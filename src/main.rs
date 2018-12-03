@@ -1,3 +1,5 @@
+extern crate actix_web;
+
 mod api;
 
 fn main() {
