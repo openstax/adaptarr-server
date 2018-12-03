@@ -1,5 +1,12 @@
+# :required: Server configuration.
 [server]
 # :optional: Internet address and port on which to listen.
 address = "127.0.0.1:80"
 # :required: Domain (host name) of this server.
 domain = "example.com"
+
+# :optional: Database configuration.
+[database]
+# :required: Database url. This field is overridden by the DATABASE_URL
+# env variable.
+url = "postgres://user:password@host/database"

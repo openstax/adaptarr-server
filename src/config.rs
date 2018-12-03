@@ -11,6 +11,7 @@ pub fn load() -> Result<Config> {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub server: Server,
+    pub database: Option<Database>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -20,6 +21,12 @@ pub struct Server {
     pub address: SocketAddr,
     /// Domain (host name) of this server.
     pub domain: String,
+}
+
+/// Database configuration.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Database {
+    pub url: String,
 }
 
 #[derive(Debug, Fail)]

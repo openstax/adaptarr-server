@@ -4,7 +4,11 @@ use actix_web::{
     server,
 };
 
-use super::config::Config;
+use super::{
+    Result,
+    config::Config,
+    db,
+};
 
 mod bookparts;
 mod books;
@@ -17,9 +21,10 @@ mod pages;
 mod users;
 
 /// Start an API server.
-pub fn start(cfg: Config) {
+pub fn start(cfg: Config) -> Result<()> {
     let state = State {
         config: cfg.clone(),
+        db: db::pool(&cfg)?,
     };
 
     let server = server::new(move || vec![
@@ -35,12 +40,16 @@ pub fn start(cfg: Config) {
 
     server
         .server_hostname(cfg.server.domain.clone())
-        .run()
+        .run();
+    Ok(())
 }
 
 #[derive(Clone)]
 pub struct State {
+    /// Current configuration.
     pub config: Config,
+    /// Database connection pool.
+    pub db: db::Pool,
 }
 
 fn api_app(state: State) -> App<State> {
