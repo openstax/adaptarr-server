@@ -1,10 +1,11 @@
-extern crate actix_web;
-
-mod api;
+extern crate adaptarr_server;
 
 fn main() {
-    std::env::set_var("RUST_LOG", "actix_web=info");
-    env_logger::init();
+    if let Err(err) = adaptarr_server::main() {
+        eprintln!("Error: {}", err);
 
-    api::start();
+        for cause in err.iter_causes() {
+            eprintln!("Caused by: {}", cause);
+        }
+    }
 }
