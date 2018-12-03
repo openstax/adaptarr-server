@@ -1,7 +1,9 @@
 use actix_web::{App, HttpRequest, HttpResponse, http::Method};
 
+use super::State;
+
 /// Configure routes.
-pub fn routes(app: App<()>) -> App<()> {
+pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/drafts/{id}", |r| {
             r.get().f(get_draft);
@@ -27,7 +29,7 @@ pub fn routes(app: App<()>) -> App<()> {
 /// ```
 /// GET /drafts/:id
 /// ```
-pub fn get_draft(_req: &HttpRequest) -> HttpResponse {
+pub fn get_draft(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -38,7 +40,7 @@ pub fn get_draft(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// DELTE /drafts/:id
 /// ```
-pub fn delete_draft(_req: &HttpRequest) -> HttpResponse {
+pub fn delete_draft(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -49,7 +51,7 @@ pub fn delete_draft(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /drafts/:id/save
 /// ```
-pub fn save_draft(_req: HttpRequest) -> HttpResponse {
+pub fn save_draft(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -60,7 +62,7 @@ pub fn save_draft(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// GET /drafts/:id/comments
 /// ```
-pub fn list_comments(_req: &HttpRequest) -> HttpResponse {
+pub fn list_comments(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -71,7 +73,7 @@ pub fn list_comments(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /drafts/:id/comments
 /// ```
-pub fn add_comment(_req: &HttpRequest) -> HttpResponse {
+pub fn add_comment(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -82,7 +84,7 @@ pub fn add_comment(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// GET /drafts/:id/files
 /// ```
-pub fn list_files(_req: HttpRequest) -> HttpResponse {
+pub fn list_files(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -93,7 +95,7 @@ pub fn list_files(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// GET /drafts/:id/files/:name
 /// ```
-pub fn get_file(_req: &HttpRequest) -> HttpResponse {
+pub fn get_file(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -104,7 +106,7 @@ pub fn get_file(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// PUT /drafts/:id/files/:name
 /// ```
-pub fn update_file(_req: &HttpRequest) -> HttpResponse {
+pub fn update_file(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -115,6 +117,6 @@ pub fn update_file(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// DELETE /drafts/:id/files/:name
 /// ```
-pub fn delete_file(_req: &HttpRequest) -> HttpResponse {
+pub fn delete_file(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }

@@ -1,7 +1,9 @@
 use actix_web::{App, HttpRequest, HttpResponse, http::Method};
 
+use super::State;
+
 /// Configure routes.
-pub fn routes(app: App<()>) -> App<()> {
+pub fn routes(app: App<State>) -> App<State> {
     app
         .route("/conversations/{id}", Method::GET, get_conversation)
         .route("/conversations/{id}/socket", Method::GET, get_socket)
@@ -14,7 +16,7 @@ pub fn routes(app: App<()>) -> App<()> {
 /// ```
 /// GET /conversations/:id
 /// ```
-pub fn get_conversation(_req: HttpRequest) -> HttpResponse {
+pub fn get_conversation(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -26,6 +28,6 @@ pub fn get_conversation(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// GET /conversations/:id/socket
 /// ```
-pub fn get_socket(_req: HttpRequest) -> HttpResponse {
+pub fn get_socket(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }

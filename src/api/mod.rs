@@ -18,9 +18,13 @@ mod users;
 
 /// Start an API server.
 pub fn start(cfg: Config) {
-    let server = server::new(|| vec![
-        api_app(),
-        pages::app(),
+    let state = State {
+        config: cfg.clone(),
+    };
+
+    let server = server::new(move || vec![
+        api_app(state.clone()),
+        pages::app(state.clone()),
     ]);
 
     let server = if let Some(fd) = listenfd::ListenFd::from_env().take_tcp_listener(0).unwrap() {
@@ -34,8 +38,13 @@ pub fn start(cfg: Config) {
         .run()
 }
 
-fn api_app() -> App {
-    App::new()
+#[derive(Clone)]
+pub struct State {
+    pub config: Config,
+}
+
+fn api_app(state: State) -> App<State> {
+    App::with_state(state)
         .middleware(Logger::default())
         .prefix("/api/v1")
         .configure(bookparts::routes)

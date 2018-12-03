@@ -1,7 +1,9 @@
 use actix_web::{App, HttpRequest, HttpResponse, http::Method};
 
+use super::State;
+
 /// Configure routes.
-pub fn routes(app: App<()>) -> App<()> {
+pub fn routes(app: App<State>) -> App<State> {
     app.scope("/users", |scope| scope
         .route("/invite", Method::POST, create_invitation)
         .resource("/{id}", |r| {
@@ -18,7 +20,7 @@ pub fn routes(app: App<()>) -> App<()> {
 /// ```
 /// POST /users/invite
 /// ```
-pub fn create_invitation(_req: HttpRequest) -> HttpResponse {
+pub fn create_invitation(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -29,7 +31,7 @@ pub fn create_invitation(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// GET /users/:id
 /// ```
-pub fn get_user(_req: &HttpRequest) -> HttpResponse {
+pub fn get_user(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -40,7 +42,7 @@ pub fn get_user(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// PUT /users/:id
 /// ```
-pub fn modify_user(_req: &HttpRequest) -> HttpResponse {
+pub fn modify_user(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -51,6 +53,6 @@ pub fn modify_user(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// PUT /users/me/password
 /// ```
-pub fn modify_password(_req: HttpRequest) -> HttpResponse {
+pub fn modify_password(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }

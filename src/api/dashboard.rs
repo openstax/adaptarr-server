@@ -1,7 +1,9 @@
 use actix_web::{App, HttpRequest, HttpResponse, http::Method};
 
+use super::State;
+
 /// Configure routes.
-pub fn routes(app: App<()>) -> App<()> {
+pub fn routes(app: App<State>) -> App<State> {
     app
         .route("/dashboard", Method::GET, get_dashboard)
 }
@@ -13,6 +15,6 @@ pub fn routes(app: App<()>) -> App<()> {
 /// ```
 /// GET /dashboard
 /// ```
-pub fn get_dashboard(_req: HttpRequest) -> HttpResponse {
+pub fn get_dashboard(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }

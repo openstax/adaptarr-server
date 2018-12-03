@@ -6,8 +6,10 @@ use actix_web::{
     middleware::Logger,
 };
 
-pub fn app() -> App {
-    App::new()
+use super::State;
+
+pub fn app(state: State) -> App<State> {
+    App::with_state(state)
         .middleware(Logger::default())
         .resource("/login", |r| {
             r.get().f(login);
@@ -31,7 +33,7 @@ pub fn app() -> App {
 /// ```
 /// GET /login
 /// ```
-pub fn login(_req: &HttpRequest) -> HttpResponse {
+pub fn login(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -42,7 +44,7 @@ pub fn login(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /login
 /// ```
-pub fn do_login(_req: &HttpRequest) -> HttpResponse {
+pub fn do_login(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -53,7 +55,7 @@ pub fn do_login(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// GET /logout
 /// ```
-pub fn logout(_req: HttpRequest) -> HttpResponse {
+pub fn logout(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -64,7 +66,7 @@ pub fn logout(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// GET /reset
 /// ```
-pub fn reset(_req: &HttpRequest) -> HttpResponse {
+pub fn reset(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -75,7 +77,7 @@ pub fn reset(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /reset
 /// ```
-pub fn do_reset(_req: &HttpRequest) -> HttpResponse {
+pub fn do_reset(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -86,7 +88,7 @@ pub fn do_reset(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// GET /register
 /// ```
-pub fn register(_req: &HttpRequest) -> HttpResponse {
+pub fn register(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -97,6 +99,6 @@ pub fn register(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /register
 /// ```
-pub fn do_register(_req: &HttpRequest) -> HttpResponse {
+pub fn do_register(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }

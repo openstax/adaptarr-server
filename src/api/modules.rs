@@ -1,7 +1,9 @@
 use actix_web::{App, HttpRequest, HttpResponse, http::Method};
 
+use super::State;
+
 /// Configure routes.
-pub fn routes(app: App<()>) -> App<()> {
+pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/modules/{id}", |r| {
             r.get().f(get_module);
@@ -23,7 +25,7 @@ pub fn routes(app: App<()>) -> App<()> {
 /// ```
 /// GET /modules/:id
 /// ```
-pub fn get_module(_req: &HttpRequest) -> HttpResponse {
+pub fn get_module(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -34,7 +36,7 @@ pub fn get_module(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /modules/:id
 /// ```
-pub fn crete_draft(_req: &HttpRequest) -> HttpResponse {
+pub fn crete_draft(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -45,7 +47,7 @@ pub fn crete_draft(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// DELTE /modules/:id
 /// ```
-pub fn delete_module(_req: &HttpRequest) -> HttpResponse {
+pub fn delete_module(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -56,7 +58,7 @@ pub fn delete_module(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// GET /modules/:id/comments
 /// ```
-pub fn list_comments(_req: &HttpRequest) -> HttpResponse {
+pub fn list_comments(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -67,7 +69,7 @@ pub fn list_comments(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /modules/:id/comments
 /// ```
-pub fn add_comment(_req: &HttpRequest) -> HttpResponse {
+pub fn add_comment(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -78,7 +80,7 @@ pub fn add_comment(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// GET /modules/:id/files
 /// ```
-pub fn list_files(_req: HttpRequest) -> HttpResponse {
+pub fn list_files(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -89,6 +91,6 @@ pub fn list_files(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// GET /modules/:id/files/:name
 /// ```
-pub fn get_file(_req: HttpRequest) -> HttpResponse {
+pub fn get_file(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }

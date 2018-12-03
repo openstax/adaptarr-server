@@ -1,7 +1,9 @@
 use actix_web::{App, HttpRequest, HttpResponse, http::Method};
 
+use super::State;
+
 /// Configure routes.
-pub fn routes(app: App<()>) -> App<()> {
+pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/bookparts/{id}", |r| {
             r.get().f(get_part);
@@ -18,7 +20,7 @@ pub fn routes(app: App<()>) -> App<()> {
 /// ```
 /// GET /bookparts/:id
 /// ```
-pub fn get_part(_req: &HttpRequest) -> HttpResponse {
+pub fn get_part(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -29,7 +31,7 @@ pub fn get_part(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// DELETE /bookparts/:id
 /// ```
-pub fn delete_part(_req: &HttpRequest) -> HttpResponse {
+pub fn delete_part(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -40,7 +42,7 @@ pub fn delete_part(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /bookparts/:id/parts
 /// ```
-pub fn insert_into_part(_req: HttpRequest) -> HttpResponse {
+pub fn insert_into_part(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -51,6 +53,6 @@ pub fn insert_into_part(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// POST /bookparts/:id/move
 /// ```
-pub fn move_part(_req: HttpRequest) -> HttpResponse {
+pub fn move_part(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }

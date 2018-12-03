@@ -1,7 +1,9 @@
 use actix_web::{App, HttpRequest, HttpResponse, http::Method};
 
+use super::State;
+
 /// Configure routes.
-pub fn routes(app: App<()>) -> App<()> {
+pub fn routes(app: App<State>) -> App<State> {
     app
         .route("/notifications", Method::GET, list_notifications)
         .route("/notifications/{id}", Method::POST, update_notifiation)
@@ -15,7 +17,7 @@ pub fn routes(app: App<()>) -> App<()> {
 /// ```
 /// GET /notifications
 /// ```
-pub fn list_notifications(_req: HttpRequest) -> HttpResponse {
+pub fn list_notifications(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -26,7 +28,7 @@ pub fn list_notifications(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// POST /notifications/:id
 /// ```
-pub fn update_notifiation(_req: HttpRequest) -> HttpResponse {
+pub fn update_notifiation(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -37,6 +39,6 @@ pub fn update_notifiation(_req: HttpRequest) -> HttpResponse {
 /// ```
 /// GET /events
 /// ```
-pub fn event_stream(_req: HttpRequest) -> HttpResponse {
+pub fn event_stream(_req: HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }

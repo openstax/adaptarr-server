@@ -1,7 +1,9 @@
 use actix_web::{App, HttpRequest, HttpResponse};
 
+use super::State;
+
 /// Configure routes.
-pub fn routes(app: App<()>) -> App<()> {
+pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/books", |r| {
             r.get().f(list_books);
@@ -20,7 +22,7 @@ pub fn routes(app: App<()>) -> App<()> {
 /// ```
 /// GET /books
 /// ```
-pub fn list_books(_req: &HttpRequest) -> HttpResponse {
+pub fn list_books(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -31,7 +33,7 @@ pub fn list_books(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// POST /books
 /// ```
-pub fn create_book(_req: &HttpRequest) -> HttpResponse {
+pub fn create_book(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -42,7 +44,7 @@ pub fn create_book(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// GET /books/:id
 /// ```
-pub fn get_book(_req: &HttpRequest) -> HttpResponse {
+pub fn get_book(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
@@ -53,6 +55,6 @@ pub fn get_book(_req: &HttpRequest) -> HttpResponse {
 /// ```
 /// DELETE /books/:id
 /// ```
-pub fn delete_book(_req: &HttpRequest) -> HttpResponse {
+pub fn delete_book(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
