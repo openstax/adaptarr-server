@@ -4,6 +4,8 @@ use actix_web::{
     server,
 };
 
+use super::config::Config;
+
 mod bookparts;
 mod books;
 mod conversations;
@@ -15,7 +17,7 @@ mod pages;
 mod users;
 
 /// Start an API server.
-pub fn start() {
+pub fn start(cfg: Config) {
     let server = server::new(|| vec![
         api_app(),
         pages::app(),
@@ -24,10 +26,12 @@ pub fn start() {
     let server = if let Some(fd) = listenfd::ListenFd::from_env().take_tcp_listener(0).unwrap() {
         server.listen(fd)
     } else {
-        server.bind("127.0.0.1:8080").unwrap()
+        server.bind(cfg.server.address).unwrap()
     };
 
-    server.run()
+    server
+        .server_hostname(cfg.server.domain.clone())
+        .run()
 }
 
 fn api_app() -> App {
