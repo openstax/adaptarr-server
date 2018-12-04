@@ -6,6 +6,10 @@ extern crate chrono;
 extern crate failure;
 extern crate r2d2;
 extern crate r2d2_diesel;
+extern crate rand;
+extern crate ring;
+extern crate rmp_serde as rmps;
+extern crate serde;
 extern crate toml;
 
 #[macro_use] extern crate diesel;
@@ -23,6 +27,7 @@ pub(crate) use self::config::Config;
 mod api;
 mod config;
 mod db;
+mod utils;
 
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
