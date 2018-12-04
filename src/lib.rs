@@ -2,6 +2,7 @@
 #![allow(proc_macro_derive_resolution_fallback)]
 
 extern crate actix_web;
+extern crate argon2;
 extern crate base64;
 extern crate chrono;
 extern crate failure;
@@ -28,6 +29,7 @@ pub(crate) use self::config::Config;
 mod api;
 mod config;
 mod db;
+mod models;
 mod utils;
 
 pub type Result<T> = std::result::Result<T, failure::Error>;
