@@ -1,3 +1,4 @@
+use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     prelude::*,
     result::{DatabaseErrorKind, Error as DbError},
@@ -28,7 +29,24 @@ pub struct User {
     data: db::User,
 }
 
+/// A subset of user's data that can safely be publicly exposed.
+#[derive(Debug, Serialize)]
+pub struct PublicData {
+    id: i32,
+    name: String,
+}
+
 impl User {
+    /// Find an user by ID.
+    pub fn by_id(dbcon: &Connection, id: i32) -> Result<User, FindUserError> {
+        users::table
+            .filter(users::id.eq(id))
+            .get_result::<db::User>(dbcon)
+            .optional()?
+            .ok_or(FindUserError::NotFound)
+            .map(|data| User { data })
+    }
+
     /// Create a new user.
     pub fn create(
         dbcon: &Connection,
@@ -92,6 +110,16 @@ impl User {
             Err(UserAuthenticateError::BadPassword)
         }
     }
+
+    /// Get the public portion of this user's data.
+    pub fn get_public(&self) -> PublicData {
+        let db::User { id, ref name, .. } = self.data;
+
+        PublicData {
+            id,
+            name: name.clone(),
+        }
+    }
 }
 
 impl std::ops::Deref for User {
@@ -99,6 +127,31 @@ impl std::ops::Deref for User {
 
     fn deref(&self) -> &db::User {
         &self.data
+    }
+}
+
+#[derive(Debug, Fail)]
+pub enum FindUserError {
+    /// Creation failed due to a database error.
+    #[fail(display = "Database error: {}", _0)]
+    Internal(#[cause] DbError),
+    /// No user found for given email address.
+    #[fail(display = "No such user")]
+    NotFound,
+}
+
+impl_from! { for FindUserError ;
+    DbError => |e| FindUserError::Internal(e),
+}
+
+impl ResponseError for FindUserError {
+    fn error_response(&self) -> HttpResponse {
+        match *self {
+            FindUserError::Internal(_) =>
+                HttpResponse::InternalServerError().finish(),
+            FindUserError::NotFound =>
+                HttpResponse::NotFound().finish(),
+        }
     }
 }
 
