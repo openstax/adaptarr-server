@@ -2,6 +2,7 @@
 #![allow(proc_macro_derive_resolution_fallback)]
 
 extern crate actix_web;
+extern crate chrono;
 extern crate failure;
 extern crate r2d2;
 extern crate r2d2_diesel;
