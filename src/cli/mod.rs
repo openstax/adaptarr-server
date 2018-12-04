@@ -3,6 +3,7 @@ use structopt::StructOpt;
 use crate::Result;
 
 mod server;
+mod user;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -15,6 +16,9 @@ enum Command {
     /// Start the server
     #[structopt(name = "start")]
     Start,
+    /// Manage users
+    #[structopt(name = "user")]
+    User(user::Opts),
 }
 
 pub fn main() -> Result<()> {
@@ -23,6 +27,7 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Command::Start => server::start(config),
+        Command::User(opts) => user::main(config, opts),
     }
 }
 
