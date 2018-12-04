@@ -12,6 +12,7 @@ extern crate rand;
 extern crate ring;
 extern crate rmp_serde as rmps;
 extern crate serde;
+extern crate structopt;
 extern crate toml;
 
 #[macro_use] extern crate diesel;
@@ -24,11 +25,14 @@ extern crate toml;
 #[macro_use]
 extern crate diesel_migrations;
 
+pub use self::cli::main;
+
 pub(crate) use self::config::Config;
 
 #[macro_use] mod macros;
 
 mod api;
+mod cli;
 mod config;
 mod db;
 mod models;
@@ -36,13 +40,3 @@ mod utils;
 
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
-pub fn main() -> Result<()> {
-    std::env::set_var("RUST_LOG", "actix_web=info");
-    env_logger::init();
-
-    let config = config::load()?;
-
-    api::start(config)?;
-
-    Ok(())
-}
