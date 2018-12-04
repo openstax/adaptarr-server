@@ -18,6 +18,7 @@ mod drafts;
 mod events;
 mod modules;
 mod pages;
+mod session;
 mod users;
 
 /// Start an API server.
@@ -53,8 +54,14 @@ pub struct State {
 }
 
 fn api_app(state: State) -> App<State> {
+    let sessions = session::SessionManager::new(
+        state.config.server.secret.clone(),
+        state.db.clone(),
+    );
+
     App::with_state(state)
         .middleware(Logger::default())
+        .middleware(sessions)
         .prefix("/api/v1")
         .configure(bookparts::routes)
         .configure(books::routes)

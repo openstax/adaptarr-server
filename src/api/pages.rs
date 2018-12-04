@@ -6,11 +6,20 @@ use actix_web::{
     middleware::Logger,
 };
 
-use super::State;
+use super::{
+    State,
+    session::SessionManager,
+};
 
 pub fn app(state: State) -> App<State> {
+    let sessions = SessionManager::new(
+        state.config.server.secret.clone(),
+        state.db.clone(),
+    );
+
     App::with_state(state)
         .middleware(Logger::default())
+        .middleware(sessions)
         .resource("/login", |r| {
             r.get().f(login);
             r.post().f(do_login);
