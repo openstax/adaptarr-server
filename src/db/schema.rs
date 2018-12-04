@@ -1,2 +1,10 @@
-// This file will be updated by Diesel automatically when running migrations
-// during development.
+table! {
+    users (id) {
+        id -> Int4,
+        email -> Varchar,
+        name -> Varchar,
+        password -> Bytea,
+        salt -> Bytea,
+        is_super -> Bool,
+    }
+}
