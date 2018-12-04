@@ -18,6 +18,8 @@ extern crate diesel_migrations;
 
 pub(crate) use self::config::Config;
 
+#[macro_use] mod macros;
+
 mod api;
 mod config;
 mod db;
