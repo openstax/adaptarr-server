@@ -254,13 +254,20 @@ impl<P> std::ops::Deref for Session<P> {
 }
 
 
-impl<S> FromRequest<S> for Session {
+impl<S, P> FromRequest<S> for Session<P>
+where
+    P: Policy,
+{
     type Config = ();
-    type Result = Result<Session, SessionFromRequestError>;
+    type Result = Result<Session<P>, SessionFromRequestError>;
 
     fn from_request(req: &HttpRequest<S>, _cfg: &()) -> Self::Result {
         if let Some(session) = req.extensions().get::<SessionData>()
                                 .and_then(|s| s.existing) {
+            if !P::validate(&session) {
+                return Err(SessionFromRequestError::Policy);
+            }
+
             Ok(Session {
                 data: session.clone(),
                 _policy: PhantomData,
@@ -291,6 +298,9 @@ pub enum SessionFromRequestError {
     Unsealing(#[cause] utils::UnsealingError),
     #[fail(display = "Invalid base64: {}", _0)]
     Decoding(#[cause] base64::DecodeError),
+    /// Session was rejected by policy.
+    #[fail(display = "Rejected by policy")]
+    Policy,
 }
 
 impl ResponseError for SessionFromRequestError {
@@ -302,6 +312,8 @@ impl ResponseError for SessionFromRequestError {
                 .body("a session is required"),
             Unsealing(_) | Decoding(_) => HttpResponse::BadRequest()
                 .body("could not decode session cookie"),
+            Policy => HttpResponse::Forbidden()
+                .body("access denied by policy"),
         }
     }
 }
