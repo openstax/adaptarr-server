@@ -6,7 +6,7 @@ use crate::{
     Config,
     Result,
     db,
-    models::User,
+    models::{Invite, User},
 };
 
 #[derive(StructOpt)]
@@ -20,11 +20,15 @@ pub enum Command {
     /// Add a new user
     #[structopt(name = "add")]
     Add(AddOpts),
+    /// Create an invitation
+    #[structopt(name = "invite")]
+    Invite(InviteOpts),
 }
 
 pub fn main(cfg: Config, opts: Opts) -> Result<()> {
     match opts.command {
         Command::Add(opts) => add_user(cfg, opts),
+        Command::Invite(opts) => invite(cfg, opts),
     }
 }
 
@@ -49,6 +53,23 @@ pub fn add_user(cfg: Config, opts: AddOpts) -> Result<()> {
         &db, &opts.email, &opts.name, &opts.password, opts.is_super)?;
 
     println!("Created user {}", user.id);
+
+    Ok(())
+}
+
+#[derive(StructOpt)]
+pub struct InviteOpts {
+    /// User's email address
+    email: String,
+}
+
+pub fn invite(cfg: Config, opts: InviteOpts) -> Result<()> {
+    let db = db::connect(&cfg)?;
+    let invite = Invite::create(&db, &opts.email)?;
+    let code = invite.get_code(&cfg);
+
+    println!("Invitation code: {}", code);
+    println!("Registration url: {}/register?invite={}", cfg.server.domain, code);
 
     Ok(())
 }
