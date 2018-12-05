@@ -90,6 +90,9 @@ struct SessionData {
     existing: Option<DbSession>,
     /// Data for a new session to be created.
     new: Option<NewSession>,
+    /// Whether to destroy the existing session or not. Existing session
+    /// is always destroyed if it is to be replaced with a new one.
+    destroy: bool,
 }
 
 impl SessionManager {
@@ -157,6 +160,7 @@ impl<S> Middleware<S> for SessionManager {
             req.extensions_mut().insert(SessionData {
                 existing: Some(session),
                 new: None,
+                destroy: false,
             });
         }
 
@@ -169,7 +173,12 @@ impl<S> Middleware<S> for SessionManager {
             let db = self.db.get()
                 .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
-            if let Some(new) = session.new {
+            if session.existing.is_some() && session.destroy {
+                diesel::delete(&session.existing.unwrap())
+                    .execute(&*db)
+                    .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+                rsp.add_cookie(&Cookie::new(COOKIE, ""));
+            } else if let Some(new) = session.new {
                 if let Some(session) = session.existing {
                     diesel::delete(&session)
                         .execute(&*db)
@@ -202,7 +211,7 @@ impl<S> Middleware<S> for SessionManager {
     }
 }
 
-impl Session {
+impl<P> Session<P> {
     pub fn create<S>(req: &HttpRequest<S>, user: i32, is_super: bool) {
         let now = Utc::now().naive_utc();
         let new = NewSession {
@@ -223,7 +232,16 @@ impl Session {
         extensions.insert(SessionData {
             existing: None,
             new: Some(new),
+            destroy: false,
         });
+    }
+
+    pub fn destroy<S>(req: &HttpRequest<S>, sess: Self) {
+        req.extensions_mut().insert(SessionData {
+            existing: Some(sess.data),
+            new: None,
+            destroy: true,
+        })
     }
 }
 

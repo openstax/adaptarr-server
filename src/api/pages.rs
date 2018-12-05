@@ -13,7 +13,7 @@ use tera::Tera;
 use crate::models::User;
 use super::{
     State,
-    session::{SessionManager, Session},
+    session::{SessionManager, Session, Normal},
 };
 
 pub fn app(state: State) -> App<State> {
@@ -124,7 +124,7 @@ pub fn do_login((
 
     // NOTE: This will automatically remove any session that may still exist,
     // we don't have to do it manually here.
-    Session::create(&req, user.id, false);
+    Session::<Normal>::create(&req, user.id, false);
 
     Ok(HttpResponse::SeeOther()
         .header("Location", params.next.as_ref().map_or("/", String::as_str))
@@ -138,8 +138,9 @@ pub fn do_login((
 /// ```
 /// GET /logout
 /// ```
-pub fn logout(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn logout((req, sess): (HttpRequest<State>, Session)) -> RenderedTemplate {
+    Session::destroy(&req, sess);
+    render("logout.html", &Empty {})
 }
 
 /// Request a password reset or render a reset form (with a token).
