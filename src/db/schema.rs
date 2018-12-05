@@ -1,4 +1,12 @@
 table! {
+    invites (id) {
+        id -> Int4,
+        email -> Varchar,
+        expires -> Timestamp,
+    }
+}
+
+table! {
     sessions (id) {
         id -> Int4,
         user -> Int4,
@@ -22,6 +30,7 @@ table! {
 joinable!(sessions -> users (user));
 
 allow_tables_to_appear_in_same_query!(
+    invites,
     sessions,
     users,
 );

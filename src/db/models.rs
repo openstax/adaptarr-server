@@ -54,3 +54,20 @@ pub struct NewSession {
     pub last_used: NaiveDateTime,
     pub is_super: bool,
 }
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct Invite {
+    /// ID of this invitation.
+    pub id: i32,
+    /// Email address this invitation is for.
+    pub email: String,
+    /// Date by which this invitation becomes unusable.
+    pub expires: NaiveDateTime,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "invites"]
+pub struct NewInvite<'s> {
+    pub email: &'s str,
+    pub expires: NaiveDateTime,
+}
