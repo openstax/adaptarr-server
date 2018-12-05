@@ -54,7 +54,7 @@ impl User {
         name: &str,
         password: &str,
         is_super: bool,
-    ) -> Result<User, UserCreationError> {
+    ) -> Result<User, CreateUserError> {
         // Generate salt and hash password.
         let mut salt = [0; 16];
         rand::thread_rng().fill_bytes(&mut salt);
@@ -79,8 +79,8 @@ impl User {
         {
             Ok(user) => Ok(User { data: user }),
             Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _))
-                => Err(UserCreationError::Duplicate),
-            Err(err) => Err(UserCreationError::Internal(err)),
+                => Err(CreateUserError::Duplicate),
+            Err(err) => Err(CreateUserError::Internal(err)),
         }
     }
 
@@ -156,7 +156,7 @@ impl ResponseError for FindUserError {
 }
 
 #[derive(Debug, Fail)]
-pub enum UserCreationError {
+pub enum CreateUserError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     Internal(#[cause] DbError),
