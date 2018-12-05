@@ -10,7 +10,7 @@ use actix_web::{
 };
 use tera::Tera;
 
-use crate::models::User;
+use crate::models::{Invite, User};
 use super::{
     State,
     session::{SessionManager, Session, Normal},
@@ -35,8 +35,8 @@ pub fn app(state: State) -> App<State> {
             r.post().f(do_reset);
         })
         .resource("/register", |r| {
-            r.get().f(register);
-            r.post().f(do_register);
+            r.get().with(register);
+            r.post().with(do_register);
         })
 }
 
@@ -165,6 +165,18 @@ pub fn do_reset(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct RegisterQuery {
+    invite: String,
+}
+
+#[derive(Serialize)]
+struct RegisterTemplate<'s> {
+    error: Option<&'s str>,
+    email: &'s str,
+    invite: &'s str,
+}
+
 /// Render registration form.
 ///
 /// ## Method
@@ -172,8 +184,31 @@ pub fn do_reset(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// GET /register
 /// ```
-pub fn register(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn register((
+    state,
+    query,
+): (
+    actix_web::State<State>,
+    Query<RegisterQuery>,
+)) -> RenderedTemplate {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let invite = Invite::from_code(&*db, &state.config, &query.invite)?;
+
+    render("register.html", &RegisterTemplate {
+        error: None,
+        email: &invite.email,
+        invite: &query.invite,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegisterForm {
+    email: String,
+    name: String,
+    password: String,
+    password1: String,
+    invite: String,
 }
 
 /// Perform registration.
@@ -183,8 +218,43 @@ pub fn register(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// POST /register
 /// ```
-pub fn do_register(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn do_register((
+    req,
+    state,
+    form,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    Form<RegisterForm>,
+)) -> RenderedTemplate {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let invite = Invite::from_code(&*db, &state.config, &form.invite)?;
+
+    if form.password != form.password1 {
+        return render_code(StatusCode::BAD_REQUEST, "register.html", &RegisterTemplate {
+            error: Some("Passwords don't match"),
+            email: &invite.email,
+            invite: &form.invite,
+        });
+    }
+
+    if form.email != invite.email {
+        return render_code(StatusCode::BAD_REQUEST, "register.html", &RegisterTemplate {
+            error: Some("You can't change your email during registration"),
+            email: &invite.email,
+            invite: &form.invite,
+        });
+    }
+
+    let user = invite.fulfil(&*db, &form.name, &form.password)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Session::<Normal>::create(&req, user.id, false);
+
+    Ok(HttpResponse::SeeOther()
+        .header("Location", "/")
+        .finish())
 }
 
 /// Empty serializable structure to serve as empty context.

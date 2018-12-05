@@ -1,0 +1,16 @@
+{% extends "_base.html" %}
+{% block body %}
+    <form accept="post">
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <input type="text" name="name" placeholder="Name">
+        <input type="email" name="email" value="{{ email }}" disabled>
+        <input type="password" name="password" placeholder="Password">
+        <input type="password" name="password1" placeholder="Password">
+        <input type="hidden" name="invite" value="{{ invite }}">
+        <input type="submit" value="Register">
+    </form>
+{% endblock body %}
+
