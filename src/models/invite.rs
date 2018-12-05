@@ -13,6 +13,7 @@ use crate::{
         models as db,
         schema::{invites, users},
     },
+    models::user::{User, CreateUserError},
     utils,
 };
 
@@ -73,6 +74,12 @@ impl Invite {
         let sealed = utils::seal(&cfg.server.secret, self.data.id)
             .expect("failed to seal value");
         base64::encode_config(&sealed, base64::URL_SAFE_NO_PAD)
+    }
+
+    /// Fulfil an invitation by creating a user.
+    pub fn fulfil(self, dbconn: &Connection, name: &str, password: &str)
+    -> Result<User, CreateUserError> {
+        User::create(dbconn, &self.email, name, password, false)
     }
 }
 

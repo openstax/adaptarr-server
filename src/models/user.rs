@@ -1,5 +1,6 @@
 use actix_web::{HttpResponse, ResponseError};
 use diesel::{
+    Connection as _Connection,
     prelude::*,
     result::{DatabaseErrorKind, Error as DbError},
 };
@@ -8,7 +9,7 @@ use rand::RngCore;
 use crate::db::{
     Connection,
     models as db,
-    schema::users,
+    schema::{invites, users},
 };
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
@@ -67,21 +68,23 @@ impl User {
             &ARGON2_CONFIG,
         ).expect("Cannot hash password");
 
-        match diesel::insert_into(users::table)
-            .values(db::NewUser {
-                email,
-                name,
-                password: &hash,
-                salt: &salt,
-                is_super,
-            })
-            .get_result::<db::User>(dbcon)
-        {
-            Ok(user) => Ok(User { data: user }),
-            Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _))
-                => Err(CreateUserError::Duplicate),
-            Err(err) => Err(CreateUserError::Internal(err)),
-        }
+        dbcon.transaction(|| {
+            diesel::delete(invites::table.filter(invites::email.eq(email)))
+                .execute(dbcon)
+                .map_err(CreateUserError::Internal)?;
+
+            diesel::insert_into(users::table)
+                .values(db::NewUser {
+                    email,
+                    name,
+                    password: &hash,
+                    salt: &salt,
+                    is_super,
+                })
+                .get_result::<db::User>(dbcon)
+                .map(|data| User { data })
+                .map_err(Into::into)
+        })
     }
 
     /// Find an user for given email and try to authenticate as them.
@@ -163,6 +166,14 @@ pub enum CreateUserError {
     /// Duplicate user.
     #[fail(display = "Duplicate user")]
     Duplicate,
+}
+
+impl_from! { for CreateUserError ;
+    DbError => |e| match e {
+        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
+            => CreateUserError::Duplicate,
+        _ => CreateUserError::Internal(e),
+    },
 }
 
 #[derive(Debug, Fail)]
