@@ -12,6 +12,7 @@ pub fn load() -> crate::Result<Config> {
 pub struct Config {
     pub server: Server,
     pub database: Option<Database>,
+    pub mail: crate::mail::Config,
 }
 
 #[derive(Clone, Debug, Deserialize)]

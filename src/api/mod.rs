@@ -8,6 +8,7 @@ use super::{
     Result,
     config::Config,
     db,
+    mail::Mailer,
 };
 
 mod bookparts;
@@ -26,6 +27,7 @@ pub fn start(cfg: Config) -> Result<()> {
     let state = State {
         config: cfg.clone(),
         db: db::pool(&cfg)?,
+        mailer: Mailer::from_config(cfg.mail.clone())?,
     };
 
     let server = server::new(move || vec![
@@ -51,6 +53,8 @@ pub struct State {
     pub config: Config,
     /// Database connection pool.
     pub db: db::Pool,
+    /// Mailer service.
+    pub mailer: Mailer,
 }
 
 fn api_app(state: State) -> App<State> {

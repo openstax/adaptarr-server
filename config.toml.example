@@ -18,3 +18,12 @@ secret = "..."
 # :required: Database url. This field is overridden by the DATABASE_URL
 # env variable.
 url = "postgres://user:password@host/database"
+
+# :required: Mailing configuration.
+[mail]
+# :required: Email address to send messages as.
+sender = "noreply@example.com"
+# :required: What method to use to send mails. Possible values are
+# - "log" to log emails to standard error for debugging,
+# - "sendmail" to use the sendmail(1) command,
+transport = "log"
