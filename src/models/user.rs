@@ -9,7 +9,7 @@ use rand::RngCore;
 use crate::db::{
     Connection,
     models as db,
-    schema::{invites, users},
+    schema::{invites, users, password_reset_tokens, sessions},
 };
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
@@ -133,6 +133,46 @@ impl User {
             name: name.clone(),
         }
     }
+
+    /// Change user's password.
+    pub fn change_password(&mut self, dbcon: &Connection, password: &str)
+    -> Result<(), ChangePasswordError> {
+        // Generate salt and hash password.
+        let mut salt = [0; 16];
+        rand::thread_rng().fill_bytes(&mut salt);
+
+        // Hashing can only fail if the configuration is invalid, or salt
+        // is wrong length. All those cases are unlikely.
+        let hash = argon2::hash_raw(
+            password.as_bytes(),
+            &salt,
+            &ARGON2_CONFIG,
+        ).expect("Cannot hash password");
+
+        let data = dbcon.transaction(|| {
+            // Delete all existing password reset tokens.
+            diesel::delete(
+                password_reset_tokens::table
+                    .filter(password_reset_tokens::user.eq(self.id)))
+                .execute(dbcon)?;
+
+            // Delete all existing sessions.
+            diesel::delete(sessions::table.filter(sessions::user.eq(self.id)))
+                .execute(dbcon)?;
+
+            // Update credentials.
+            diesel::update(&self.data)
+                .set(db::PasswordChange {
+                    salt: &salt,
+                    password: &hash,
+                })
+                .get_result::<db::User>(dbcon)
+        })?;
+
+        self.data = data;
+
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for User {
@@ -210,4 +250,15 @@ impl UserAuthenticateError {
 
 impl_from! { for UserAuthenticateError ;
     DbError => |e| UserAuthenticateError::Internal(e),
+}
+
+#[derive(Debug, Fail)]
+pub enum ChangePasswordError {
+    /// Authentication failed due to a database error.
+    #[fail(display = "Database error: {}", _0)]
+    Internal(#[cause] DbError),
+}
+
+impl_from! { for ChangePasswordError ;
+    DbError => |e| ChangePasswordError::Internal(e),
 }
