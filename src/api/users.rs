@@ -1,5 +1,6 @@
 use actix_web::{
     App,
+    Form,
     HttpRequest,
     HttpResponse,
     Json,
@@ -9,10 +10,13 @@ use actix_web::{
 };
 use serde::de::{Deserialize, Deserializer};
 
-use crate::models::user::{User, PublicData};
+use crate::models::{
+    Invite,
+    user::{User, PublicData},
+};
 use super::{
     State,
-    session::Session,
+    session::{Session, ElevatedSession},
 };
 
 /// Configure routes.
@@ -26,15 +30,49 @@ pub fn routes(app: App<State>) -> App<State> {
         .route("/me/password", Method::PUT, modify_password))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct InviteParams {
+    email: String,
+}
+
+#[derive(Serialize)]
+struct InviteTemplate {
+    url: String,
+}
+
 /// Create an invitation.
+///
+/// This endpoint is only accessible in an elevated session.
 ///
 /// ## Method
 ///
 /// ```
 /// POST /users/invite
 /// ```
-pub fn create_invitation(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn create_invitation((
+    state,
+    _session,
+    params,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Form<InviteParams>,
+)) -> Result<HttpResponse, Error> {
+    let db = state.db.get().map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let invite = Invite::create(&*db, &params.email)?;
+
+    let code = invite.get_code(&state.config);
+    // TODO: get URL from Actix.
+    let url = format!(
+        "https://{}/register?invite={}",
+        &state.config.server.domain,
+        code,
+    );
+
+    state.mailer.send(
+        "invite", params.email.as_str(), "Invitation", &InviteTemplate { url });
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Get user information.

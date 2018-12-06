@@ -6,6 +6,7 @@ use crate::{
     Config,
     Result,
     db,
+    mail::Mailer,
     models::{Invite, User},
 };
 
@@ -63,6 +64,11 @@ pub struct InviteOpts {
     email: String,
 }
 
+#[derive(Serialize)]
+struct InviteTemplate {
+    url: String,
+}
+
 pub fn invite(cfg: Config, opts: InviteOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let invite = Invite::create(&db, &opts.email)?;
@@ -70,6 +76,17 @@ pub fn invite(cfg: Config, opts: InviteOpts) -> Result<()> {
 
     println!("Invitation code: {}", code);
     println!("Registration url: {}/register?invite={}", cfg.server.domain, code);
+
+    let code = invite.get_code(&cfg);
+    // TODO: get URL from Actix.
+    let url = format!(
+        "https://{}/register?invite={}",
+        &cfg.server.domain,
+        code,
+    );
+
+    Mailer::from_config(cfg.mail)?
+        .send("invite", opts.email, "Invitation", &InviteTemplate { url });
 
     Ok(())
 }
