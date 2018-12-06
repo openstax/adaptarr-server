@@ -97,3 +97,23 @@ pub struct NewPasswordResetToken {
     /// Date by which this token becomes unusable.
     pub expires: NaiveDateTime,
 }
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct File {
+    /// ID of this file.
+    pub id: i32,
+    /// Mime type of this file.
+    pub mime: String,
+    /// Path to file in the underlying storage containing contents of this file.
+    pub path: String,
+    /// Has of this file's contents.
+    pub hash: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Insertable)]
+#[table_name = "files"]
+pub struct NewFile<'a> {
+    pub mime: &'a str,
+    pub path: &'a str,
+    pub hash: &'a [u8],
+}

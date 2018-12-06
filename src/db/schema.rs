@@ -1,4 +1,13 @@
 table! {
+    files (id) {
+        id -> Int4,
+        mime -> Varchar,
+        path -> Varchar,
+        hash -> Bytea,
+    }
+}
+
+table! {
     invites (id) {
         id -> Int4,
         email -> Varchar,
@@ -39,6 +48,7 @@ joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
 
 allow_tables_to_appear_in_same_query!(
+    files,
     invites,
     password_reset_tokens,
     sessions,
