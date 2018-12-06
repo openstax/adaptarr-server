@@ -28,6 +28,13 @@ pub struct NewUser<'a> {
     pub is_super: bool,
 }
 
+#[derive(AsChangeset, Clone, Copy, Debug)]
+#[table_name = "users"]
+pub struct PasswordChange<'a> {
+    pub password: &'a [u8],
+    pub salt: &'a [u8],
+}
+
 #[derive(Associations, Clone, Copy, Debug, Identifiable, Queryable)]
 #[belongs_to(User, foreign_key = "user")]
 pub struct Session {
@@ -69,5 +76,24 @@ pub struct Invite {
 #[table_name = "invites"]
 pub struct NewInvite<'s> {
     pub email: &'s str,
+    pub expires: NaiveDateTime,
+}
+
+#[derive(Clone, Copy, Debug, Identifiable, Queryable)]
+pub struct PasswordResetToken {
+    /// ID of this reset token.
+    pub id: i32,
+    /// ID of the user for whom this token is valid.
+    pub user: i32,
+    /// Date by which this token becomes unusable.
+    pub expires: NaiveDateTime,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "password_reset_tokens"]
+pub struct NewPasswordResetToken {
+    /// ID of the user for whom this token is valid.
+    pub user: i32,
+    /// Date by which this token becomes unusable.
     pub expires: NaiveDateTime,
 }

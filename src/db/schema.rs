@@ -7,6 +7,14 @@ table! {
 }
 
 table! {
+    password_reset_tokens (id) {
+        id -> Int4,
+        user -> Int4,
+        expires -> Timestamp,
+    }
+}
+
+table! {
     sessions (id) {
         id -> Int4,
         user -> Int4,
@@ -27,10 +35,12 @@ table! {
     }
 }
 
+joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
 
 allow_tables_to_appear_in_same_query!(
     invites,
+    password_reset_tokens,
     sessions,
     users,
 );
