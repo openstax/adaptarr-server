@@ -1,4 +1,12 @@
 table! {
+    documents (id) {
+        id -> Int4,
+        name -> Varchar,
+        index -> Int4,
+    }
+}
+
+table! {
     files (id) {
         id -> Int4,
         mime -> Varchar,
@@ -44,10 +52,12 @@ table! {
     }
 }
 
+joinable!(documents -> files (index));
 joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
 
 allow_tables_to_appear_in_same_query!(
+    documents,
     files,
     invites,
     password_reset_tokens,

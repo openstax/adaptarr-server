@@ -117,3 +117,20 @@ pub struct NewFile<'a> {
     pub path: &'a str,
     pub hash: &'a [u8],
 }
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct Document {
+    /// ID of this document.
+    pub id: i32,
+    /// Name of this document.
+    pub name: String,
+    /// ID of file serving as this document's `index.cnxml`.
+    pub index: i32,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "documents"]
+pub struct NewDocument<'a> {
+    pub name: &'a str,
+    pub index: i32,
+}
