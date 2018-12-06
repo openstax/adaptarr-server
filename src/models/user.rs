@@ -48,6 +48,16 @@ impl User {
             .map(|data| User { data })
     }
 
+    /// Find an user by email address.
+    pub fn by_email(dbcon: &Connection, email: &str) -> Result<User, FindUserError> {
+        users::table
+            .filter(users::email.eq(email))
+            .get_result::<db::User>(dbcon)
+            .optional()?
+            .ok_or(FindUserError::NotFound)
+            .map(|data| User { data })
+    }
+
     /// Create a new user.
     pub fn create(
         dbcon: &Connection,
