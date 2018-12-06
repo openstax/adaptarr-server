@@ -1,0 +1,21 @@
+{% extends "_base.html" %}
+{% block body %}
+    <form action="post">
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        {% if token %}
+            <input type="password" name="password" placeholder="Password">
+            <input type="password" name="password1" placeholder="Password">
+            <input type="hidden" name="token" value="{{ token }}">
+        {% else %}
+            <p>
+                Please enter your email address and we will mail you further
+                instructions.
+            </p>
+            <input type="email" name="email" placeholder="E-Mail address">
+        {% endif %}
+        <input type="submit" value="Reset password">
+    </form>
+{% endblock body %}

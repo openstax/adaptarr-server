@@ -9,7 +9,11 @@ use actix_web::{
     middleware::Logger,
 };
 
-use crate::models::{Invite, User};
+use crate::models::{
+    Invite,
+    PasswordResetToken,
+    user::{User, PublicData as UserData},
+};
 use super::{
     State,
     session::{SessionManager, Session, Normal},
@@ -30,10 +34,11 @@ pub fn app(state: State) -> App<State> {
         })
         .route("/logout", Method::GET, logout)
         .resource("/reset", |r| {
-            r.get().f(reset);
-            r.post().f(do_reset);
+            r.get().with(reset);
+            r.post().with(do_reset);
         })
         .resource("/register", |r| {
+            r.name("register");
             r.get().with(register);
             r.post().with(do_register);
         })
@@ -136,6 +141,17 @@ pub fn logout((req, sess): (HttpRequest<State>, Session)) -> RenderedTemplate {
     render("logout.html", &Empty {})
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ResetQuery {
+    token: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ResetTemplate<'s> {
+    error: Option<&'s str>,
+    token: Option<&'s str>,
+}
+
 /// Request a password reset or render a reset form (with a token).
 ///
 /// ## Method
@@ -143,8 +159,27 @@ pub fn logout((req, sess): (HttpRequest<State>, Session)) -> RenderedTemplate {
 /// ```
 /// GET /reset
 /// ```
-pub fn reset(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn reset(query: Query<ResetQuery>) -> RenderedTemplate {
+    render("reset.html", &*query)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum ResetForm {
+    CreateToken {
+        email: String,
+    },
+    FulfilToken {
+        password: String,
+        password1: String,
+        token: String,
+    },
+}
+
+#[derive(Serialize)]
+struct ResetMail<'s> {
+    user: UserData,
+    url: &'s str,
 }
 
 /// Send reset token in an e-mail or perform password reset (with a token).
@@ -154,8 +189,58 @@ pub fn reset(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// POST /reset
 /// ```
-pub fn do_reset(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn do_reset((
+    req,
+    state,
+    form,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    Form<ResetForm>,
+))
+-> RenderedTemplate {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    match form.into_inner() {
+        ResetForm::CreateToken { email } => {
+            let user = User::by_email(&*db, &email)?;
+            let token = PasswordResetToken::create(&*db, &user)
+                .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+            let code = token.get_code(&state.config);
+            // TODO: get URL from Actix.
+            let url = format!(
+                "https://{}/reset?token={}", &state.config.server.domain, code);
+
+            state.mailer.send(
+                "reset", email.as_str(), "Password reset", &ResetMail {
+                    user: user.get_public(),
+                    url: &url,
+                });
+
+            render("reset_token_sent.html", &Empty {})
+        }
+        ResetForm::FulfilToken { password, password1, token: token_str } => {
+            let token = PasswordResetToken::from_code(
+                &*db, &state.config, &token_str)?;
+
+            if password != password1 {
+                return render_code(StatusCode::BAD_REQUEST, "reset.html", &ResetTemplate {
+                    error: Some("Passwords don't match"),
+                    token: Some(&token_str),
+                });
+            }
+
+            let user = token.fulfil(&*db, &password)
+                .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+            Session::<Normal>::create(&req, user.id, false);
+
+            Ok(HttpResponse::SeeOther()
+                .header("Location", "/")
+                .finish())
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
