@@ -36,7 +36,7 @@ mod cli;
 mod config;
 mod db;
 mod models;
+mod templates;
 mod utils;
 
 pub type Result<T> = std::result::Result<T, failure::Error>;
-

@@ -8,7 +8,6 @@ use actix_web::{
     http::{Method, StatusCode},
     middleware::Logger,
 };
-use tera::Tera;
 
 use crate::models::{Invite, User};
 use super::{
@@ -38,12 +37,6 @@ pub fn app(state: State) -> App<State> {
             r.get().with(register);
             r.post().with(do_register);
         })
-}
-
-lazy_static! {
-    static ref TERA: Tera = {
-        compile_templates!("templates/**/*")
-    };
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -283,7 +276,8 @@ fn render_code<T>(code: StatusCode, name: &str, context: &T) -> RenderedTemplate
 where
     T: serde::Serialize,
 {
-    TERA.render(name, context)
+    crate::templates::PAGES
+        .render(name, context)
         .map(|r| HttpResponse::build(code).body(r))
         .map_err(|e| ErrorInternalServerError(e.to_string()))
 }
