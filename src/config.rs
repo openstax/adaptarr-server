@@ -13,6 +13,7 @@ pub struct Config {
     pub server: Server,
     pub database: Option<Database>,
     pub mail: crate::mail::Config,
+    pub storage: Storage,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -31,6 +32,13 @@ pub struct Server {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Database {
     pub url: String,
+}
+
+/// File storage configuration.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Storage {
+    /// Path to a directory in which user-uploaded files will be kept.
+    pub path: std::path::PathBuf,
 }
 
 #[derive(Debug, Fail)]

@@ -27,3 +27,8 @@ sender = "noreply@example.com"
 # - "log" to log emails to standard error for debugging,
 # - "sendmail" to use the sendmail(1) command,
 transport = "log"
+
+# :required: Backing storage for files.
+[storage]
+# :required: Path to a directory in which user-uploaded files will be kept.
+path = "/var/uploads"

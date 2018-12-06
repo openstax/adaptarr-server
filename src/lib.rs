@@ -4,10 +4,13 @@
 extern crate actix_web;
 extern crate argon2;
 extern crate base64;
+extern crate blake2_rfc as blake2;
 extern crate chrono;
 extern crate failure;
+extern crate futures;
 extern crate lettre;
 extern crate lettre_email;
+extern crate magic;
 extern crate r2d2;
 extern crate r2d2_diesel;
 extern crate rand;
@@ -15,6 +18,7 @@ extern crate ring;
 extern crate rmp_serde as rmps;
 extern crate serde;
 extern crate structopt;
+extern crate tempfile;
 extern crate toml;
 
 #[macro_use] extern crate diesel;
