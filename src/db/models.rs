@@ -156,3 +156,17 @@ pub struct ModuleVersion {
     pub version: NaiveDateTime,
 }
 
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct Book {
+    /// ID of this book.
+    pub id: Uuid,
+    /// Title of this book.
+    pub title: String,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "books"]
+pub struct NewBook<'a> {
+    pub id: Uuid,
+    pub title: &'a str,
+}

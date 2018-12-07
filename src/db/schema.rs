@@ -1,4 +1,11 @@
 table! {
+    books (id) {
+        id -> Uuid,
+        title -> Varchar,
+    }
+}
+
+table! {
     documents (id) {
         id -> Int4,
         name -> Varchar,
@@ -77,6 +84,7 @@ joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
 
 allow_tables_to_appear_in_same_query!(
+    books,
     documents,
     files,
     invites,
