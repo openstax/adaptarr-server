@@ -18,6 +18,14 @@ pub struct Module {
     document: db::Document,
 }
 
+/// A subset of module's data that can safely be publicly exposed.
+#[derive(Debug, Serialize)]
+pub struct PublicData {
+    pub id: Uuid,
+    pub name: String,
+    pub assignee: Option<i32>,
+}
+
 impl Module {
     /// Find a module by ID.
     pub fn by_id(dbconn: &Connection, id: Uuid) -> Result<Module, FindModuleError> {
@@ -28,6 +36,15 @@ impl Module {
             .optional()?
             .ok_or(FindModuleError::NotFound)
             .map(|(data, document)| Module { data, document })
+    }
+
+    /// Get the public portion of this module's data.
+    pub fn get_public(&self) -> PublicData {
+        PublicData {
+            id: self.data.id,
+            name: self.document.name.clone(),
+            assignee: self.data.assignee,
+        }
     }
 }
 
