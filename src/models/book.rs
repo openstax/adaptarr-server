@@ -1,3 +1,4 @@
+use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     prelude::*,
     result::Error as DbError,
@@ -17,6 +18,13 @@ pub struct Book {
     data: db::Book,
 }
 
+/// A subset of book's data that can safely be publicly exposed.
+#[derive(Debug, Serialize)]
+pub struct PublicData {
+    id: Uuid,
+    title: String,
+}
+
 impl Book {
     /// Find a book by ID.
     pub fn by_id(dbconn: &Connection, id: Uuid) -> Result<Book, FindBookError> {
@@ -26,6 +34,14 @@ impl Book {
             .optional()?
             .ok_or(FindBookError::NotFound)
             .map(|data| Book { data })
+    }
+
+    /// Get the public portion of this book's data.
+    pub fn get_public(&self) -> PublicData {
+        PublicData {
+            id: self.data.id,
+            title: self.data.title.clone(),
+        }
     }
 }
 
@@ -41,4 +57,15 @@ pub enum FindBookError {
 
 impl_from! { for FindBookError ;
     DbError => |e| FindBookError::Database(e),
+}
+
+impl ResponseError for FindBookError {
+    fn error_response(&self) -> HttpResponse {
+        match *self {
+            FindBookError::Database(_) =>
+                HttpResponse::InternalServerError().finish(),
+            FindBookError::NotFound =>
+                HttpResponse::NotFound().finish(),
+        }
+    }
 }
