@@ -1,4 +1,15 @@
 table! {
+    book_parts (book, id) {
+        book -> Uuid,
+        id -> Int4,
+        title -> Varchar,
+        module -> Nullable<Uuid>,
+        parent -> Int4,
+        index -> Int4,
+    }
+}
+
+table! {
     books (id) {
         id -> Uuid,
         title -> Varchar,
@@ -75,6 +86,8 @@ table! {
     }
 }
 
+joinable!(book_parts -> books (book));
+joinable!(book_parts -> modules (module));
 joinable!(documents -> files (index));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
@@ -84,6 +97,7 @@ joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
 
 allow_tables_to_appear_in_same_query!(
+    book_parts,
     books,
     documents,
     files,

@@ -170,3 +170,33 @@ pub struct NewBook<'a> {
     pub id: Uuid,
     pub title: &'a str,
 }
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+#[primary_key(book, id)]
+pub struct BookPart {
+    /// ID of the book this is a part of.
+    pub book: Uuid,
+    /// ID of this part within `book`.
+    pub id: i32,
+    /// Title of this part.
+    pub title: String,
+    /// If this field is `Some` this part is a module. Otherwise it is a group
+    /// of book parts.
+    pub module: Option<Uuid>,
+    /// ID of a book part this book part is an item in.
+    ///
+    /// As a special case, this field is 0 for group 0.
+    pub parent: i32,
+    /// Index of this book part within `parent`.
+    pub index: i32,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "book_parts"]
+pub struct NewBookPart<'a> {
+    pub book: Uuid,
+    pub title: &'a str,
+    pub module: Option<Uuid>,
+    pub parent: i32,
+    pub index: i32,
+}
