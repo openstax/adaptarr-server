@@ -26,18 +26,26 @@ pub struct PublicData {
     number: i32,
     title: String,
     #[serde(flatten)]
-    part: Variant,
+    part: Variant<i32>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
-enum Variant {
+enum Variant<Part> {
     Module {
         id: Uuid,
     },
     Group {
-        parts: Vec<i32>,
+        parts: Vec<Part>,
     },
+}
+
+#[derive(Debug, Serialize)]
+pub struct Tree {
+    number: i32,
+    title: String,
+    #[serde(flatten)]
+    part: Variant<Tree>,
 }
 
 impl BookPart {
@@ -84,6 +92,31 @@ impl BookPart {
                         })?,
                 }
             },
+        })
+    }
+
+    /// Get contents of this group as a tree.
+    pub fn get_tree(&self, dbconn: &Connection) -> Result<Tree, DbError> {
+        let part = if let Some(id) = self.data.module {
+            Variant::Module { id }
+        } else {
+            let parts = book_parts::table
+                .filter(book_parts::book.eq(self.data.book)
+                    .and(book_parts::parent.eq(self.data.id))
+                    .and(book_parts::id.ne(self.data.id)))
+                .order_by(book_parts::index.asc())
+                .get_results::<db::BookPart>(dbconn)?
+                .into_iter()
+                .map(|data| BookPart { data }.get_tree(dbconn))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Variant::Group { parts }
+        };
+
+        Ok(Tree {
+            number: self.data.id,
+            title: self.data.title.clone(),
+            part,
         })
     }
 }

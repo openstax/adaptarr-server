@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::models::{
     book::{Book, PublicData as BookData},
-    bookpart::{BookPart, PublicData as PartData},
+    bookpart::{BookPart, PublicData as PartData, Tree},
 };
 use super::{
     State,
@@ -29,7 +29,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.delete().f(delete_book);
         })
         .resource("/books/{id}/parts", |r| {
-            r.get().f(book_contents);
+            r.get().with(book_contents);
             r.post().f(create_part);
         })
         .resource("/books/{id}/parts/{number}", |r| {
@@ -104,8 +104,22 @@ pub fn delete_book(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// GET /books/:id/parts
 /// ```
-pub fn book_contents(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn book_contents((
+    state,
+    _session,
+    id,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<Uuid>,
+)) -> Result<Json<Tree>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let book = BookPart::by_id(&*db, *id, 0)?;
+
+    book.get_tree(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))
+        .map(Json)
 }
 
 /// Create a new part.
