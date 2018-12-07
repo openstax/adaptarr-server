@@ -136,6 +136,26 @@ pub struct NewDocument<'a> {
     pub index: i32,
 }
 
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct DocumentFile {
+    /// ID of this document file.
+    pub id: i32,
+    /// ID of the document this file is a part of.
+    pub document: i32,
+    /// Name of this file.
+    pub name: String,
+    /// The actual file.
+    pub file: i32,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "document_files"]
+pub struct NewDocumentFile<'a> {
+    pub document: i32,
+    pub name: &'a str,
+    pub file: i32,
+}
+
 #[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
 pub struct Module {
     /// ID of this module.

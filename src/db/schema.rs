@@ -17,6 +17,15 @@ table! {
 }
 
 table! {
+    document_files (id) {
+        id -> Int4,
+        document -> Int4,
+        name -> Varchar,
+        file -> Int4,
+    }
+}
+
+table! {
     documents (id) {
         id -> Int4,
         name -> Varchar,
@@ -88,6 +97,8 @@ table! {
 
 joinable!(book_parts -> books (book));
 joinable!(book_parts -> modules (module));
+joinable!(document_files -> documents (document));
+joinable!(document_files -> files (file));
 joinable!(documents -> files (index));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
@@ -99,6 +110,7 @@ joinable!(sessions -> users (user));
 allow_tables_to_appear_in_same_query!(
     book_parts,
     books,
+    document_files,
     documents,
     files,
     invites,
