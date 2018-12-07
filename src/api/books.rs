@@ -8,7 +8,10 @@ use actix_web::{
 };
 use uuid::Uuid;
 
-use crate::models::book::{Book, PublicData as BookData};
+use crate::models::{
+    book::{Book, PublicData as BookData},
+    bookpart::{BookPart, PublicData as PartData},
+};
 use super::{
     State,
     session::Session,
@@ -30,7 +33,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.post().f(create_part);
         })
         .resource("/books/{id}/parts/{number}", |r| {
-            r.get().f(get_part);
+            r.get().with(get_part);
             r.delete().f(delete_part);
             r.put().f(update_part);
         })
@@ -123,8 +126,23 @@ pub fn create_part(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// GET /book/:id/parts/:number
 /// ```
-pub fn get_part(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn get_part((
+    state,
+    _session,
+    path,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<(Uuid, i32)>,
+)) -> Result<Json<PartData>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let (book, id) = path.into_inner();
+    let part = BookPart::by_id(&*db, book, id)?;
+
+    part.get_public(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))
+        .map(Json)
 }
 
 /// Delete a part from a book.

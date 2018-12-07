@@ -1,3 +1,4 @@
+use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     prelude::*,
     result::Error as DbError,
@@ -17,6 +18,26 @@ use crate::db::{
 #[derive(Debug)]
 pub struct BookPart {
     data: db::BookPart,
+}
+
+/// A subset of book part's data that can safely be publicly exposed.
+#[derive(Debug, Serialize)]
+pub struct PublicData {
+    number: i32,
+    title: String,
+    #[serde(flatten)]
+    part: Variant,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum Variant {
+    Module {
+        id: Uuid,
+    },
+    Group {
+        parts: Vec<i32>,
+    },
 }
 
 impl BookPart {
@@ -46,6 +67,25 @@ impl BookPart {
             .map_err(Into::into)
             .map(|r| r.into_iter().map(|p| p.id).collect())
     }
+
+    /// Get the public portion of this book part's data.
+    pub fn get_public(&self, dbconn: &Connection) -> Result<PublicData, DbError> {
+        Ok(PublicData {
+            number: self.data.id,
+            title: self.data.title.clone(),
+            part: if let Some(id) = self.data.module {
+                Variant::Module { id }
+            } else {
+                Variant::Group {
+                    parts: self.get_parts(dbconn)
+                        .map_err(|e| match e {
+                            GetPartsError::Database(e) => e,
+                            GetPartsError::IsAModule => unreachable!(),
+                        })?,
+                }
+            },
+        })
+    }
 }
 
 #[derive(Debug, Fail)]
@@ -60,6 +100,16 @@ pub enum FindBookPartError {
 
 impl_from! { for FindBookPartError ;
     DbError => |e| FindBookPartError::Database(e),
+}
+impl ResponseError for FindBookPartError {
+    fn error_response(&self) -> HttpResponse {
+        match *self {
+            FindBookPartError::Database(_) =>
+                HttpResponse::InternalServerError().finish(),
+            FindBookPartError::NotFound =>
+                HttpResponse::NotFound().finish(),
+        }
+    }
 }
 
 #[derive(Debug, Fail)]
