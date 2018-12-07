@@ -107,8 +107,22 @@ pub fn add_comment(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// GET /modules/:id/files
 /// ```
-pub fn list_files(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn list_files((
+    state,
+    _session,
+    id,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<Uuid>,
+)) -> Result<Json<Vec<String>>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let module = Module::by_id(&*db, *id)?;
+
+    module.get_files(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))
+        .map(Json)
 }
 
 /// Get a file from a module.
