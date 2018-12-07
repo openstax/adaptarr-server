@@ -11,7 +11,6 @@ use super::{
     mail::Mailer,
 };
 
-mod bookparts;
 mod books;
 mod conversations;
 mod dashboard;
@@ -67,7 +66,6 @@ fn api_app(state: State) -> App<State> {
         .middleware(Logger::default())
         .middleware(sessions)
         .prefix("/api/v1")
-        .configure(bookparts::routes)
         .configure(books::routes)
         .configure(conversations::routes)
         .configure(dashboard::routes)

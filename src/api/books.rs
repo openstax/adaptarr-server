@@ -25,6 +25,15 @@ pub fn routes(app: App<State>) -> App<State> {
             r.get().with(get_book);
             r.delete().f(delete_book);
         })
+        .resource("/books/{id}/parts", |r| {
+            r.get().f(book_contents);
+            r.post().f(create_part);
+        })
+        .resource("/books/{id}/parts/{number}", |r| {
+            r.get().f(get_part);
+            r.delete().f(delete_part);
+            r.put().f(update_part);
+        })
 }
 
 type Result<T> = std::result::Result<T, actix_web::Error>;
@@ -82,5 +91,60 @@ pub fn get_book((
 /// DELETE /books/:id
 /// ```
 pub fn delete_book(_req: &HttpRequest<State>) -> HttpResponse {
+    unimplemented!()
+}
+
+/// Get book's contents as a tree.
+///
+/// ## Method
+///
+/// ```
+/// GET /books/:id/parts
+/// ```
+pub fn book_contents(_req: &HttpRequest<State>) -> HttpResponse {
+    unimplemented!()
+}
+
+/// Create a new part.
+///
+/// ## Method
+///
+/// ```
+/// POST /books/:id/parts
+/// ```
+pub fn create_part(_req: &HttpRequest<State>) -> HttpResponse {
+    unimplemented!()
+}
+
+/// Inspect a single part of a book.
+///
+/// ## Method
+///
+/// ```
+/// GET /book/:id/parts/:number
+/// ```
+pub fn get_part(_req: &HttpRequest<State>) -> HttpResponse {
+    unimplemented!()
+}
+
+/// Delete a part from a book.
+///
+/// ## Method
+///
+/// ```
+/// DELETE /book/:ids/parts/:number
+/// ```
+pub fn delete_part(_req: &HttpRequest<State>) -> HttpResponse {
+    unimplemented!()
+}
+
+/// Update a book part.
+///
+/// ## Method
+///
+/// ```
+/// PUT /book/:ids/parts/:number
+/// ```
+pub fn update_part(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
