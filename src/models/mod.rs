@@ -2,6 +2,7 @@
 
 pub mod book;
 pub mod bookpart;
+pub mod document;
 pub mod file;
 pub mod invite;
 pub mod module;
@@ -11,6 +12,7 @@ pub mod user;
 pub use self::{
     book::Book,
     bookpart::BookPart,
+    document::Document,
     file::File,
     invite::Invite,
     module::Module,

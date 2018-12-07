@@ -10,12 +10,13 @@ use crate::db::{
     models as db,
     schema::{documents, modules},
 };
+use super::Document;
 
 /// A module is a version of Document that can be part of a Book.
 #[derive(Debug)]
 pub struct Module {
     data: db::Module,
-    document: db::Document,
+    document: Document,
 }
 
 /// A subset of module's data that can safely be publicly exposed.
@@ -35,7 +36,10 @@ impl Module {
             .get_result::<(db::Module, db::Document)>(dbconn)
             .optional()?
             .ok_or(FindModuleError::NotFound)
-            .map(|(data, document)| Module { data, document })
+            .map(|(data, document)| Module {
+                data,
+                document: Document::from_db(document),
+            })
     }
 
     /// Get the public portion of this module's data.
@@ -45,6 +49,14 @@ impl Module {
             name: self.document.name.clone(),
             assignee: self.data.assignee,
         }
+    }
+}
+
+impl std::ops::Deref for Module {
+    type Target = Document;
+
+    fn deref(&self) -> &Document {
+        &self.document
     }
 }
 
