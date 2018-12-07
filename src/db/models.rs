@@ -1,4 +1,5 @@
 use chrono::NaiveDateTime;
+use uuid::Uuid;
 
 use super::schema::*;
 
@@ -134,3 +135,24 @@ pub struct NewDocument<'a> {
     pub name: &'a str,
     pub index: i32,
 }
+
+#[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
+pub struct Module {
+    /// ID of this module.
+    pub id: Uuid,
+    /// Document which is the current content of this module.
+    pub document: i32,
+    /// User assigned to this module.
+    pub assignee: Option<i32>,
+}
+
+#[derive(Clone, Copy, Debug, Insertable, Queryable)]
+pub struct ModuleVersion {
+    /// ID of the module.
+    pub module: Uuid,
+    /// ID of the document which was content of the module at this version.
+    pub document: i32,
+    /// Date this version was created.
+    pub version: NaiveDateTime,
+}
+

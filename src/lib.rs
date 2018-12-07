@@ -20,6 +20,7 @@ extern crate serde;
 extern crate structopt;
 extern crate tempfile;
 extern crate toml;
+extern crate uuid;
 
 #[macro_use] extern crate diesel;
 #[macro_use] extern crate failure_derive;

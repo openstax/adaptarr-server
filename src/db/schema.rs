@@ -24,6 +24,22 @@ table! {
 }
 
 table! {
+    modules (id) {
+        id -> Uuid,
+        document -> Int4,
+        assignee -> Nullable<Int4>,
+    }
+}
+
+table! {
+    module_versions (module, document) {
+        module -> Uuid,
+        document -> Int4,
+        version -> Timestamp,
+    }
+}
+
+table! {
     password_reset_tokens (id) {
         id -> Int4,
         user -> Int4,
@@ -53,6 +69,10 @@ table! {
 }
 
 joinable!(documents -> files (index));
+joinable!(module_versions -> documents (document));
+joinable!(module_versions -> modules (module));
+joinable!(modules -> documents (document));
+joinable!(modules -> users (assignee));
 joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
 
@@ -60,6 +80,8 @@ allow_tables_to_appear_in_same_query!(
     documents,
     files,
     invites,
+    modules,
+    module_versions,
     password_reset_tokens,
     sessions,
     users,
