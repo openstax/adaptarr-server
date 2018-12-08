@@ -27,6 +27,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .resource("/books/{id}", |r| {
             r.get().with(get_book);
+            r.put().with(update_book);
             r.delete().f(delete_book);
         })
         .resource("/books/{id}/parts", |r| {
@@ -100,6 +101,39 @@ pub fn get_book((
     let db = state.db.get()
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
     let book = Book::by_id(&*db, *id)?;
+
+    Ok(Json(book.get_public()))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BookChange {
+    title: String,
+}
+
+/// Update books metadata.
+///
+/// ## Method
+///
+/// ```
+/// PUT /books/:id
+/// ```
+pub fn update_book((
+    state,
+    _session,
+    id,
+    change,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Path<Uuid>,
+    Json<BookChange>,
+)) -> Result<Json<BookData>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let mut book = Book::by_id(&*db, *id)?;
+
+    book.set_title(&*db, change.into_inner().title)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
     Ok(Json(book.get_public()))
 }

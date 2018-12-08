@@ -53,6 +53,15 @@ impl Book {
             title: self.data.title.clone(),
         }
     }
+
+    /// Change title of this book.
+    pub fn set_title(&mut self, dbconn: &Connection, title: String) -> Result<(), DbError> {
+        diesel::update(&self.data)
+            .set(books::title.eq(&title))
+            .execute(dbconn)?;
+        self.data.title = title;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Fail)]
