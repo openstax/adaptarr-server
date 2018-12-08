@@ -3,7 +3,6 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
-
 use uuid::Uuid;
 
 use crate::db::{
@@ -33,6 +32,17 @@ impl Book {
             .get_result::<db::Book>(dbconn)
             .optional()?
             .ok_or(FindBookError::NotFound)
+            .map(|data| Book { data })
+    }
+
+    /// Create a new book.
+    pub fn create(dbconn: &Connection, title: &str) -> Result<Book, DbError> {
+        diesel::insert_into(books::table)
+            .values(db::NewBook {
+                id: Uuid::new_v4(),
+                title,
+            })
+            .get_result::<db::Book>(dbconn)
             .map(|data| Book { data })
     }
 

@@ -1,5 +1,6 @@
 use actix_web::{
     App,
+    Form,
     HttpRequest,
     HttpResponse,
     Json,
@@ -14,7 +15,7 @@ use crate::models::{
 };
 use super::{
     State,
-    session::Session,
+    session::{ElevatedSession, Session},
 };
 
 /// Configure routes.
@@ -22,7 +23,7 @@ pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/books", |r| {
             r.get().f(list_books);
-            r.post().f(create_book);
+            r.post().with(create_book);
         })
         .resource("/books/{id}", |r| {
             r.get().with(get_book);
@@ -52,6 +53,11 @@ pub fn list_books(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BookForm {
+    title: String,
+}
+
 /// Create a new book.
 ///
 /// ## Method
@@ -59,8 +65,20 @@ pub fn list_books(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// POST /books
 /// ```
-pub fn create_book(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn create_book((
+    state,
+    _session,
+    form,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Form<BookForm>,
+)) -> Result<Json<BookData>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let book = Book::create(&*db, &form.title)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    Ok(Json(book.get_public()))
 }
 
 /// Get a book by ID.
