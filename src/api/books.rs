@@ -28,7 +28,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/books/{id}", |r| {
             r.get().with(get_book);
             r.put().with(update_book);
-            r.delete().f(delete_book);
+            r.delete().with(delete_book);
         })
         .resource("/books/{id}/parts", |r| {
             r.get().with(book_contents);
@@ -145,8 +145,22 @@ pub fn update_book((
 /// ```
 /// DELETE /books/:id
 /// ```
-pub fn delete_book(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn delete_book((
+    state,
+    _session,
+    id,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Path<Uuid>,
+)) -> Result<HttpResponse> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let book = Book::by_id(&*db, *id)?;
+
+    book.delete(&*db).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Get book's contents as a tree.

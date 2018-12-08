@@ -46,6 +46,15 @@ impl Book {
             .map(|data| Book { data })
     }
 
+    /// Delete this book.
+    ///
+    /// This will delete only the book and its structure. Modules added to this
+    /// book will not be affected.
+    pub fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
+        diesel::delete(&self.data).execute(dbconn)?;
+        Ok(())
+    }
+
     /// Get the public portion of this book's data.
     pub fn get_public(&self) -> PublicData {
         PublicData {
