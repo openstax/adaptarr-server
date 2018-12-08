@@ -100,28 +100,25 @@ impl User {
     /// Find an user for given email and try to authenticate as them.
     pub fn authenticate(dbcon: &Connection, email: &str, password: &str)
     -> Result<User, UserAuthenticateError> {
-        let user = users::table
-            .filter(users::email.eq(email))
-            .get_result::<db::User>(dbcon)
-            .optional()?
-            .ok_or(UserAuthenticateError::NotFound)?;
+        let user = User::by_email(dbcon, email)?;
 
-        // Verification can only fail if the configuration is invalid, or salt
-        // or password digest length are wrong. All those cases are unlikely.
-        let good = argon2::verify_raw(
-            password.as_bytes(),
-            &user.salt,
-            &user.password,
-            &ARGON2_CONFIG,
-        ).expect("hashing password");
-
-        if good {
-            Ok(User {
-                data: user,
-            })
+        if user.check_password(password) {
+            Ok(user)
         } else {
             Err(UserAuthenticateError::BadPassword)
         }
+    }
+
+    /// Verify correctness of a password.
+    pub fn check_password(&self, password: &str) -> bool {
+        // Verification can only fail if the configuration is invalid, or salt
+        // or password digest length are wrong. All those cases are unlikely.
+        argon2::verify_raw(
+            password.as_bytes(),
+            &self.data.salt,
+            &self.data.password,
+            &ARGON2_CONFIG,
+        ).expect("hashing password")
     }
 
     /// Get the public portion of this user's data.
@@ -250,6 +247,10 @@ impl UserAuthenticateError {
 
 impl_from! { for UserAuthenticateError ;
     DbError => |e| UserAuthenticateError::Internal(e),
+    FindUserError => |e| match e {
+        FindUserError::Internal(e) => UserAuthenticateError::Internal(e),
+        FindUserError::NotFound => UserAuthenticateError::NotFound,
+    },
 }
 
 #[derive(Debug, Fail)]

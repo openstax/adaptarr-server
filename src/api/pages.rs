@@ -32,6 +32,10 @@ pub fn app(state: State) -> App<State> {
             r.get().with(login);
             r.post().with(do_login);
         })
+        .resource("/elevate", |r| {
+            r.get().with(elevate);
+            r.post().with(do_elevate);
+        })
         .route("/logout", Method::GET, logout)
         .resource("/reset", |r| {
             r.get().with(reset);
@@ -126,6 +130,86 @@ pub fn do_login((
 
     Ok(HttpResponse::SeeOther()
         .header("Location", params.next.as_ref().map_or("/", String::as_str))
+        .finish())
+}
+
+/// Render a session elevation screen.
+///
+/// ## Method
+///
+/// ```
+/// GET /elevate
+/// ```
+pub fn elevate((
+    state,
+    session,
+    query,
+): (
+    actix_web::State<State>,
+    Session,
+    Query<LoginQuery>,
+)) -> RenderedTemplate {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let user = User::by_id(&*db, session.user)?;
+
+    if !user.is_super {
+        return Ok(HttpResponse::Forbidden().finish());
+    }
+
+    render("elevate.html", &LoginTemplate {
+        error: None,
+        next: query.into_inner().next,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ElevateCredentials {
+    password: String,
+    next: Option<String>,
+}
+
+/// Perform session elevation.
+///
+/// ## Method
+///
+/// ```
+/// POST /elevate
+/// ```
+pub fn do_elevate((
+    req,
+    state,
+    session,
+    form,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    Session,
+    Form<ElevateCredentials>,
+)) -> RenderedTemplate {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let user = User::by_id(&*db, session.user)?;
+
+    if !user.is_super {
+        return Ok(HttpResponse::Forbidden().finish());
+    }
+
+    if !user.check_password(&form.password) {
+        return render_code(
+            StatusCode::BAD_REQUEST,
+            "elevate.html",
+            &LoginTemplate {
+                error: Some("Bad password".to_string()),
+                next: form.into_inner().next,
+            },
+        );
+    }
+
+    Session::<Normal>::create(&req, user.id, true);
+
+    Ok(HttpResponse::SeeOther()
+        .header("Location", form.next.as_ref().map_or("/", String::as_str))
         .finish())
 }
 

@@ -1,0 +1,16 @@
+{% extends "_base.html" %}
+{% block body %}
+    <form method="post">
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <input type="password" name="password" placeholder="Password">
+
+        {% if next %}
+            <input type="hidden" name="next" value="{{ next }}">
+        {% endif %}
+
+        <input type="submit" name="Authorize">
+    </form>
+{% endblock body %}
