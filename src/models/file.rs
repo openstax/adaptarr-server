@@ -34,6 +34,21 @@ pub struct File {
 }
 
 impl File {
+    /// Construct `File` from its database counterpart.
+    pub(super) fn from_db(data: db::File) -> File {
+        File { data }
+    }
+
+    /// Find a file by ID.
+    pub fn by_id(dbconn: &Connection, id: i32) -> Result<File, FindFileError> {
+        files::table
+            .filter(files::id.eq(id))
+            .get_result::<db::File>(dbconn)
+            .optional()?
+            .ok_or(FindFileError::NotFound)
+            .map(File::from_db)
+    }
+
     /// Create new file from a stream of bytes.
     pub fn from_stream<S, I>(dbpool: Pool, storage: PathBuf, data: S)
         -> impl Future<Item=File, Error=CreateFileError>
@@ -100,6 +115,20 @@ impl std::ops::Deref for File {
     fn deref(&self) -> &db::File {
         &self.data
     }
+}
+
+#[derive(Debug, Fail)]
+pub enum FindFileError {
+    /// Creation failed due to a database error.
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    /// File not found.
+    #[fail(display = "No such file")]
+    NotFound,
+}
+
+impl_from! { for FindFileError ;
+    DbError => |e| FindFileError::Database(e),
 }
 
 #[derive(Debug, Fail)]
