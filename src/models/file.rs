@@ -1,3 +1,4 @@
+use actix_web::{Responder, fs::NamedFile};
 use blake2::blake2b::{Blake2b, Blake2bResult};
 use diesel::{
     prelude::*,
@@ -10,11 +11,14 @@ use std::{
 };
 use tempfile::{Builder as TempBuilder, NamedTempFile};
 
-use crate::db::{
-    Connection,
-    Pool,
-    models as db,
-    schema::files,
+use crate::{
+    Config,
+    db::{
+        Connection,
+        Pool,
+        models as db,
+        schema::files,
+    },
 };
 
 thread_local! {
@@ -107,6 +111,13 @@ impl File {
             }
         }
     }
+
+    /// Get an Actix responder streaming contents of this file.
+    pub fn stream(&self, cfg: &Config) -> impl Responder {
+        let hash = hash_to_hex(&self.data.hash);
+        let path = cfg.storage.path.join(hash);
+        NamedFile::open(path)
+    }
 }
 
 impl std::ops::Deref for File {
@@ -185,7 +196,7 @@ fn hash_to_hex(hash: &[u8]) -> String {
     let mut hex = String::with_capacity(hash.len() * 4);
 
     for byte in hash {
-        write!(hex, "{:02x}", byte);
+        write!(hex, "{:02x}", byte).unwrap();
     }
 
     hex

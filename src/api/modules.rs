@@ -4,6 +4,7 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
+    Responder,
     error::ErrorInternalServerError,
     http::Method,
 };
@@ -132,6 +133,20 @@ pub fn list_files((
 /// ```
 /// GET /modules/:id/files/:name
 /// ```
-pub fn get_file(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn get_file((
+    state,
+    _session,
+    path,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<(Uuid, String)>,
+)) -> Result<impl Responder> {
+    let (id, name) = path.into_inner();
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let module = Module::by_id(&*db, id)?;
+
+    Ok(module.get_file(&*db, &name)?
+        .stream(&state.config))
 }
