@@ -1,5 +1,6 @@
 use actix_web::{HttpResponse, ResponseError};
 use diesel::{
+    Connection as _Connection,
     prelude::*,
     result::Error as DbError,
 };
@@ -7,7 +8,7 @@ use diesel::{
 use crate::db::{
     Connection,
     models as db,
-    schema::{document_files, files},
+    schema::{documents, document_files, files},
 };
 use super::file::{File, FindFileError};
 
@@ -23,6 +24,39 @@ impl Document {
     /// Construct `Document` from its database counterpart.
     pub(super) fn from_db(data: db::Document) -> Document {
         Document { data }
+    }
+
+    /// Create a new document.
+    pub(super) fn create<'c, N, I>(
+        dbconn: &Connection,
+        name: &str,
+        index: File,
+        files: I,
+    )  -> Result<Document, DbError>
+    where
+        I: IntoIterator<Item = &'c (N, File)>,
+        N: AsRef<str> + 'c,
+    {
+        dbconn.transaction(|| {
+            let data = diesel::insert_into(documents::table)
+                .values(&db::NewDocument {
+                    name,
+                    index: index.id,
+                })
+                .get_result::<db::Document>(dbconn)?;
+
+            for (name, file) in files {
+                diesel::insert_into(document_files::table)
+                    .values(&db::NewDocumentFile {
+                        document: data.id,
+                        name: name.as_ref(),
+                        file: file.id,
+                    })
+                    .execute(dbconn)?;
+            }
+
+            Ok(Document { data })
+        })
     }
 
     /// Get list of files in this document.

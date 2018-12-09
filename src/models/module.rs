@@ -1,5 +1,6 @@
 use actix_web::{HttpResponse, ResponseError};
 use diesel::{
+    Connection as _Connection,
     prelude::*,
     result::Error as DbError,
 };
@@ -10,7 +11,7 @@ use crate::db::{
     models as db,
     schema::{documents, modules},
 };
-use super::Document;
+use super::{Document, File};
 
 /// A module is a version of Document that can be part of a Book.
 #[derive(Debug)]
@@ -40,6 +41,32 @@ impl Module {
                 data,
                 document: Document::from_db(document),
             })
+    }
+
+    /// Create a new module.
+    pub fn create<'c, N, I>(
+        dbconn: &Connection,
+        title: &str,
+        index: File,
+        files: I,
+    ) -> Result<Module, DbError>
+    where
+        I: IntoIterator<Item = &'c (N, File)>,
+        N: AsRef<str> + 'c,
+    {
+        dbconn.transaction(|| {
+            let document = Document::create(dbconn, title, index, files)?;
+
+            let data = diesel::insert_into(modules::table)
+                .values(&db::Module {
+                    id: Uuid::new_v4(),
+                    document: document.id,
+                    assignee: None,
+                })
+                .get_result::<db::Module>(dbconn)?;
+
+            Ok(Module { data, document })
+        })
     }
 
     /// Get the public portion of this module's data.
