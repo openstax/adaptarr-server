@@ -1,5 +1,6 @@
 use actix_web::{HttpResponse, ResponseError};
 use diesel::{
+    Connection as _Connection,
     prelude::*,
     result::Error as DbError,
 };
@@ -10,6 +11,7 @@ use crate::db::{
     models as db,
     schema::book_parts,
 };
+use super::Module;
 
 /// Part of a book.
 ///
@@ -119,6 +121,72 @@ impl BookPart {
             part,
         })
     }
+
+    /// Insert a module at index.
+    pub fn insert_module<T>(
+        &self,
+        dbconn: &Connection,
+        index: i32,
+        title: T,
+        module: &Module,
+    ) -> Result<BookPart, CreatePartError>
+    where
+        T: AsRef<str>,
+    {
+        self.create_at(dbconn, index, title.as_ref(), Some(module))
+    }
+
+    /// Create a new group at index.
+    pub fn create_group<T>(&self, dbconn: &Connection, index: i32, title: T)
+    -> Result<BookPart, CreatePartError>
+    where
+        T: AsRef<str>,
+    {
+        self.create_at(dbconn, index, title.as_ref(), None)
+    }
+
+    /// Create a new book part at an index within this book part.
+    fn create_at(
+        &self,
+        dbconn: &Connection,
+        index: i32,
+        title: &str,
+        module: Option<&Module>,
+    ) -> Result<BookPart, CreatePartError> {
+        if self.data.module.is_some() {
+            return Err(CreatePartError::IsAModule);
+        }
+
+        dbconn.transaction(|| {
+            let parts = book_parts::table
+                .filter(book_parts::book.eq(self.data.book)
+                    .and(book_parts::parent.eq(self.data.id))
+                    .and(book_parts::index.ge(index)));
+            diesel::update(parts)
+                .set(book_parts::index.eq(book_parts::index + 1))
+                .execute(dbconn)?;
+
+            diesel::insert_into(book_parts::table)
+                .values(&db::NewBookPart {
+                    book: self.data.book,
+                    title: title,
+                    module: module.map(|m| m.id()),
+                    parent: self.data.id,
+                    index,
+                })
+                .get_result::<db::BookPart>(dbconn)
+                .map_err(Into::into)
+                .map(|data| BookPart { data })
+        })
+    }
+}
+
+impl std::ops::Deref for BookPart {
+    type Target = db::BookPart;
+
+    fn deref(&self) -> &db::BookPart {
+        &self.data
+    }
 }
 
 #[derive(Debug, Fail)]
@@ -157,4 +225,18 @@ pub enum GetPartsError {
 
 impl_from! { for GetPartsError ;
     DbError => |e| GetPartsError::Database(e),
+}
+
+#[derive(Debug, Fail)]
+pub enum CreatePartError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    /// This part is a module, it has no parts of its own.
+    #[fail(display = "Module has no parts")]
+    IsAModule,
+}
+
+impl_from! { for CreatePartError ;
+    DbError => |e| CreatePartError::Database(e),
 }

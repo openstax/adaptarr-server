@@ -69,6 +69,14 @@ impl Module {
         })
     }
 
+    /// Get ID of this module.
+    ///
+    /// Since `Module` derefs to [`Document`], `module.id` will return ID of the
+    /// this module's current document.
+    pub fn id(&self) -> Uuid {
+        self.data.id
+    }
+
     /// Get the public portion of this module's data.
     pub fn get_public(&self) -> PublicData {
         PublicData {
