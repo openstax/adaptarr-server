@@ -10,15 +10,19 @@ use actix_web::{
 };
 use uuid::Uuid;
 
-use crate::models::module::{Module, PublicData as ModuleData};
+use crate::models::{
+    File,
+    module::{Module, PublicData as ModuleData},
+};
 use super::{
     State,
-    session::Session,
+    session::{Session, ElevatedSession},
 };
 
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
     app
+        .route("/modules", Method::POST, create_module)
         .resource("/modules/{id}", |r| {
             r.get().with(get_module);
             r.post().f(crete_draft);
@@ -33,6 +37,51 @@ pub fn routes(app: App<State>) -> App<State> {
 }
 
 type Result<T> = std::result::Result<T, actix_web::error::Error>;
+
+#[derive(Debug, Deserialize)]
+pub struct NewModule {
+    title: String,
+}
+
+/// Create a new empty module.
+///
+/// ## Method
+///
+/// ```
+/// POST /modules
+/// ```
+pub fn create_module((
+    state,
+    _session,
+    data,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Json<NewModule>,
+)) -> Result<Json<ModuleData>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    let content = format!(
+        r#"<?xml version="1.0" encoding="utf-8"?>
+        <document xmlns="http://cnx.rice.edu/cnxml" cnxml-version="0.7" id="new" module-id="new">
+            <title>{}</title>
+            <content>
+                <para/>
+            </content>
+        </document>
+        "#,
+        tera::escape_html(&data.title),
+    );
+
+    let index = File::from_data(&*db, &state.config, &content)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    let module = Module::create::<&str, _>(&*db, &data.title, index, &[])
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(Json(module.get_public()))
+}
 
 /// Get a module by ID.
 ///
