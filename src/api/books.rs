@@ -7,11 +7,16 @@ use actix_web::{
     Path,
     error::ErrorInternalServerError,
 };
+use diesel::result::Error as DbError;
 use uuid::Uuid;
 
-use crate::models::{
-    book::{Book, PublicData as BookData},
-    bookpart::{BookPart, PublicData as PartData, Tree},
+use crate::{
+    db,
+    models::{
+        module::{Module, FindModuleError},
+        book::{Book, PublicData as BookData},
+        bookpart::{BookPart, PublicData as PartData, Tree, CreatePartError},
+    },
 };
 use super::{
     State,
@@ -32,7 +37,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .resource("/books/{id}/parts", |r| {
             r.get().with(book_contents);
-            r.post().f(create_part);
+            r.post().with(create_part);
         })
         .resource("/books/{id}/parts/{number}", |r| {
             r.get().with(get_part);
@@ -188,6 +193,34 @@ pub fn book_contents((
         .map(Json)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum NewPart {
+    Module {
+        title: Option<String>,
+        module: Uuid,
+    },
+    Group {
+        title: String,
+        parts: Vec<NewPart>,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewPartRoot {
+    #[serde(flatten)]
+    part: NewPart,
+    parent: i32,
+    index: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NewPartData {
+    number: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parts: Option<Vec<NewPartData>>,
+}
+
 /// Create a new part.
 ///
 /// ## Method
@@ -195,8 +228,86 @@ pub fn book_contents((
 /// ```
 /// POST /books/:id/parts
 /// ```
-pub fn create_part(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn create_part((
+    state,
+    _session,
+    book,
+    part,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Path<Uuid>,
+    Json<NewPartRoot>,
+)) -> Result<Json<NewPartData>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let NewPartRoot { part, parent, index } = part.into_inner();
+    let parent = BookPart::by_id(&*db, *book, parent)?;
+
+    println!("DATA: {:?}", part);
+
+    use diesel::Connection;
+    let data = db.transaction(|| {
+        create_part_inner(&*db, &parent, index, part)
+    }).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(Json(data))
+}
+
+/// Recursively create parts.
+fn create_part_inner(
+    dbconn: &db::Connection,
+    parent: &BookPart,
+    index: i32,
+    template: NewPart,
+) -> std::result::Result<NewPartData, RealizeTemplateError> {
+    match template {
+        NewPart::Module { title, module } => {
+            let module = Module::by_id(dbconn, module)?;
+
+            let part = parent.insert_module(
+                dbconn,
+                index,
+                title.as_ref().map_or(module.name.as_str(), String::as_str),
+                &module,
+            )?;
+
+            Ok(NewPartData {
+                number: part.id,
+                parts: None,
+            })
+        }
+        NewPart::Group { title, parts } => {
+            let group = parent.create_group(dbconn, index, title.as_str())?;
+
+            Ok(NewPartData {
+                number: group.id,
+                parts: parts.into_iter()
+                    .enumerate()
+                    .map(|(index, part)| {
+                        create_part_inner(dbconn, &group, index as i32, part)
+                    })
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map(Some)?,
+            })
+        }
+    }
+}
+
+#[derive(Debug, Fail)]
+enum RealizeTemplateError {
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    #[fail(display = "Module not found: {}", _0)]
+    ModuleNotFound(#[cause] FindModuleError),
+    #[fail(display = "Part could not be created: {}", _0)]
+    PartCreation(CreatePartError),
+}
+
+impl_from! { for RealizeTemplateError ;
+    DbError => |e| RealizeTemplateError::Database(e),
+    FindModuleError => |e| RealizeTemplateError::ModuleNotFound(e),
+    CreatePartError => |e| RealizeTemplateError::PartCreation(e),
 }
 
 /// Inspect a single part of a book.
