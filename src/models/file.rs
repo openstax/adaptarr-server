@@ -71,6 +71,47 @@ impl File {
                         File::from_file_with_hash(&*db, storage, tmp, hash))))
     }
 
+    /// Create new file from a data in memory.
+    pub fn from_data<B>(dbconn: &Connection, config: &Config, data: B)
+        -> Result<File, CreateFileError>
+    where
+        B: AsRef<[u8]>,
+    {
+        let mut hash = Blake2b::new(64);
+        hash.update(data.as_ref());
+        let hash = hash.finalize();
+
+        match files::table
+            .filter(files::hash.eq(hash.as_bytes()))
+            .get_result::<db::File>(dbconn)
+            .optional()?
+        {
+            // There already is a file with this hash.
+            Some(data) => Ok(File { data }),
+            // It's a new file; we need to create database entry for it.
+            None => {
+                let name = hash_to_hex(hash.as_bytes());
+                let path = config.storage.path.join(name);
+
+                let mut file = std::fs::File::create(&path)?;
+                file.write_all(data.as_ref())?;
+
+                let mime = MAGIC.with(|magic| magic.file(&path))
+                    .expect("libmagic to work");
+
+                diesel::insert_into(files::table)
+                    .values(db::NewFile {
+                        mime: &mime,
+                        path: path.to_str().expect("invalid path"),
+                        hash: hash.as_bytes(),
+                    })
+                    .get_result::<db::File>(dbconn)
+                    .map_err(Into::into)
+                    .map(|data| File { data })
+            },
+        }
+    }
+
     /// Create new file from a temporary file and hash.
     ///
     /// This is an internal constructor.
