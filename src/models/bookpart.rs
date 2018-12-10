@@ -192,6 +192,62 @@ impl BookPart {
                 .map(|data| BookPart { data })
         })
     }
+
+    /// Change title of this book part.
+    pub fn set_title(&mut self, dbconn: &Connection, title: &str) -> Result<(), DbError> {
+        diesel::update(&self.data)
+            .set(book_parts::title.eq(title))
+            .execute(dbconn)?;
+
+        self.data.title = title.to_owned();
+
+        Ok(())
+    }
+
+    /// Move this part to another group, or another location in the same group.
+    pub fn reparent(&mut self, dbconn: &Connection, new: &BookPart, index: i32)
+    -> Result<(), ReparentPartError> {
+        if new.module.is_some() {
+            return Err(ReparentPartError::IsAModule);
+        }
+
+        self.data = dbconn.transaction::<_, DbError, _>(|| {
+            // First make place in the new parent.
+            let siblings = book_parts::table.filter(
+                book_parts::book.eq(new.book)
+                    .and(book_parts::parent.eq(new.id))
+                    .and(book_parts::index.ge(index))
+            );
+            diesel::update(siblings)
+                .set(book_parts::index.eq(book_parts::index + 1))
+                .execute(dbconn)?;
+
+            // Now we can move self to new without violating
+            // unique (book, parent, index).
+            let data = diesel::update(&self.data)
+                .set(&db::NewBookPartLocation {
+                    book: new.book,
+                    parent: new.id,
+                    index: index,
+                })
+                .get_result::<db::BookPart>(dbconn)?;
+
+            // Now we can shift old sibling back by one to fill the gap, without
+            // violating unique (book, parent, index) on the old parent.
+            let siblings = book_parts::table.filter(
+                book_parts::book.eq(self.data.book)
+                    .and(book_parts::parent.eq(self.data.parent))
+                    .and(book_parts::index.gt(self.data.index))
+            );
+            diesel::update(siblings)
+                .set(book_parts::index.eq(book_parts::index - 1))
+                .execute(dbconn)?;
+
+            Ok(data)
+        })?;
+
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for BookPart {
@@ -267,4 +323,18 @@ pub enum CreatePartError {
 
 impl_from! { for CreatePartError ;
     DbError => |e| CreatePartError::Database(e),
+}
+
+#[derive(Debug, Fail)]
+pub enum ReparentPartError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    /// New parent is a module, it has no parts of its own.
+    #[fail(display = "Parent cannot be a module")]
+    IsAModule,
+}
+
+impl_from! { for ReparentPartError ;
+    DbError => |e| ReparentPartError::Database(e),
 }

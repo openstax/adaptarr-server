@@ -15,7 +15,13 @@ use crate::{
     models::{
         module::{Module, FindModuleError},
         book::{Book, PublicData as BookData},
-        bookpart::{BookPart, PublicData as PartData, Tree, CreatePartError},
+        bookpart::{
+            BookPart,
+            CreatePartError,
+            PublicData as PartData,
+            ReparentPartError,
+            Tree,
+        },
     },
 };
 use super::{
@@ -42,7 +48,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/books/{id}/parts/{number}", |r| {
             r.get().with(get_part);
             r.delete().with(delete_part);
-            r.put().f(update_part);
+            r.put().with(update_part);
         })
 }
 
@@ -341,7 +347,7 @@ pub fn get_part((
 /// ## Method
 ///
 /// ```
-/// DELETE /book/:ids/parts/:number
+/// DELETE /book/:id/parts/:number
 /// ```
 pub fn delete_part((
     state,
@@ -363,13 +369,61 @@ pub fn delete_part((
     Ok(HttpResponse::Ok().finish())
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PartUpdate {
+    title: Option<String>,
+    #[serde(flatten)]
+    location: Option<PartLocation>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PartLocation {
+    parent: i32,
+    index: i32,
+}
+
 /// Update a book part.
 ///
 /// ## Method
 ///
 /// ```
-/// PUT /book/:ids/parts/:number
+/// PUT /book/:id/parts/:number
 /// ```
-pub fn update_part(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn update_part((
+    state,
+    _session,
+    path,
+    update,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Path<(Uuid, i32)>,
+    Json<PartUpdate>,
+)) -> Result<HttpResponse> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let (book, id) = path.into_inner();
+    let mut part = BookPart::by_id(&*db, book, id)?;
+    let parent = update.location
+        .as_ref()
+        .map_or(Ok(None), |location| {
+            BookPart::by_id(&*db, book, location.parent)
+                .map(|part| Some((part, location.index)))
+        })?;
+
+    let dbconn = &*db;
+    use diesel::Connection;
+    dbconn.transaction::<_, ReparentPartError, _>(move || {
+        if let Some(ref title) = update.title {
+            part.set_title(dbconn, &title)?;
+        }
+
+        if let Some((parent, index)) = parent {
+            part.reparent(dbconn, &parent, index)?;
+        }
+
+        Ok(())
+    }).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(HttpResponse::Ok().finish())
 }

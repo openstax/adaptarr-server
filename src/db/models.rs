@@ -220,3 +220,11 @@ pub struct NewBookPart<'a> {
     pub parent: i32,
     pub index: i32,
 }
+
+#[derive(Clone, Copy, Debug, AsChangeset)]
+#[table_name = "book_parts"]
+pub struct NewBookPartLocation {
+    pub book: Uuid,
+    pub parent: i32,
+    pub index: i32,
+}
