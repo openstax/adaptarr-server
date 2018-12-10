@@ -177,7 +177,7 @@ impl<S> Middleware<S> for SessionManager {
                 diesel::delete(&session.existing.unwrap())
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-                rsp.add_cookie(&Cookie::new(COOKIE, ""));
+                rsp.add_cookie(&Cookie::new(COOKIE, ""))?;
             } else if let Some(new) = session.new {
                 if let Some(session) = session.existing {
                     diesel::delete(&session)
