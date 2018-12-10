@@ -41,7 +41,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .resource("/books/{id}/parts/{number}", |r| {
             r.get().with(get_part);
-            r.delete().f(delete_part);
+            r.delete().with(delete_part);
             r.put().f(update_part);
         })
 }
@@ -343,8 +343,24 @@ pub fn get_part((
 /// ```
 /// DELETE /book/:ids/parts/:number
 /// ```
-pub fn delete_part(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn delete_part((
+    state,
+    _session,
+    path,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<(Uuid, i32)>,
+)) -> Result<HttpResponse> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let (book, id) = path.into_inner();
+
+    BookPart::by_id(&*db, book, id)?
+        .delete(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Update a book part.

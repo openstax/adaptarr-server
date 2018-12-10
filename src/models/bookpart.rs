@@ -62,6 +62,19 @@ impl BookPart {
             .map(|data| BookPart { data })
     }
 
+    /// Delete this book part.
+    ///
+    /// This method cannot be used to delete group 0 (the main group of a book).
+    /// To delete group 0 use [`Book::delete()`] instead.
+    pub fn delete(self, dbconn: &Connection) -> Result<(), DeletePartError> {
+        if self.data.id == 0 {
+            return Err(DeletePartError::RootGroup);
+        }
+
+        diesel::delete(&self.data).execute(dbconn)?;
+        Ok(())
+    }
+
     /// Get parts of this group.
     pub fn get_parts(&self, dbconn: &Connection) -> Result<Vec<i32>, GetPartsError> {
         if self.data.module.is_some() {
@@ -202,6 +215,7 @@ pub enum FindBookPartError {
 impl_from! { for FindBookPartError ;
     DbError => |e| FindBookPartError::Database(e),
 }
+
 impl ResponseError for FindBookPartError {
     fn error_response(&self) -> HttpResponse {
         match *self {
@@ -211,6 +225,20 @@ impl ResponseError for FindBookPartError {
                 HttpResponse::NotFound().finish(),
         }
     }
+}
+
+#[derive(Debug, Fail)]
+pub enum DeletePartError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    /// Deleting group 0 is not possible.
+    #[fail(display = "Cannot delete group 0")]
+    RootGroup,
+}
+
+impl_from! { for DeletePartError ;
+    DbError => |e| DeletePartError::Database(e),
 }
 
 #[derive(Debug, Fail)]
