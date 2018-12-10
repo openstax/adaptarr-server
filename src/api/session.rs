@@ -21,6 +21,7 @@ use crate::{
     },
     utils,
 };
+use super::State;
 
 /// Name of the cookie carrying session ID.
 const COOKIE: &str = "sesid";
@@ -54,6 +55,11 @@ pub struct Session<Policy = Normal> {
     _policy: PhantomData<Policy>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SessionSetting {
+    pub is_super: bool,
+}
+
 /// Policies govern what sessions can do. For example a [`Normal`] session can
 /// not be used to modify server settings, only an [`Elevated`] session can
 /// do so.
@@ -67,7 +73,18 @@ pub trait Policy {
     ///
     /// This method should return `true` if the request should pass, and `false`
     /// otherwise.
-    fn validate(session: &DbSession) -> bool;
+    fn validate(session: &DbSession) -> Validation;
+}
+
+/// Outcome of policy validation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Validation {
+    /// Let this session through.
+    Pass,
+    /// Let this session through, but update its settings.
+    Update(SessionSetting),
+    /// Reject this session.
+    Reject,
 }
 
 /// Normal policy.
@@ -100,29 +117,30 @@ impl SessionManager {
         SessionManager { secret, db }
     }
 
-    fn validate(ses: &DbSession) -> bool {
+    fn validate(ses: &DbSession) -> Validation {
         let now = Utc::now().naive_utc();
 
         // Disallow expired sessions.
         if now > ses.expires {
-            return false;
+            return Validation::Reject;
         }
 
         let diff = now - ses.last_used;
 
         // Disallow reviving inactive sessions.
         if diff > Duration::days(INACTIVITY_EXPIRATION) {
-            return false;
+            return Validation::Reject;
         }
 
         // Downgrade administrative session back to a normal session after some
         // time.
         if ses.is_super && diff > Duration::minutes(SUPER_EXPIRATION) {
-            // TODO: downgrade session
-            return false;
+            return Validation::Update(SessionSetting {
+                is_super: false,
+            });
         }
 
-        true
+        Validation::Pass
     }
 }
 
@@ -152,11 +170,24 @@ impl<S> Middleware<S> for SessionManager {
             None => return Ok(Started::Done),
         };
 
-        if !SessionManager::validate(&session) {
-            diesel::delete(&session)
-                .execute(&*db)
-                .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-        } else {
+        let pass = match SessionManager::validate(&session) {
+            Validation::Pass => true,
+            Validation::Update(settings) => {
+                diesel::update(&session)
+                    .set(sessions::is_super.eq(settings.is_super))
+                    .execute(&*db)
+                    .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+                true
+            }
+            Validation::Reject => {
+                diesel::delete(&session)
+                    .execute(&*db)
+                    .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+                false
+            }
+        };
+
+        if pass {
             req.extensions_mut().insert(SessionData {
                 existing: Some(session),
                 new: None,
@@ -254,18 +285,26 @@ impl<P> std::ops::Deref for Session<P> {
 }
 
 
-impl<S, P> FromRequest<S> for Session<P>
+impl<P> FromRequest<State> for Session<P>
 where
     P: Policy,
 {
     type Config = ();
     type Result = Result<Session<P>, SessionFromRequestError>;
 
-    fn from_request(req: &HttpRequest<S>, _cfg: &()) -> Self::Result {
+    fn from_request(req: &HttpRequest<State>, _cfg: &()) -> Self::Result {
         if let Some(session) = req.extensions().get::<SessionData>()
                                 .and_then(|s| s.existing) {
-            if !P::validate(&session) {
-                return Err(SessionFromRequestError::Policy);
+
+            match P::validate(&session) {
+                Validation::Pass => (),
+                Validation::Update(settings) => {
+                    let db = req.state().db.get()?;
+                    diesel::update(&session)
+                        .set(sessions::is_super.eq(settings.is_super))
+                        .execute(&*db)?;
+                }
+                Validation::Reject => return Err(SessionFromRequestError::Policy),
             }
 
             Ok(Session {
@@ -279,14 +318,18 @@ where
 }
 
 impl Policy for Normal {
-    fn validate(_: &DbSession) -> bool {
-        true
+    fn validate(_: &DbSession) -> Validation {
+        Validation::Pass
     }
 }
 
 impl Policy for Elevated {
-    fn validate(session: &DbSession) -> bool {
-        session.is_super
+    fn validate(session: &DbSession) -> Validation {
+        if session.is_super {
+            Validation::Pass
+        } else {
+            Validation::Reject
+        }
     }
 }
 
@@ -298,9 +341,18 @@ pub enum SessionFromRequestError {
     Unsealing(#[cause] utils::UnsealingError),
     #[fail(display = "Invalid base64: {}", _0)]
     Decoding(#[cause] base64::DecodeError),
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] diesel::result::Error),
+    #[fail(display = "Cannot obtain database connection: {}", _0)]
+    DatabasePool(#[cause] r2d2::Error),
     /// Session was rejected by policy.
     #[fail(display = "Rejected by policy")]
     Policy,
+}
+
+impl_from! { for SessionFromRequestError ;
+    diesel::result::Error => |e| SessionFromRequestError::Database(e),
+    r2d2::Error => |e| SessionFromRequestError::DatabasePool(e),
 }
 
 impl ResponseError for SessionFromRequestError {
@@ -312,6 +364,8 @@ impl ResponseError for SessionFromRequestError {
                 .body("a session is required"),
             Unsealing(_) | Decoding(_) => HttpResponse::BadRequest()
                 .body("could not decode session cookie"),
+            Database(_) | DatabasePool(_) => HttpResponse::InternalServerError()
+                .finish(),
             Policy => HttpResponse::Forbidden()
                 .body("access denied by policy"),
         }
