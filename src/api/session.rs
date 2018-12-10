@@ -224,10 +224,9 @@ impl<S> Middleware<S> for SessionManager {
                 let value = utils::seal(&self.secret, session.id)
                     .expect("sealing session ID");
                 let cookie = Cookie::build(COOKIE, base64::encode(&value))
-                    .path("/")
                     .max_age(Duration::days(MAX_DURATION))
-                    .secure(true)
-                    .http_only(true)
+                    .secure(!cfg!(debug_assertions))
+                    .http_only(!cfg!(debug_assertions))
                     .finish();
                 rsp.add_cookie(&cookie)?;
             } else if let Some(session) = session.existing {
