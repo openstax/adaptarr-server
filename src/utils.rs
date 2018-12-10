@@ -30,6 +30,10 @@ pub fn unseal<T>(key: &[u8], data: &mut [u8]) -> Result<T, UnsealingError>
 where
     T: DeserializeOwned,
 {
+    if data.len() < 12 {
+        return Err(UnsealingError::TooShort);
+    }
+
     let key = aead::OpeningKey::new(&aead::AES_256_GCM, key).unwrap();
 
     let index = data.len() - 12;
@@ -54,6 +58,8 @@ pub enum UnsealingError {
     Serialization(#[cause] rmps::decode::Error),
     #[fail(display = "could not decode: {}", _0)]
     Crypto(#[cause] ring::error::Unspecified),
+    #[fail(display = "not enough data to unseal")]
+    TooShort,
 }
 
 impl_from! { for UnsealingError ;
