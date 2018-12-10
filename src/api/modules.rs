@@ -22,7 +22,10 @@ use super::{
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
     app
-        .route("/modules", Method::POST, create_module)
+        .resource("/modules", |r| {
+            r.get().with(list_modules);
+            r.post().with(create_module);
+        })
         .resource("/modules/{id}", |r| {
             r.get().with(get_module);
             r.post().f(crete_draft);
@@ -41,6 +44,29 @@ type Result<T> = std::result::Result<T, actix_web::error::Error>;
 #[derive(Debug, Deserialize)]
 pub struct NewModule {
     title: String,
+}
+
+/// Get list of all modules.
+///
+/// ## Method
+///
+/// ```
+/// Get /modules
+/// ```
+pub fn list_modules((
+    state,
+    _session,
+): (
+    actix_web::State<State>,
+    Session,
+)) -> Result<Json<Vec<ModuleData>>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let modules = Module::all(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    Ok(Json(modules.into_iter()
+        .map(|module| module.get_public())
+        .collect()))
 }
 
 /// Create a new empty module.

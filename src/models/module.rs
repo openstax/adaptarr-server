@@ -29,6 +29,24 @@ pub struct PublicData {
 }
 
 impl Module {
+    /// Get all modules.
+    ///
+    /// *Warning*: this function is temporary and will be removed once we figure
+    /// out how to do pagination.
+    pub fn all(dbconn: &Connection) -> Result<Vec<Module>, DbError> {
+        modules::table
+            .inner_join(documents::table)
+            .get_results::<(db::Module, db::Document)>(dbconn)
+            .map(|v| {
+                v.into_iter()
+                    .map(|(data, document)| Module {
+                        data,
+                        document: Document::from_db(document),
+                    })
+                    .collect()
+            })
+    }
+
     /// Find a module by ID.
     pub fn by_id(dbconn: &Connection, id: Uuid) -> Result<Module, FindModuleError> {
         modules::table
