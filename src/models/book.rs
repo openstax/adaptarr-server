@@ -25,6 +25,16 @@ pub struct PublicData {
 }
 
 impl Book {
+    /// Get all books.
+    ///
+    /// *Warning*: this function is temporary and will be removed once we figure
+    /// out how to do pagination.
+    pub fn all(dbconn: &Connection) -> Result<Vec<Book>, DbError> {
+        books::table
+            .get_results::<db::Book>(dbconn)
+            .map(|v| v.into_iter().map(|data| Book { data }).collect())
+    }
+
     /// Find a book by ID.
     pub fn by_id(dbconn: &Connection, id: Uuid) -> Result<Book, FindBookError> {
         books::table

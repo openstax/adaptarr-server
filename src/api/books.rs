@@ -1,7 +1,6 @@
 use actix_web::{
     App,
     Form,
-    HttpRequest,
     HttpResponse,
     Json,
     Path,
@@ -33,7 +32,7 @@ use super::{
 pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/books", |r| {
-            r.get().f(list_books);
+            r.get().with(list_books);
             r.post().with(create_book);
         })
         .resource("/books/{id}", |r| {
@@ -61,8 +60,20 @@ type Result<T> = std::result::Result<T, actix_web::Error>;
 /// ```
 /// GET /books
 /// ```
-pub fn list_books(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn list_books((
+    state,
+    _session,
+): (
+    actix_web::State<State>,
+    Session,
+)) -> Result<Json<Vec<BookData>>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let books = Book::all(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    Ok(Json(books.into_iter()
+        .map(|book| book.get_public())
+        .collect()))
 }
 
 #[derive(Debug, Deserialize)]
