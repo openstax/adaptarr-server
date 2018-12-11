@@ -123,8 +123,24 @@ pub fn delete_draft((
 /// ```
 /// POST /drafts/:id/save
 /// ```
-pub fn save_draft(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn save_draft((
+    state,
+    session,
+    id,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<Uuid>,
+)) -> Result<HttpResponse> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let draft = Draft::by_id(&*db, *id, session.user)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    draft.save(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Get comments on a draft.
