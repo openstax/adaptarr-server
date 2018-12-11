@@ -134,8 +134,23 @@ pub fn add_comment(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// GET /drafts/:id/files
 /// ```
-pub fn list_files(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn list_files((
+    state,
+    session,
+    id,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<Uuid>,
+)) -> Result<Json<Vec<String>>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let draft = Draft::by_id(&*db, *id, session.user)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    draft.get_files(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))
+        .map(Json)
 }
 
 /// Get a file from a draft.
