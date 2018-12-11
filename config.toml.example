@@ -22,7 +22,12 @@ url = "postgres://user:password@host/database"
 # :required: Mailing configuration.
 [mail]
 # :required: Email address to send messages as.
-sender = "noreply@example.com"
+#
+# Address can be anything understood as an address according to RFC 5322 (per
+# the mailbox production in §3.4), in particular:
+# - bare email address, e.g. noreply@example.com
+# - email address with sender's name, e.g. Name <noreply@example.com>
+sender = "Name <noreply@example.com>"
 # :required: What method to use to send mails. Possible values are
 # - "log" to log emails to standard error for debugging,
 # - "sendmail" to use the sendmail(1) command,

@@ -1,6 +1,6 @@
 use lettre::{EmailTransport, SendmailTransport};
 use lettre_email::{Email, EmailBuilder, IntoMailbox, Mailbox};
-use serde::Serialize;
+use serde::{Deserializer, Serialize};
 use std::cell::RefCell;
 
 use crate::{
@@ -17,7 +17,8 @@ pub struct Mailer {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// Email address to send messages as.
-    pub sender: String,
+    #[serde(deserialize_with = "de_mailbox")]
+    pub sender: Mailbox,
     /// Transport method to use, and its configuration.
     #[serde(flatten)]
     pub transport: Transports,
@@ -110,9 +111,36 @@ fn construct(
 ) -> Email {
     EmailBuilder::new()
         .to(to)
-        .from(config.sender.as_str())
+        .from(config.sender.clone())
         .subject(subject)
         .alternative(html, text)
         .build()
         .expect("email to build correctly")
+}
+
+fn de_mailbox<'de, D>(d: D) -> std::result::Result<Mailbox, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    d.deserialize_str(MailboxVisitor)
+}
+
+struct MailboxVisitor;
+
+impl<'de> serde::de::Visitor<'de> for MailboxVisitor {
+    type Value = Mailbox;
+
+    fn expecting(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "an email address")
+    }
+
+    fn visit_str<E>(self, v: &str) -> std::result::Result<Mailbox, E>
+    where
+        E: serde::de::Error,
+    {
+        use serde::de::Unexpected;
+
+        v.parse()
+            .map_err(|_| E::invalid_value(Unexpected::Str(v), &"an email address"))
+    }
 }
