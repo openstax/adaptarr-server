@@ -94,6 +94,15 @@ impl Draft {
             .execute(dbconn)?;
         Ok(())
     }
+
+    /// Delete a file from this draft.
+    pub fn delete_file(&self, dbconn: &Connection, name: &str) -> Result<(), DbError> {
+        diesel::delete(document_files::table
+            .filter(document_files::document.eq(self.document.id)
+                .and(document_files::name.eq(name))))
+            .execute(dbconn)?;
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for Draft {

@@ -39,7 +39,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/drafts/{id}/files/{name}", |r| {
             r.get().with(get_file);
             r.put().with_async(update_file);
-            r.delete().f(delete_file);
+            r.delete().with(delete_file);
         })
 }
 
@@ -254,6 +254,23 @@ pub fn update_file((
 /// ```
 /// DELETE /drafts/:id/files/:name
 /// ```
-pub fn delete_file(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn delete_file((
+    state,
+    session,
+    path,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<(Uuid, String)>,
+)) -> Result<HttpResponse> {
+    let (id, name) = path.into_inner();
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let draft = Draft::by_id(&*db, id, session.user)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    draft.delete_file(&*db, &name)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(HttpResponse::Ok().finish())
 }
