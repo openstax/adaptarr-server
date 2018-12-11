@@ -4,6 +4,7 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
+    Responder,
     error::ErrorInternalServerError,
     http::Method,
 };
@@ -30,7 +31,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .route("/drafts/{id}/files", Method::GET, list_files)
         .resource("/drafts/{id}/files/{name}", |r| {
-            r.get().f(get_file);
+            r.get().with(get_file);
             r.put().f(update_file);
             r.delete().f(delete_file);
         })
@@ -160,8 +161,23 @@ pub fn list_files((
 /// ```
 /// GET /drafts/:id/files/:name
 /// ```
-pub fn get_file(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn get_file((
+    state,
+    session,
+    path,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<(Uuid, String)>,
+)) -> Result<impl Responder> {
+    let (id, name) = path.into_inner();
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let draft = Draft::by_id(&*db, id, session.user)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(draft.get_file(&*db, &name)?
+        .stream(&state.config))
 }
 
 /// Update a file in a draft.
