@@ -151,10 +151,14 @@ impl<S> Middleware<S> for SessionManager {
             None => return Ok(Started::Done),
         };
 
-        let mut data = base64::decode(cookie.value())
-            .map_err(SessionFromRequestError::Decoding)?;
-        let sesid: i32 = utils::unseal(&self.secret, &mut data)
-            .map_err(SessionFromRequestError::Unsealing)?;
+        let mut data = match base64::decode(cookie.value()) {
+            Ok(data) => data,
+            Err(_) => return Ok(Started::Done),
+        };
+        let sesid: i32 = match utils::unseal(&self.secret, &mut data) {
+            Ok(sesid) => sesid,
+            Err(_) => return Ok(Started::Done),
+        };
 
         let db = self.db.get()
             .map_err(|e| ErrorInternalServerError(e.to_string()))?;
