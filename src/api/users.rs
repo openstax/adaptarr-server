@@ -1,6 +1,5 @@
 use actix_web::{
     App,
-    Form,
     HttpRequest,
     HttpResponse,
     Json,
@@ -56,7 +55,7 @@ pub fn create_invitation((
 ): (
     actix_web::State<State>,
     ElevatedSession,
-    Form<InviteParams>,
+    Json<InviteParams>,
 )) -> Result<HttpResponse, Error> {
     let db = state.db.get().map_err(|e| ErrorInternalServerError(e.to_string()))?;
     let invite = Invite::create(&*db, &params.email)?;

@@ -1,6 +1,5 @@
 use actix_web::{
     App,
-    Form,
     HttpResponse,
     Json,
     Path,
@@ -77,7 +76,7 @@ pub fn list_books((
 }
 
 #[derive(Debug, Deserialize)]
-pub struct BookForm {
+pub struct NewBook {
     title: String,
 }
 
@@ -95,7 +94,7 @@ pub fn create_book((
 ): (
     actix_web::State<State>,
     ElevatedSession,
-    Form<BookForm>,
+    Json<NewBook>,
 )) -> Result<Json<BookData>> {
     let db = state.db.get()
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
