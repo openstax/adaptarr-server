@@ -5,6 +5,7 @@ use std::env;
 
 use super::Config;
 
+pub mod functions;
 pub mod models;
 pub mod schema;
 
