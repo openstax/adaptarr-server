@@ -34,6 +34,14 @@ table! {
 }
 
 table! {
+    drafts (module, user) {
+        module -> Uuid,
+        user -> Int4,
+        document -> Int4,
+    }
+}
+
+table! {
     files (id) {
         id -> Int4,
         mime -> Varchar,
@@ -100,6 +108,9 @@ joinable!(book_parts -> modules (module));
 joinable!(document_files -> documents (document));
 joinable!(document_files -> files (file));
 joinable!(documents -> files (index));
+joinable!(drafts -> documents (document));
+joinable!(drafts -> modules (module));
+joinable!(drafts -> users (user));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
 joinable!(modules -> documents (document));
@@ -112,6 +123,7 @@ allow_tables_to_appear_in_same_query!(
     books,
     document_files,
     documents,
+    drafts,
     files,
     invites,
     modules,

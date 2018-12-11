@@ -228,3 +228,14 @@ pub struct NewBookPartLocation {
     pub parent: i32,
     pub index: i32,
 }
+
+#[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(module, user)]
+pub struct Draft {
+    /// Module of which this is a draft.
+    pub module: Uuid,
+    /// User owning this draft.
+    pub user: i32,
+    /// Contents of this draft.
+    pub document: i32,
+}
