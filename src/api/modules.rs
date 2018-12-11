@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::models::{
     File,
+    draft::PublicData as DraftData,
     module::{Module, PublicData as ModuleData},
 };
 use super::{
@@ -28,7 +29,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .resource("/modules/{id}", |r| {
             r.get().with(get_module);
-            r.post().f(crete_draft);
+            r.post().with(crete_draft);
             r.delete().f(delete_module);
         })
         .resource("/modules/{id}/comments", |r| {
@@ -139,8 +140,21 @@ pub fn get_module((
 /// ```
 /// POST /modules/:id
 /// ```
-pub fn crete_draft(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn crete_draft((
+    state,
+    session,
+    id,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<Uuid>,
+)) -> Result<Json<DraftData>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let module = Module::by_id(&*db, id.into_inner())?;
+    let draft = module.create_draft(&*db, session.user)?;
+
+    Ok(Json(draft.get_public()))
 }
 
 /// Delete a module

@@ -24,6 +24,11 @@ pub struct PublicData {
 }
 
 impl Draft {
+    /// Construct `Draft` from its database counterpart.
+    pub(super) fn from_db(data: db::Draft, document: Document) -> Draft {
+        Draft { data, document }
+    }
+
     /// Get all drafts belonging to a user.
     pub fn all_of(dbconn: &Connection, user: i32) -> Result<Vec<Draft>, DbError> {
         drafts::table

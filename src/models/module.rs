@@ -2,16 +2,17 @@ use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     Connection as _Connection,
     prelude::*,
-    result::Error as DbError,
+    result::{DatabaseErrorKind, Error as DbError},
 };
 use uuid::Uuid;
 
 use crate::db::{
     Connection,
+    functions::duplicate_document,
     models as db,
-    schema::{documents, modules},
+    schema::{documents, drafts, modules},
 };
-use super::{Document, File};
+use super::{Document, Draft, File};
 
 /// A module is a version of Document that can be part of a Book.
 #[derive(Debug)]
@@ -103,6 +104,28 @@ impl Module {
             assignee: self.data.assignee,
         }
     }
+
+    /// Create a new draft of this module for a given user.
+    pub fn create_draft(&self, dbconn: &Connection, user: i32)
+    -> Result<Draft, CreateDraftError> {
+        if self.data.assignee != Some(user) {
+            return Err(CreateDraftError::UserNotAssigned);
+        }
+
+        let draft = diesel::insert_into(drafts::table)
+            .values((
+                drafts::module.eq(self.data.id),
+                drafts::user.eq(user),
+                drafts::document.eq(duplicate_document(self.document.id)),
+            ))
+            .get_result::<db::Draft>(dbconn)?;
+
+        let document = documents::table
+            .filter(documents::id.eq(draft.document))
+            .get_result::<db::Document>(dbconn)?;
+
+        Ok(Draft::from_db(draft, Document::from_db(document)))
+    }
 }
 
 impl std::ops::Deref for Module {
@@ -134,6 +157,38 @@ impl ResponseError for FindModuleError {
                 HttpResponse::InternalServerError().finish(),
             FindModuleError::NotFound =>
                 HttpResponse::NotFound().finish(),
+        }
+    }
+}
+
+#[derive(Debug, Fail)]
+pub enum CreateDraftError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    /// Tried to create draft for an user other than the one assigned.
+    #[fail(display = "Only assigned user can create a draft")]
+    UserNotAssigned,
+    /// User already has a draft of this module.
+    #[fail(display = "User already has a draft")]
+    Exists,
+}
+
+impl_from! { for CreateDraftError ;
+    DbError => |e| match e {
+        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) =>
+            CreateDraftError::Exists,
+        _ => CreateDraftError::Database(e),
+    }
+}
+
+impl ResponseError for CreateDraftError {
+    fn error_response(&self) -> HttpResponse {
+        match *self {
+            CreateDraftError::Database(_) =>
+                HttpResponse::InternalServerError().finish(),
+            CreateDraftError::UserNotAssigned | CreateDraftError::Exists =>
+                HttpResponse::BadRequest().finish(),
         }
     }
 }
