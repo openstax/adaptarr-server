@@ -45,6 +45,19 @@ impl Draft {
             })
     }
 
+    /// Find draft by ID.
+    pub fn by_id(dbconn: &Connection, module: Uuid, user: i32) -> Result<Draft, DbError> {
+        drafts::table
+            .filter(drafts::module.eq(module)
+                .and(drafts::user.eq(user)))
+            .inner_join(documents::table)
+            .get_result::<(db::Draft, db::Document)>(dbconn)
+            .map(|(data, document)| Draft {
+                data,
+                document: Document::from_db(document),
+            })
+    }
+
     /// Get the public portion of this drafts's data.
     pub fn get_public(&self) -> PublicData {
         PublicData {

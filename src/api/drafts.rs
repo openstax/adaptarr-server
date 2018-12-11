@@ -3,9 +3,11 @@ use actix_web::{
     HttpRequest,
     HttpResponse,
     Json,
+    Path,
     error::ErrorInternalServerError,
     http::Method,
 };
+use uuid::Uuid;
 
 use crate::models::draft::{Draft, PublicData as DraftData};
 use super::{
@@ -18,7 +20,7 @@ pub fn routes(app: App<State>) -> App<State> {
     app
         .route("/drafts", Method::GET, list_drafts)
         .resource("/drafts/{id}", |r| {
-            r.get().f(get_draft);
+            r.get().with(get_draft);
             r.delete().f(delete_draft);
         })
         .route("/drafts/{id}/save", Method::POST, save_draft)
@@ -64,8 +66,21 @@ pub fn list_drafts((
 /// ```
 /// GET /drafts/:id
 /// ```
-pub fn get_draft(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn get_draft((
+    state,
+    session,
+    id,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<Uuid>,
+)) -> Result<Json<DraftData>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let draft = Draft::by_id(&*db, *id, session.user)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(Json(draft.get_public()))
 }
 
 /// Delete a draft
