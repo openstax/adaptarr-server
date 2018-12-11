@@ -1,5 +1,7 @@
 use actix_web::{
     App,
+    AsyncResponder,
+    HttpMessage,
     HttpRequest,
     HttpResponse,
     Json,
@@ -8,9 +10,13 @@ use actix_web::{
     error::ErrorInternalServerError,
     http::Method,
 };
+use futures::{Future, future};
 use uuid::Uuid;
 
-use crate::models::draft::{Draft, PublicData as DraftData};
+use crate::models::{
+    File,
+    draft::{Draft, PublicData as DraftData},
+};
 use super::{
     State,
     session::Session,
@@ -32,7 +38,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .route("/drafts/{id}/files", Method::GET, list_files)
         .resource("/drafts/{id}/files/{name}", |r| {
             r.get().with(get_file);
-            r.put().f(update_file);
+            r.put().with_async(update_file);
             r.delete().f(delete_file);
         })
 }
@@ -202,8 +208,43 @@ pub fn get_file((
 /// ```
 /// PUT /drafts/:id/files/:name
 /// ```
-pub fn update_file(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn update_file((
+    req,
+    state,
+    session,
+    path,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    Session,
+    Path<(Uuid, String)>,
+)) -> Box<dyn Future<Item = HttpResponse, Error = actix_web::Error>> {
+    let (id, name) = path.into_inner();
+    let storage = state.config.storage.path.clone();
+
+    let db = match state.db.get() {
+        Ok(db) => db,
+        Err(e) => return future::err(ErrorInternalServerError(e.to_string()))
+            .responder(),
+    };
+
+    let draft = match Draft::by_id(&*db, id, session.user) {
+        Ok(draft) => draft,
+        Err(e) => return future::err(ErrorInternalServerError(e.to_string()))
+            .responder(),
+    };
+
+    File::from_stream::<_, _, actix_web::Error>(
+        state.db.clone(),
+        storage,
+        req.payload(),
+    )
+        .and_then(move |file| {
+            draft.write_file(&*db, &name, &file)
+                .map_err(|e| ErrorInternalServerError(e.to_string()))
+                .map(|_| HttpResponse::Ok().finish())
+        })
+        .responder()
 }
 
 /// Delete a file from a draft.

@@ -8,9 +8,9 @@ use uuid::Uuid;
 use crate::db::{
     Connection,
     models as db,
-    schema::{documents, drafts},
+    schema::{documents, document_files, drafts},
 };
-use super::Document;
+use super::{Document, File};
 
 #[derive(Debug)]
 pub struct Draft {
@@ -74,6 +74,25 @@ impl Draft {
             module: self.data.module,
             name: self.document.name.clone(),
         }
+    }
+
+    /// Write into a file in this draft.
+    ///
+    /// If there already is a file with this name it will be updated, otherwise
+    /// a new file will be created.
+    pub fn write_file(&self, dbconn: &Connection, name: &str, file: &File)
+    -> Result<(), DbError> {
+        diesel::insert_into(document_files::table)
+            .values(&db::NewDocumentFile {
+                document: self.document.id,
+                name,
+                file: file.id,
+            })
+            .on_conflict((document_files::document, document_files::name))
+            .do_update()
+            .set(document_files::file.eq(file.id))
+            .execute(dbconn)?;
+        Ok(())
     }
 }
 

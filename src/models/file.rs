@@ -1,4 +1,4 @@
-use actix_web::{Responder, fs::NamedFile};
+use actix_web::{HttpResponse, Responder, ResponseError, fs::NamedFile};
 use blake2::blake2b::{Blake2b, Blake2bResult};
 use diesel::{
     prelude::*,
@@ -54,21 +54,24 @@ impl File {
     }
 
     /// Create new file from a stream of bytes.
-    pub fn from_stream<S, I>(dbpool: Pool, storage: PathBuf, data: S)
-        -> impl Future<Item=File, Error=CreateFileError>
+    pub fn from_stream<S, I, E>(dbpool: Pool, storage: PathBuf, data: S)
+        -> impl Future<Item=File, Error=E>
     where
         S: Stream<Item=I>,
         I: AsRef<[u8]>,
-        CreateFileError: From<S::Error>,
+        E: From<CreateFileError>,
+        E: From<S::Error>,
+        E: From<io::Error>,
     {
         future::result(TempBuilder::new().tempfile_in(&storage))
-            .from_err()
+            .map_err(E::from)
             .and_then(|tmp| copy_hash(64, data, tmp))
             .and_then(move |(hash, tmp)| future::result(
                 dbpool.get()
                     .map_err(Into::into)
                     .and_then(|db|
-                        File::from_file_with_hash(&*db, storage, tmp, hash))))
+                        File::from_file_with_hash(&*db, storage, tmp, hash))
+                    .map_err(E::from)))
     }
 
     /// Create new file from a data in memory.
@@ -201,6 +204,12 @@ impl_from! { for CreateFileError ;
     r2d2::Error => |e| CreateFileError::DbPool(e),
     io::Error => |e| CreateFileError::System(e),
     tempfile::PersistError => |e| CreateFileError::System(e.error),
+}
+
+impl ResponseError for CreateFileError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::InternalServerError().finish()
+    }
 }
 
 /// Write stream into a sing and return hash of its contents.
