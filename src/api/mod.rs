@@ -13,7 +13,6 @@ use super::{
 
 mod books;
 mod conversations;
-mod dashboard;
 mod drafts;
 mod events;
 mod modules;
@@ -68,7 +67,6 @@ fn api_app(state: State) -> App<State> {
         .prefix("/api/v1")
         .configure(books::routes)
         .configure(conversations::routes)
-        .configure(dashboard::routes)
         .configure(drafts::routes)
         .configure(events::routes)
         .configure(modules::routes)
