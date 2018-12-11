@@ -1,10 +1,22 @@
-use actix_web::{App, HttpRequest, HttpResponse, http::Method};
+use actix_web::{
+    App,
+    HttpRequest,
+    HttpResponse,
+    Json,
+    error::ErrorInternalServerError,
+    http::Method,
+};
 
-use super::State;
+use crate::models::draft::{Draft, PublicData as DraftData};
+use super::{
+    State,
+    session::Session,
+};
 
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
     app
+        .route("/drafts", Method::GET, list_drafts)
         .resource("/drafts/{id}", |r| {
             r.get().f(get_draft);
             r.delete().f(delete_draft);
@@ -20,6 +32,29 @@ pub fn routes(app: App<State>) -> App<State> {
             r.put().f(update_file);
             r.delete().f(delete_file);
         })
+}
+
+type Result<T> = std::result::Result<T, actix_web::error::Error>;
+
+/// List current user's all drafts.
+///
+/// ## Method
+///
+/// ```
+/// GET /drafts
+/// ```
+pub fn list_drafts((
+    state,
+    session,
+): (
+    actix_web::State<State>,
+    Session,
+)) -> Result<Json<Vec<DraftData>>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let drafts = Draft::all_of(&*db, session.user)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    Ok(Json(drafts.into_iter().map(|d| d.get_public()).collect()))
 }
 
 /// Get a draft by ID.
