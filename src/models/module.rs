@@ -48,6 +48,22 @@ impl Module {
             })
     }
 
+    /// Get all modules assigned to a user.
+    pub fn assigned_to(dbconn: &Connection, user: i32) -> Result<Vec<Module>, DbError> {
+        modules::table
+            .filter(modules::assignee.eq(user))
+            .inner_join(documents::table)
+            .get_results::<(db::Module, db::Document)>(dbconn)
+            .map(|v| {
+                v.into_iter()
+                    .map(|(data, document)| Module {
+                        data,
+                        document: Document::from_db(document),
+                    })
+                    .collect()
+            })
+    }
+
     /// Find a module by ID.
     pub fn by_id(dbconn: &Connection, id: Uuid) -> Result<Module, FindModuleError> {
         modules::table

@@ -18,6 +18,7 @@ use crate::models::{
 use super::{
     State,
     session::{Session, ElevatedSession},
+    users::UserId,
 };
 
 /// Configure routes.
@@ -27,6 +28,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.get().with(list_modules);
             r.post().with(create_module);
         })
+        .route("/modules/assigned/to/{user}", Method::GET, list_assigned)
         .resource("/modules/{id}", |r| {
             r.get().with(get_module);
             r.post().with(crete_draft);
@@ -64,6 +66,32 @@ pub fn list_modules((
     let db = state.db.get()
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
     let modules = Module::all(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    Ok(Json(modules.into_iter()
+        .map(|module| module.get_public())
+        .collect()))
+}
+
+/// Get list of all modules assigned to a particular user.
+///
+/// ## Method
+///
+/// ```
+/// GET /modules/assigned/to/:user
+/// ```
+pub fn list_assigned((
+    state,
+    session,
+    user,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<UserId>,
+)) -> Result<Json<Vec<ModuleData>>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let user = user.get_user(&*state, &session)?;
+    let modules = Module::assigned_to(&*db, user.id)
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
     Ok(Json(modules.into_iter()
         .map(|module| module.get_public())
