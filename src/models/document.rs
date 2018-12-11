@@ -59,6 +59,12 @@ impl Document {
         })
     }
 
+    /// Delete this document.
+    pub(super) fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
+        diesel::delete(&self.data).execute(dbconn)?;
+        Ok(())
+    }
+
     /// Get list of files in this document.
     pub fn get_files(&self, dbconn: &Connection) -> Result<Vec<String>, DbError> {
         document_files::table

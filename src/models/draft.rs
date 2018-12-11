@@ -1,4 +1,5 @@
 use diesel::{
+    Connection as _Connection,
     prelude::*,
     result::Error as DbError,
 };
@@ -56,6 +57,15 @@ impl Draft {
                 data,
                 document: Document::from_db(document),
             })
+    }
+
+    /// Delete this draft.
+    pub fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
+        dbconn.transaction(|| {
+            diesel::delete(&self.data).execute(dbconn)?;
+            self.document.delete(dbconn)?;
+            Ok(())
+        })
     }
 
     /// Get the public portion of this drafts's data.

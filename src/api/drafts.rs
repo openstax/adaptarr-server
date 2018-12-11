@@ -22,7 +22,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .route("/drafts", Method::GET, list_drafts)
         .resource("/drafts/{id}", |r| {
             r.get().with(get_draft);
-            r.delete().f(delete_draft);
+            r.delete().with(delete_draft);
         })
         .route("/drafts/{id}/save", Method::POST, save_draft)
         .resource("/drafts/{id}/comments", |r| {
@@ -91,8 +91,23 @@ pub fn get_draft((
 /// ```
 /// DELTE /drafts/:id
 /// ```
-pub fn delete_draft(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn delete_draft((
+    state,
+    session,
+    id,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<Uuid>,
+)) -> Result<HttpResponse> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let draft = Draft::by_id(&*db, *id, session.user)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    draft.delete(&*db).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Save a draft.
