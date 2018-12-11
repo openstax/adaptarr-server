@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::db::{
     Connection,
     models as db,
-    schema::{documents, document_files, drafts},
+    schema::{documents, document_files, drafts, modules},
 };
 use super::{Document, File};
 
@@ -64,6 +64,23 @@ impl Draft {
         dbconn.transaction(|| {
             diesel::delete(&self.data).execute(dbconn)?;
             self.document.delete(dbconn)?;
+            Ok(())
+        })
+    }
+
+    /// Save this draft creating new version of the module from which it was
+    /// created.
+    pub fn save(self, dbconn: &Connection) -> Result<(), DbError> {
+        dbconn.transaction(|| {
+            diesel::update(
+                modules::table
+                    .filter(modules::id.eq(self.data.module)))
+                .set(modules::document.eq(self.data.document))
+                .execute(dbconn)?;
+
+            diesel::delete(&self.data)
+                .execute(dbconn)?;
+
             Ok(())
         })
     }
