@@ -142,6 +142,15 @@ impl Module {
 
         Ok(Draft::from_db(draft, Document::from_db(document)))
     }
+
+    /// Change user assigned to this module.
+    pub fn set_assignee(&self, dbconn: &Connection, user: Option<i32>)
+    -> Result<(), DbError> {
+        diesel::update(&self.data)
+            .set(modules::assignee.eq(user))
+            .execute(dbconn)?;
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for Module {

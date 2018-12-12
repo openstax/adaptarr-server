@@ -8,6 +8,7 @@ use actix_web::{
     error::ErrorInternalServerError,
     http::Method,
 };
+use serde::de::{Deserialize, Deserializer};
 use uuid::Uuid;
 
 use crate::models::{
@@ -32,6 +33,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/modules/{id}", |r| {
             r.get().with(get_module);
             r.post().with(crete_draft);
+            r.put().with(update_module);
             r.delete().f(delete_module);
         })
         .resource("/modules/{id}/comments", |r| {
@@ -185,6 +187,47 @@ pub fn crete_draft((
     Ok(Json(draft.get_public()))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ModuleUpdate {
+    #[serde(default, deserialize_with = "de_optional_null")]
+    pub assignee: Option<Option<i32>>,
+}
+
+/// Update module
+///
+/// ## Method
+///
+/// ```
+/// PUT /modules/:id
+/// ```
+pub fn update_module((
+    state,
+    _session,
+    id,
+    update,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Path<Uuid>,
+    Json<ModuleUpdate>,
+)) -> Result<HttpResponse> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let module = Module::by_id(&*db, id.into_inner())?;
+
+    use diesel::Connection;
+    let dbconn = &*db;
+    dbconn.transaction::<_, diesel::result::Error, _>(|| {
+        if let Some(user) = update.assignee {
+            module.set_assignee(dbconn, user)?;
+        }
+
+        Ok(())
+    }).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 /// Delete a module
 ///
 /// ## Method
@@ -266,4 +309,12 @@ pub fn get_file((
 
     Ok(module.get_file(&*db, &name)?
         .stream(&state.config))
+}
+
+fn de_optional_null<'de, T, D>(de: D) -> std::result::Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    T::deserialize(de).map(Some)
 }
