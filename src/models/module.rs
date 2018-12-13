@@ -25,7 +25,7 @@ pub struct Module {
 #[derive(Debug, Serialize)]
 pub struct PublicData {
     pub id: Uuid,
-    pub name: String,
+    pub title: String,
     pub assignee: Option<i32>,
 }
 
@@ -116,7 +116,7 @@ impl Module {
     pub fn get_public(&self) -> PublicData {
         PublicData {
             id: self.data.id,
-            name: self.document.name.clone(),
+            title: self.document.title.clone(),
             assignee: self.data.assignee,
         }
     }

@@ -21,7 +21,7 @@ pub struct Draft {
 #[derive(Debug, Serialize)]
 pub struct PublicData {
     pub module: Uuid,
-    pub name: String,
+    pub title: String,
 }
 
 impl Draft {
@@ -89,7 +89,7 @@ impl Draft {
     pub fn get_public(&self) -> PublicData {
         PublicData {
             module: self.data.module,
-            name: self.document.name.clone(),
+            title: self.document.title.clone(),
         }
     }
 

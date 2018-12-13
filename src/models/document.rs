@@ -29,7 +29,7 @@ impl Document {
     /// Create a new document.
     pub(super) fn create<'c, N, I>(
         dbconn: &Connection,
-        name: &str,
+        title: &str,
         index: File,
         files: I,
     )  -> Result<Document, DbError>
@@ -40,7 +40,7 @@ impl Document {
         dbconn.transaction(|| {
             let data = diesel::insert_into(documents::table)
                 .values(&db::NewDocument {
-                    name,
+                    title,
                     index: index.id,
                 })
                 .get_result::<db::Document>(dbconn)?;

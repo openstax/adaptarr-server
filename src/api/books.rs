@@ -285,7 +285,7 @@ fn create_part_inner(
             let part = parent.insert_module(
                 dbconn,
                 index,
-                title.as_ref().map_or(module.name.as_str(), String::as_str),
+                title.as_ref().map_or(module.title.as_str(), String::as_str),
                 &module,
             )?;
 

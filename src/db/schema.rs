@@ -28,7 +28,7 @@ table! {
 table! {
     documents (id) {
         id -> Int4,
-        name -> Varchar,
+        title -> Varchar,
         index -> Int4,
     }
 }

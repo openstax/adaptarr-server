@@ -124,7 +124,7 @@ pub struct Document {
     /// ID of this document.
     pub id: i32,
     /// Name of this document.
-    pub name: String,
+    pub title: String,
     /// ID of file serving as this document's `index.cnxml`.
     pub index: i32,
 }
@@ -132,7 +132,7 @@ pub struct Document {
 #[derive(Clone, Copy, Debug, Insertable)]
 #[table_name = "documents"]
 pub struct NewDocument<'a> {
-    pub name: &'a str,
+    pub title: &'a str,
     pub index: i32,
 }
 
