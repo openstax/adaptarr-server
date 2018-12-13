@@ -218,6 +218,7 @@ pub enum NewPart {
     },
     Group {
         title: String,
+        #[serde(default)]
         parts: Vec<NewPart>,
     },
 }
