@@ -13,12 +13,17 @@ use actix_web::{
     FromRequest,
     HttpRequest,
     HttpResponse,
+    Json,
+    error::ErrorInternalServerError,
     http::Method,
     ws::{self, WebsocketContext},
 };
 use chrono::NaiveDateTime;
 
-use crate::events;
+use crate::{
+    events,
+    models::Event,
+};
 use super::{
     State,
     session::{Session, Normal},
@@ -32,6 +37,17 @@ pub fn routes(app: App<State>) -> App<State> {
         .route("/events", Method::GET, event_stream)
 }
 
+type Result<T> = std::result::Result<T, actix_web::Error>;
+
+#[derive(Debug, Serialize)]
+pub struct EventData {
+    id: i32,
+    kind: &'static str,
+    timestamp: NaiveDateTime,
+    #[serde(flatten)]
+    data: events::Event,
+}
+
 /// Get list of all notifications (events) ever received by current user.
 ///
 /// ## Method
@@ -39,8 +55,31 @@ pub fn routes(app: App<State>) -> App<State> {
 /// ```
 /// GET /notifications
 /// ```
-pub fn list_notifications(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn list_notifications((
+    state,
+    session,
+): (
+    actix_web::State<State>,
+    Session,
+)) -> Result<Json<Vec<EventData>>> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let events = Event::unread(&*db, session.user)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?
+        .into_iter()
+        .map(|event| {
+            let data = event.load();
+
+            EventData {
+                id: event.id,
+                kind: data.kind(),
+                timestamp: event.timestamp,
+                data: data,
+            }
+        })
+        .collect();
+
+    Ok(Json(events))
 }
 
 /// Update a notification's state.
@@ -70,7 +109,7 @@ pub fn event_stream((
 ): (
     HttpRequest<State>,
     Session,
-)) -> Result<HttpResponse, actix_web::Error> {
+)) -> Result<HttpResponse> {
     ws::start(&req, Listener)
 }
 
@@ -115,21 +154,12 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for Listener {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct Event<'a> {
-    id: i32,
-    kind: &'a str,
-    timestamp: NaiveDateTime,
-    #[serde(flatten)]
-    data: events::Event,
-}
-
 impl Handler<events::NewEvent> for Listener {
     type Result = ();
 
     fn handle(&mut self, msg: events::NewEvent, ctx: &mut Self::Context) {
         let events::NewEvent { id, timestamp, event } = msg;
-        ctx.binary(serde_json::to_vec(&Event {
+        ctx.binary(serde_json::to_vec(&EventData {
             id,
             kind: event.kind(),
             timestamp,
