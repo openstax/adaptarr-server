@@ -1,6 +1,7 @@
 // TEMPORARY, see diesel-rs/diesel#1787.
 #![allow(proc_macro_derive_resolution_fallback)]
 
+extern crate actix;
 extern crate actix_web;
 extern crate argon2;
 extern crate base64;
@@ -42,6 +43,7 @@ mod api;
 mod cli;
 mod config;
 mod db;
+mod events;
 mod mail;
 mod models;
 mod templates;

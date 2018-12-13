@@ -4,6 +4,7 @@ version = "0.0.0"
 authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
 
 [dependencies]
+actix = "0.7.9"
 actix-web = "0.7.14"
 base64 = "0.10.0"
 blake2-rfc = "0.2.18"
