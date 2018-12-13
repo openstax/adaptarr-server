@@ -18,6 +18,7 @@ extern crate rand;
 extern crate ring;
 extern crate rmp_serde as rmps;
 extern crate serde;
+extern crate serde_json;
 extern crate structopt;
 extern crate tempfile;
 extern crate toml;
