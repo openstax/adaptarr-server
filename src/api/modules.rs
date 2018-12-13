@@ -11,10 +11,14 @@ use actix_web::{
 use serde::de::{Deserialize, Deserializer};
 use uuid::Uuid;
 
-use crate::models::{
-    File,
-    draft::PublicData as DraftData,
-    module::{Module, PublicData as ModuleData},
+use crate::{
+    events::{self, EventManagerAddrExt},
+    models::{
+        File,
+        User,
+        draft::PublicData as DraftData,
+        module::{Module, PublicData as ModuleData},
+    },
 };
 use super::{
     State,
@@ -202,7 +206,7 @@ pub struct ModuleUpdate {
 /// ```
 pub fn update_module((
     state,
-    _session,
+    session,
     id,
     update,
 ): (
@@ -217,9 +221,17 @@ pub fn update_module((
 
     use diesel::Connection;
     let dbconn = &*db;
-    dbconn.transaction::<_, diesel::result::Error, _>(|| {
+    dbconn.transaction::<_, failure::Error, _>(|| {
         if let Some(user) = update.assignee {
             module.set_assignee(dbconn, user)?;
+
+            if let Some(id) = user {
+                let user = User::by_id(dbconn, id)?;
+                state.events.notify(user, events::Assigned {
+                    who: session.user,
+                    module: module.id(),
+                });
+            }
         }
 
         Ok(())

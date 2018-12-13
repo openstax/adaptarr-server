@@ -1,6 +1,6 @@
 //! Actix actor handling creation and delivery of events.
 
-use actix::{Actor, Context, Handler, Message};
+use actix::{Actor, Addr, Context, Handler, Message};
 use diesel::{
     prelude::*,
     result::Error as DbError,
@@ -82,4 +82,23 @@ impl_from! { for Error ;
     DbError => |e| Error::Database(e),
     r2d2::Error => |e| Error::DatabasePool(e),
     rmps::encode::Error => |e| Error::Serialize(e),
+}
+
+pub trait EventManagerAddrExt {
+    fn notify<E>(&self, user: User, event: E)
+    where
+        Event: From<E>;
+}
+
+impl EventManagerAddrExt for Addr<EventManager> {
+    /// Emit an event.
+    fn notify<E>(&self, user: User, event: E)
+    where
+        Event: From<E>,
+    {
+        self.do_send(Notify {
+            user,
+            event: Event::from(event),
+        })
+    }
 }

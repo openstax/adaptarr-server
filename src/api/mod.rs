@@ -1,3 +1,4 @@
+use actix::{Addr, System};
 use actix_web::{
     App,
     middleware::Logger,
@@ -8,6 +9,7 @@ use super::{
     Result,
     config::Config,
     db,
+    events::{self as event_manager, EventManager},
     mail::Mailer,
 };
 
@@ -22,10 +24,14 @@ mod users;
 
 /// Start an API server.
 pub fn start(cfg: Config) -> Result<()> {
+    let system = System::new("adaptarr");
+
+    let db = db::pool(&cfg)?;
     let state = State {
         config: cfg.clone(),
-        db: db::pool(&cfg)?,
+        db: db.clone(),
         mailer: Mailer::from_config(cfg.mail.clone())?,
+        events: event_manager::start(db.clone()),
     };
 
     let server = server::new(move || vec![
@@ -41,7 +47,10 @@ pub fn start(cfg: Config) -> Result<()> {
 
     server
         .server_hostname(cfg.server.domain.clone())
-        .run();
+        .start();
+
+    system.run();
+
     Ok(())
 }
 
@@ -53,6 +62,8 @@ pub struct State {
     pub db: db::Pool,
     /// Mailer service.
     pub mailer: Mailer,
+    /// Event manager.
+    pub events: Addr<EventManager>,
 }
 
 fn api_app(state: State) -> App<State> {
