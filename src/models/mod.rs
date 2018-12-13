@@ -4,6 +4,7 @@ pub mod book;
 pub mod bookpart;
 pub mod document;
 pub mod draft;
+pub mod event;
 pub mod file;
 pub mod invite;
 pub mod module;
@@ -15,6 +16,7 @@ pub use self::{
     bookpart::BookPart,
     document::Document,
     draft::Draft,
+    event::Event,
     file::File,
     invite::Invite,
     module::Module,
