@@ -14,6 +14,7 @@ use actix_web::{
     HttpRequest,
     HttpResponse,
     Json,
+    Path,
     error::ErrorInternalServerError,
     http::Method,
     ws::{self, WebsocketContext},
@@ -82,6 +83,11 @@ pub fn list_notifications((
     Ok(Json(events))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct EventUpdate {
+    unread: bool,
+}
+
 /// Update a notification's state.
 ///
 /// ## Method
@@ -89,8 +95,25 @@ pub fn list_notifications((
 /// ```
 /// POST /notifications/:id
 /// ```
-pub fn update_notifiation(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn update_notifiation((
+    state,
+    session,
+    id,
+    update,
+): (
+    actix_web::State<State>,
+    Session,
+    Path<i32>,
+    Json<EventUpdate>,
+)) -> Result<HttpResponse> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let mut event = Event::by_id(&*db, *id, session.user)?;
+
+    event.set_unread(&*db, update.unread)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Get a stream of events for current user.
