@@ -9,7 +9,14 @@ mod service;
 
 pub use self::{
     events::*,
-    service::{EventManager, EventManagerAddrExt, Notify},
+    service::{
+        EventManager,
+        EventManagerAddrExt,
+        NewEvent,
+        Notify,
+        RegisterListener,
+        UnregisterListener,
+    },
 };
 
 /// Start an event manager instance.
