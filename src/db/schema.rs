@@ -42,6 +42,17 @@ table! {
 }
 
 table! {
+    events (id) {
+        id -> Int4,
+        user -> Int4,
+        timestamp -> Timestamp,
+        kind -> Varchar,
+        is_unread -> Bool,
+        data -> Bytea,
+    }
+}
+
+table! {
     files (id) {
         id -> Int4,
         mime -> Varchar,
@@ -111,6 +122,7 @@ joinable!(documents -> files (index));
 joinable!(drafts -> documents (document));
 joinable!(drafts -> modules (module));
 joinable!(drafts -> users (user));
+joinable!(events -> users (user));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
 joinable!(modules -> documents (document));
@@ -124,6 +136,7 @@ allow_tables_to_appear_in_same_query!(
     document_files,
     documents,
     drafts,
+    events,
     files,
     invites,
     modules,

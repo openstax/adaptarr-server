@@ -239,3 +239,27 @@ pub struct Draft {
     /// Contents of this draft.
     pub document: i32,
 }
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct Event {
+    /// ID of this event.
+    pub id: i32,
+    /// ID of the user for which this event was generated.
+    pub user: i32,
+    /// Time at which this event was generated.
+    pub timestamp: NaiveDateTime,
+    /// Short string describing what kind of event is this.
+    pub kind: String,
+    /// True if the user has not yet reviewed this event.
+    pub is_unread: bool,
+    /// Actual data for the event, serialized as MessagePack.
+    pub data: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "events"]
+pub struct NewEvent<'a> {
+    pub user: i32,
+    pub kind: &'a str,
+    pub data: &'a [u8],
+}
