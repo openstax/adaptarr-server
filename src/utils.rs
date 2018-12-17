@@ -34,13 +34,12 @@ where
         return Err(UnsealingError::TooShort);
     }
 
-    let key = aead::OpeningKey::new(&aead::AES_256_GCM, key).unwrap();
+    let key = aead::OpeningKey::new(&aead::AES_256_GCM, key)?;
 
     let index = data.len() - 12;
     let (ciphertext, nonce) = data.split_at_mut(index);
 
-    let decrypted = aead::open_in_place(&key, nonce, &[], 0, ciphertext)
-        .expect("failed to unseal value");
+    let decrypted = aead::open_in_place(&key, nonce, &[], 0, ciphertext)?;
 
     T::deserialize(&mut rmps::Deserializer::from_slice(&decrypted))
         .map_err(UnsealingError::Serialization)
