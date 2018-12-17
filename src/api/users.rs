@@ -20,7 +20,9 @@ use super::{
 
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
-    app.scope("/users", |scope| scope
+    app
+        .route("/users", Method::GET, list_users)
+        .scope("/users", |scope| scope
         .route("/invite", Method::POST, create_invitation)
         .resource("/{id}", |r| {
             r.get().with(get_user);
@@ -37,6 +39,28 @@ pub struct InviteParams {
 #[derive(Serialize)]
 struct InviteTemplate {
     url: String,
+}
+
+/// Get list of all users.
+///
+/// ## Method
+///
+/// ```
+/// GET /users
+/// ```
+pub fn list_users((
+    state,
+    _session,
+): (
+    actix_web::State<State>,
+    Session,
+)) -> Result<Json<Vec<PublicData>>, Error> {
+    let db = state.db.get().map_err(|e| ErrorInternalServerError(e.to_string()))?;
+
+    User::all(&*db)
+        .map(|v| v.into_iter().map(|u| u.get_public()).collect())
+        .map(Json)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))
 }
 
 /// Create an invitation.

@@ -38,6 +38,13 @@ pub struct PublicData {
 }
 
 impl User {
+    /// Get all users.
+    pub fn all(dbcon: &Connection) -> Result<Vec<User>, DbError> {
+        users::table
+            .get_results::<db::User>(dbcon)
+            .map(|v| v.into_iter().map(|data| User { data }).collect())
+    }
+
     /// Find an user by ID.
     pub fn by_id(dbcon: &Connection, id: i32) -> Result<User, FindUserError> {
         users::table
