@@ -27,15 +27,15 @@ impl Document {
     }
 
     /// Create a new document.
-    pub(super) fn create<'c, N, I>(
+    pub(super) fn create<N, I>(
         dbconn: &Connection,
         title: &str,
         index: File,
         files: I,
     )  -> Result<Document, DbError>
     where
-        I: IntoIterator<Item = &'c (N, File)>,
-        N: AsRef<str> + 'c,
+        I: IntoIterator<Item = (N, File)>,
+        N: AsRef<str>,
     {
         dbconn.transaction(|| {
             let data = diesel::insert_into(documents::table)

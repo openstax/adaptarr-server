@@ -138,7 +138,7 @@ pub fn create_module((
     let index = File::from_data(&*db, &state.config, &content)
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
-    let module = Module::create::<&str, _>(&*db, &data.title, index, &[])
+    let module = Module::create::<&str, _>(&*db, &data.title, index, std::iter::empty())
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
     Ok(Json(module.get_public()))

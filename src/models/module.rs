@@ -79,15 +79,15 @@ impl Module {
     }
 
     /// Create a new module.
-    pub fn create<'c, N, I>(
+    pub fn create<N, I>(
         dbconn: &Connection,
         title: &str,
         index: File,
         files: I,
     ) -> Result<Module, DbError>
     where
-        I: IntoIterator<Item = &'c (N, File)>,
-        N: AsRef<str> + 'c,
+        I: IntoIterator<Item = (N, File)>,
+        N: AsRef<str>,
     {
         dbconn.transaction(|| {
             let document = Document::create(dbconn, title, index, files)?;
