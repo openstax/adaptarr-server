@@ -34,7 +34,7 @@ use super::{
 pub fn routes(app: App<State>) -> App<State> {
     app
         .route("/notifications", Method::GET, list_notifications)
-        .route("/notifications/{id}", Method::POST, update_notifiation)
+        .route("/notifications/{id}", Method::PUT, update_notifiation)
         .route("/events", Method::GET, event_stream)
 }
 
@@ -93,7 +93,7 @@ pub struct EventUpdate {
 /// ## Method
 ///
 /// ```
-/// POST /notifications/:id
+/// PUT /notifications/:id
 /// ```
 pub fn update_notifiation((
     state,
