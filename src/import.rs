@@ -1,6 +1,7 @@
 //! File upload and importing ZIPs of modules and collections.
 
 use actix::{Actor, Addr, Handler, SyncArbiter, SyncContext, Message};
+use actix_web::{HttpResponse, ResponseError};
 use tempfile::NamedTempFile;
 use zip::{ZipArchive, result::ZipError};
 use std::path::PathBuf;
@@ -201,4 +202,19 @@ impl_from! { for ImportError ;
     CreateFileError => |e| ImportError::FileCreation(e),
     DbError => |e| ImportError::Database(e),
     ReplaceModuleError => |e| ImportError::ReplaceModule(e),
+}
+
+impl ResponseError for ImportError {
+    fn error_response(&self) -> HttpResponse {
+        use self::ImportError::*;
+
+        match *self {
+            Archive(_) | IndexMissing => HttpResponse::BadRequest()
+                .body(self.to_string()),
+            DbPool(_) | Database(_) => HttpResponse::InternalServerError()
+                .finish(),
+            FileCreation(ref e) => e.error_response(),
+            ReplaceModule(ref e) => e.error_response(),
+        }
+    }
 }

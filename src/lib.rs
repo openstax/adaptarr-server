@@ -6,6 +6,7 @@ extern crate actix_web;
 extern crate argon2;
 extern crate base64;
 extern crate blake2_rfc as blake2;
+extern crate bytes;
 extern crate chrono;
 extern crate failure;
 extern crate futures;

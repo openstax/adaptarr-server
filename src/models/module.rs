@@ -264,3 +264,14 @@ pub enum ReplaceModuleError {
 impl_from! { for ReplaceModuleError ;
     DbError => |e| ReplaceModuleError::Database(e),
 }
+
+impl ResponseError for ReplaceModuleError {
+    fn error_response(&self) -> HttpResponse {
+        match *self {
+            ReplaceModuleError::Database(_) =>
+                HttpResponse::InternalServerError().finish(),
+            ReplaceModuleError::HasDrafts =>
+                HttpResponse::BadRequest().body("module has drafts"),
+        }
+    }
+}

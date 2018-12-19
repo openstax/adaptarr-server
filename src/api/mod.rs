@@ -10,6 +10,7 @@ use super::{
     config::Config,
     db,
     events::{self as event_manager, EventManager},
+    import::Importer,
     mail::Mailer,
 };
 
@@ -32,6 +33,7 @@ pub fn start(cfg: Config) -> Result<()> {
         db: db.clone(),
         mailer: Mailer::from_config(cfg.mail.clone())?,
         events: event_manager::start(db.clone()),
+        importer: Importer::start(db.clone(), cfg.storage.clone()),
     };
 
     let server = server::new(move || vec![
@@ -64,6 +66,8 @@ pub struct State {
     pub mailer: Mailer,
     /// Event manager.
     pub events: Addr<EventManager>,
+    /// ZIP importer.
+    pub importer: Addr<Importer>,
 }
 
 fn api_app(state: State) -> App<State> {

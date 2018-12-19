@@ -1,14 +1,23 @@
 use actix_web::{
     App,
+    AsyncResponder,
+    HttpMessage,
     HttpRequest,
     HttpResponse,
     Json,
     Path,
     Responder,
-    error::ErrorInternalServerError,
+    ResponseError,
+    error::{ErrorInternalServerError, PayloadError, MultipartError},
     http::Method,
+    multipart::{Field, Multipart, MultipartItem},
+    pred,
 };
+use bytes::{Bytes, BytesMut, buf::FromBuf};
+use futures::{Async, Future, Stream, Poll, future};
 use serde::de::{Deserialize, Deserializer};
+use std::io::Write;
+use tempfile::{Builder as TempBuilder, NamedTempFile};
 use uuid::Uuid;
 
 use crate::{
@@ -17,8 +26,9 @@ use crate::{
         File,
         User,
         draft::PublicData as DraftData,
-        module::{Module, PublicData as ModuleData},
+        module::{Module, PublicData as ModuleData, FindModuleError},
     },
+    import::{ImportError, ImportModule, ReplaceModule},
 };
 use super::{
     State,
@@ -31,13 +41,20 @@ pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/modules", |r| {
             r.get().with(list_modules);
-            r.post().with(create_module);
+            r.post()
+                .filter(pred::Header("Content-Type", "application/json"))
+                .with(create_module);
+            r.post()
+                .with_async(create_module_from_zip);
         })
         .route("/modules/assigned/to/{user}", Method::GET, list_assigned)
         .resource("/modules/{id}", |r| {
             r.get().with(get_module);
             r.post().with(crete_draft);
-            r.put().with(update_module);
+            r.put()
+                .filter(pred::Header("Content-Type", "application/json"))
+                .with(update_module);
+            r.put().with_async(replace_module);
             r.delete().f(delete_module);
         })
         .resource("/modules/{id}/comments", |r| {
@@ -110,6 +127,7 @@ pub fn list_assigned((
 ///
 /// ```
 /// POST /modules
+/// Content-Type: application/json
 /// ```
 pub fn create_module((
     state,
@@ -142,6 +160,33 @@ pub fn create_module((
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
     Ok(Json(module.get_public()))
+}
+
+/// Create a new module, populating it with contents of a ZIP archive.
+///
+/// ## Method
+///
+/// ```
+/// POST /modules
+/// Content-Type: multipart/form-data
+/// ```
+pub fn create_module_from_zip((
+    req,
+    state,
+    _session,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    ElevatedSession,
+)) -> Box<dyn Future<Item = Json<ModuleData>, Error = LoadZipError>> {
+    LoadZip::new(&state.config.storage.path, req.multipart())
+        .and_then(move |(title, file)| {
+            state.importer.send(ImportModule { title, file })
+                .from_err()
+        })
+        .and_then(|r| future::result(r).from_err())
+        .map(|module| Json(module.get_public()))
+        .responder()
 }
 
 /// Get a module by ID.
@@ -203,6 +248,7 @@ pub struct ModuleUpdate {
 ///
 /// ```
 /// PUT /modules/:id
+/// Content-Type: application/json
 /// ```
 pub fn update_module((
     state,
@@ -238,6 +284,55 @@ pub fn update_module((
     }).map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
     Ok(HttpResponse::Ok().finish())
+}
+
+/// Replace module with contents of a ZIP archive.
+///
+/// ## Method
+///
+/// ```
+/// PUT /modules/:id
+/// ```
+pub fn replace_module((
+    req,
+    state,
+    session,
+    id,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    ElevatedSession,
+    Path<Uuid>,
+)) -> Box<dyn Future<Item = Json<ModuleData>, Error = LoadZipError>> {
+    let importer = state.importer.clone();
+
+    future::result(
+        state.db.get()
+            .map_err(LoadZipError::from)
+            .and_then(|db| Module::by_id(&*db, id.into_inner())
+                .map_err(LoadZipError::from)))
+        .and_then(move |module| future::result(
+            NamedTempFile::new_in(&state.config.storage.path)
+                .map(|file| (module, file))
+                .map_err(LoadZipError::from)))
+        .and_then(move |(module, file)| {
+            req.payload()
+                .from_err()
+                .fold(file, |mut file, chunk| {
+                    match file.write_all(chunk.as_ref()) {
+                        Ok(_) => future::ok(file),
+                        Err(e) => future::err(e),
+                    }
+                })
+                .map(|file| (module, file))
+        })
+        .and_then(move |(module, file)| {
+            importer.send(ReplaceModule { module, file })
+                .from_err()
+        })
+        .and_then(|r| future::result(r).from_err())
+        .map(|module| Json(module.get_public()))
+        .responder()
 }
 
 /// Delete a module
@@ -329,4 +424,218 @@ where
     D: Deserializer<'de>,
 {
     T::deserialize(de).map(Some)
+}
+
+/// Process a multipart form containing title and ZIP file for a new module.
+struct LoadZip<S> {
+    from: Box<dyn Stream<Item = (String, Field<S>), Error = LoadZipError>>,
+    fut: Option<Box<dyn Future<Item = ZipField, Error = LoadZipError>>>,
+
+    title: Option<String>,
+    file: Option<NamedTempFile>,
+}
+
+enum ZipField {
+    Title(String),
+    File(NamedTempFile),
+}
+
+impl<S> LoadZip<S>
+where
+    S: Stream<Item = Bytes, Error = PayloadError> + 'static,
+{
+    fn new(path: &std::path::Path, from: Multipart<S>)
+        -> impl Future<Item = (String, NamedTempFile), Error = LoadZipError>
+    {
+        future::result(TempBuilder::new().tempfile_in(path))
+            .from_err()
+            .and_then(|file| LoadZip {
+                from: Box::new(from
+                    .map(process_item)
+                    .flatten()),
+                fut: None,
+                title: None,
+                file: Some(file),
+            })
+    }
+
+    fn finish(&mut self) -> Poll<<Self as Future>::Item, LoadZipError> {
+        let title = self.title.take().ok_or(LoadZipError::Incomplete)?;
+        let file = self.file.take().ok_or(LoadZipError::Incomplete)?;
+
+        Ok(Async::Ready((title, file)))
+    }
+}
+
+impl<S> Future for LoadZip<S>
+where
+    S: Stream<Item = Bytes, Error = PayloadError> + 'static,
+{
+    type Item = (String, NamedTempFile);
+    type Error = LoadZipError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if let Some(ref mut fut) = self.fut {
+            let field = match fut.poll()? {
+                Async::NotReady => return Ok(Async::NotReady),
+                Async::Ready(field) => field,
+            };
+
+            match field {
+                ZipField::Title(title) => self.title = Some(title),
+                ZipField::File(file) => self.file = Some(file),
+            }
+        }
+        self.fut = None;
+
+        let (name, field) = match self.from.poll()? {
+            Async::NotReady => return Ok(Async::NotReady),
+            Async::Ready(Some(v)) => v,
+            Async::Ready(None) => return self.finish(),
+        };
+
+        let fut: Box<dyn Future<Item = _, Error = _>> = match name.as_str() {
+            "title" => Box::new(load_string(field)
+                .map(ZipField::Title)),
+            "file" => {
+                // This unwrap() is safe, because self.file can only ever
+                // be None if were reading into it, in which case we won't even
+                // reach this point (or self.file will be replaced before we do)
+                let file = self.file.take().unwrap();
+
+                Box::new(field
+                    .from_err()
+                    .fold(file, |mut file, chunk| {
+                        match file.write_all(chunk.as_ref()) {
+                            Ok(_) => future::ok(file),
+                            Err(e) => future::err(e),
+                        }
+                    })
+                    .map(ZipField::File))
+            }
+            _ => return Err(LoadZipError::UnknownField(name)),
+        };
+
+        self.fut = Some(fut);
+        self.poll()
+    }
+}
+
+fn process_item<S>(item: MultipartItem<S>)
+    -> Box<dyn Stream<Item = (String, Field<S>), Error = LoadZipError>>
+where
+    S: Stream<Item = Bytes, Error = PayloadError> + 'static,
+{
+    match item {
+        MultipartItem::Field(field) => {
+            let cd = match field.content_disposition() {
+                Some(cd) => cd,
+                None => return Box::new(future::err(
+                    LoadZipError::ContentDispositionMissing
+                ).into_stream()),
+            };
+
+            if !cd.is_form_data() {
+                return Box::new(future::err(
+                    LoadZipError::FieldNotFormData
+                ).into_stream());
+            }
+
+            Box::new(future::result({
+                cd.get_name()
+                    .map(|name| (name.to_string(), field))
+                    .ok_or(LoadZipError::UnnamedField)
+            }).into_stream())
+        },
+        MultipartItem::Nested(mp) => Box::new(mp
+            .map(process_item)
+            .flatten()),
+    }
+}
+
+fn load_string<S>(from: S) -> impl Future<Item = String, Error = LoadZipError>
+where
+    S: Stream<Item = Bytes, Error = MultipartError>,
+{
+    from
+        .from_err()
+        .fold(BytesMut::with_capacity(1024), |mut value, chunk| {
+            value.extend_from_slice(&chunk);
+            future::ok::<_, LoadZipError>(value)
+        })
+        .and_then(|value| {
+            future::result(String::from_utf8(Vec::from_buf(value)))
+                .from_err()
+        })
+}
+
+#[derive(Debug, Fail)]
+pub enum LoadZipError {
+    /// Error connecting to database.
+    #[fail(display = "Cannot obtain database connection: {}", _0)]
+    DatabasePool(#[cause] r2d2::Error),
+    /// System error.
+    #[fail(display = "IO error: {}", _0)]
+    Io(#[cause] std::io::Error),
+    /// Error reading data from client.
+    #[fail(display = "Error transferring data: {}", _0)]
+    Payload(#[cause] PayloadError),
+    /// Client sent invalid UTF-8.
+    #[fail(display = "Invalid UTF-8: {}", _0)]
+    DecodeUtf8(#[cause] std::string::FromUtf8Error),
+    /// Error processing multipart.
+    #[fail(display = "{}", _0)]
+    Multipart(#[cause] MultipartError),
+    /// Multipart field is missing content disposition.
+    #[fail(display = "Field missing Content-Disposition")]
+    ContentDispositionMissing,
+    /// Multipart field is not a `form-data`.
+    #[fail(display = "Field is not form-data")]
+    FieldNotFormData,
+    /// Multipart field is not named.
+    #[fail(display = "Field is not named")]
+    UnnamedField,
+    /// Multipart includes an unknown field.
+    #[fail(display = "Unknown field {:?}", _0)]
+    UnknownField(String),
+    /// Request is missing one of required fields.
+    #[fail(display = "Incomplete request")]
+    Incomplete,
+    /// Tried to replace a module which doesn't exist.
+    #[fail(display = "Module not found: {}", _0)]
+    NoSuchModule(#[cause] FindModuleError),
+    /// Error sending messages between actors.
+    #[fail(display = "Problem communicating between actors: {}", _0)]
+    Actor(#[cause] actix::MailboxError),
+    /// Error importing a ZIP.
+    #[fail(display = "Cannot import module: {}", _0)]
+    Import(#[cause] ImportError),
+}
+
+impl_from! { for LoadZipError ;
+    r2d2::Error => |e| LoadZipError::DatabasePool(e),
+    std::io::Error => |e| LoadZipError::Io(e),
+    PayloadError => |e| LoadZipError::Payload(e),
+    std::string::FromUtf8Error => |e| LoadZipError::DecodeUtf8(e),
+    MultipartError => |e| LoadZipError::Multipart(e),
+    FindModuleError => |e| LoadZipError::NoSuchModule(e),
+    actix::MailboxError => |e| LoadZipError::Actor(e),
+    ImportError => |e| LoadZipError::Import(e),
+}
+
+impl ResponseError for LoadZipError {
+    fn error_response(&self) -> HttpResponse {
+        use self::LoadZipError::*;
+
+        match *self {
+            DatabasePool(_) | Io(_) | Actor(_) =>
+                HttpResponse::InternalServerError().finish(),
+            DecodeUtf8(_) | UnknownField(_) | ContentDispositionMissing
+            | FieldNotFormData | UnnamedField | Incomplete | NoSuchModule(_) =>
+                HttpResponse::BadRequest().body(self.to_string()),
+            Payload(ref e) => e.error_response(),
+            Multipart(ref e) => e.error_response(),
+            Import(ref e) => e.error_response(),
+        }
+    }
 }
