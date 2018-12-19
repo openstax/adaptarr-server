@@ -6,13 +6,13 @@ use diesel::{
 };
 use futures::{Future, Stream, future};
 use std::{
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 use tempfile::{Builder as TempBuilder, NamedTempFile};
 
 use crate::{
-    Config,
+    config::{Config, Storage},
     db::{
         Connection,
         Pool,
@@ -115,6 +115,23 @@ impl File {
         }
     }
 
+    /// Create new file from any type implementing [`std::io::Write`].
+    pub fn from_read<R>(dbconn: &Connection, config: &Storage, mut read: R)
+        -> Result<File, CreateFileError>
+    where
+        R: Read,
+    {
+        let mut tmp = NamedTempFile::new_in(&config.path)?;
+
+        let digest = {
+            let mut hash = HashWriter::new(64, &mut tmp);
+            io::copy(&mut read, &mut hash)?;
+            hash.finalize()
+        };
+
+        File::from_file_with_hash(dbconn, &config.path, tmp, digest)
+    }
+
     /// Create new file from a temporary file and hash.
     ///
     /// This is an internal constructor.
@@ -212,7 +229,7 @@ impl ResponseError for CreateFileError {
     }
 }
 
-/// Write stream into a sing and return hash of its contents.
+/// Write stream into a sink and return hash of its contents.
 fn copy_hash<S, C, W, E>(nn: usize, input: S, output: W)
     -> impl Future<Item=(Blake2bResult, W), Error=E>
 where
@@ -250,4 +267,37 @@ fn hash_to_hex(hash: &[u8]) -> String {
     }
 
     hex
+}
+
+struct HashWriter<W> {
+    inner: W,
+    digest: Blake2b,
+}
+
+impl<W> HashWriter<W> {
+    fn new(nn: usize, inner: W) -> Self {
+        HashWriter {
+            inner,
+            digest: Blake2b::new(nn),
+        }
+    }
+
+    fn finalize(self) -> Blake2bResult {
+        self.digest.finalize()
+    }
+}
+
+impl<W> Write for HashWriter<W>
+where
+    W: Write,
+{
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.digest.update(&buf[..n]);
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
 }
