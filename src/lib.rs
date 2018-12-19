@@ -23,6 +23,7 @@ extern crate structopt;
 extern crate tempfile;
 extern crate toml;
 extern crate uuid;
+extern crate zip;
 
 #[macro_use] extern crate diesel;
 #[macro_use] extern crate failure_derive;
@@ -45,6 +46,7 @@ mod cli;
 mod config;
 mod db;
 mod events;
+mod import;
 mod mail;
 mod models;
 mod templates;
