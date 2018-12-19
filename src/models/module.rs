@@ -143,6 +143,39 @@ impl Module {
         Ok(Draft::from_db(draft, Document::from_db(document)))
     }
 
+    /// Replace contents of this module.
+    pub fn replace<N, I>(
+        &mut self,
+        dbconn: &Connection,
+        index: File,
+        files: I,
+    ) -> Result<(), ReplaceModuleError>
+    where
+        I: IntoIterator<Item = (N, File)>,
+        N: AsRef<str>,
+    {
+        dbconn.transaction(|| {
+            let count: i64 = drafts::table
+                .filter(drafts::module.eq(self.data.id))
+                .count()
+                .get_result(dbconn)?;
+
+            if count > 0 {
+                return Err(ReplaceModuleError::HasDrafts);
+            }
+
+            let document = Document::create(dbconn, &self.title, index, files)?;
+
+            diesel::update(modules::table.filter(modules::id.eq(self.data.id)))
+                .set(modules::document.eq(document.id))
+                .execute(dbconn)?;
+
+            self.document = document;
+
+            Ok(())
+        })
+    }
+
     /// Change user assigned to this module.
     pub fn set_assignee(&self, dbconn: &Connection, user: Option<i32>)
     -> Result<(), DbError> {
@@ -216,4 +249,18 @@ impl ResponseError for CreateDraftError {
                 HttpResponse::BadRequest().finish(),
         }
     }
+}
+
+#[derive(Debug, Fail)]
+pub enum ReplaceModuleError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    /// Module has drafts.
+    #[fail(display = "Module with drafts cannot be replaced")]
+    HasDrafts,
+}
+
+impl_from! { for ReplaceModuleError ;
+    DbError => |e| ReplaceModuleError::Database(e),
 }
