@@ -41,6 +41,7 @@ pub use self::cli::main;
 pub(crate) use self::config::Config;
 
 #[macro_use] mod macros;
+#[macro_use] mod multipart;
 
 mod api;
 mod cli;
