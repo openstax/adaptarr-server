@@ -135,6 +135,18 @@ impl BookPart {
         })
     }
 
+    /// Clear this part.
+    ///
+    /// This function does nothing if this part is a module.
+    pub fn clear(&mut self, dbconn: &Connection) -> Result<(), DbError> {
+        diesel::delete(book_parts::table
+            .filter(book_parts::book.eq(self.data.book)
+                .and(book_parts::parent.eq(self.data.id))
+                .and(book_parts::id.ne(0))))
+            .execute(dbconn)?;
+        Ok(())
+    }
+
     /// Insert a module at index.
     pub fn insert_module<T>(
         &self,

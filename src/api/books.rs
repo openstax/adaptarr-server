@@ -29,7 +29,7 @@ use crate::{
         },
     },
     multipart::Multipart,
-    import::ImportBook,
+    import::{ImportBook, ReplaceBook}
 };
 use super::{
     State,
@@ -48,7 +48,10 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .resource("/books/{id}", |r| {
             r.get().with(get_book);
-            r.put().with(update_book);
+            r.put()
+                .filter(pred::Header("Content-Type", "application/json"))
+                .with(update_book);
+            r.put().with_async(replace_book);
             r.delete().with(delete_book);
         })
         .resource("/books/{id}/parts", |r| {
@@ -207,6 +210,46 @@ pub fn update_book((
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
     Ok(Json(book.get_public()))
+}
+
+pub fn replace_book((
+    req,
+    state,
+    _session,
+    id,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    ElevatedSession,
+    Path<Uuid>,
+)) -> Box<dyn Future<Item = Json<BookData>, Error = actix_web::Error>> {
+    future::result(
+        state.db.get()
+            .map_err(|e| ErrorInternalServerError(e.to_string()))
+            .and_then(|db| Book::by_id(&*db, *id)
+                .map_err(|e| ErrorInternalServerError(e.to_string()))))
+        .and_then(|book| future::result(
+            NamedTempFile::new()
+                .map_err(|e| ErrorInternalServerError(e.to_string()))
+                .map(|file| (book, file))))
+        .and_then(move |(book, file)| {
+            req.payload()
+                .from_err()
+                .fold(file, |mut file, chunk| {
+                    match file.write_all(chunk.as_ref()) {
+                        Ok(_) => future::ok(file),
+                        Err(e) => future::err(e),
+                    }
+                })
+                .map(|file| (book, file))
+        })
+        .and_then(move |(book, file)| {
+            state.importer.send(ReplaceBook { book, file })
+                .from_err()
+        })
+        .and_then(|r| future::result(r).from_err())
+        .map(|book| Json(book.get_public()))
+        .responder()
 }
 
 /// Delete a book by ID.
