@@ -13,6 +13,7 @@ extern crate futures;
 extern crate lettre;
 extern crate lettre_email;
 extern crate magic;
+extern crate minidom;
 extern crate r2d2;
 extern crate r2d2_diesel;
 extern crate rand;
