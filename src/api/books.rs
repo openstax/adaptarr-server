@@ -1,11 +1,18 @@
 use actix_web::{
     App,
+    AsyncResponder,
+    HttpMessage,
+    HttpRequest,
     HttpResponse,
     Json,
     Path,
     error::ErrorInternalServerError,
+    pred,
 };
 use diesel::result::Error as DbError;
+use futures::{Future, Stream, future};
+use std::io::Write;
+use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 use crate::{
@@ -21,6 +28,8 @@ use crate::{
             Tree,
         },
     },
+    multipart::Multipart,
+    import::ImportBook,
 };
 use super::{
     State,
@@ -32,7 +41,10 @@ pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/books", |r| {
             r.get().with(list_books);
-            r.post().with(create_book);
+            r.post()
+                .filter(pred::Header("Content-Type", "application/json"))
+                .with(create_book);
+            r.post().with_async(create_book_from_zip);
         })
         .resource("/books/{id}", |r| {
             r.get().with(get_book);
@@ -86,6 +98,7 @@ pub struct NewBook {
 ///
 /// ```
 /// POST /books
+/// Content-Type: application/json
 /// ```
 pub fn create_book((
     state,
@@ -101,6 +114,43 @@ pub fn create_book((
     let book = Book::create(&*db, &form.title)
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
     Ok(Json(book.get_public()))
+}
+
+pub struct NewBookZip {
+    title: String,
+    file: NamedTempFile,
+}
+
+from_multipart! {
+    multipart NewBookZip via _NewBookZipImpl {
+        title: String,
+        file: NamedTempFile,
+    }
+}
+
+/// Create a new book, populating it with contents of a ZIP archive.
+///
+/// ## Method
+///
+/// ```
+/// POST /books
+/// Content-Type: multipart/form-data
+/// ```
+pub fn create_book_from_zip((
+    state,
+    _session,
+    data,
+): (
+    actix_web::State<State>,
+    ElevatedSession,
+    Multipart<NewBookZip>,
+)) -> Box<dyn Future<Item = Json<BookData>, Error = actix_web::error::Error>> {
+    let NewBookZip { title, file } = data.into_inner();
+    state.importer.send(ImportBook { title, file })
+        .from_err()
+        .and_then(|r| future::result(r).from_err())
+        .map(|book| Json(book.get_public()))
+        .responder()
 }
 
 /// Get a book by ID.

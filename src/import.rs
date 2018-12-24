@@ -43,6 +43,16 @@ impl Message for ReplaceModule {
     type Result = Result<Module, ImportError>;
 }
 
+/// Requested a new book to be created from contents of a ZIP archive.
+pub struct ImportBook {
+    pub title: String,
+    pub file: NamedTempFile,
+}
+
+impl Message for ImportBook {
+    type Result = Result<Book, ImportError>;
+}
+
 /// Actix actor processing ZIPs in a background worker.
 pub struct Importer {
     pool: Pool,
@@ -282,6 +292,21 @@ impl Importer {
 
         Ok(())
     }
+
+    /// Create a new book for a ZIP of its contents.
+    fn create_book(&mut self, title: String, mut file: NamedTempFile)
+    -> Result<Book, ImportError> {
+        let (zip, coldata, base) = self.preprocess_collection_zip(&mut file)?;
+
+        let db = self.pool.get()?;
+        let dbconn = &*db;
+
+        dbconn.transaction(|| {
+            let mut book = Book::create(dbconn, &title)?;
+            self.load_collection_zip(dbconn, &mut book, zip, coldata, base)?;
+            Ok(book)
+        })
+    }
 }
 
 impl Actor for Importer {
@@ -305,6 +330,16 @@ impl Handler<ReplaceModule> for Importer {
         let ReplaceModule { module, file } = msg;
 
         self.replace_module(module, file)
+    }
+}
+
+impl Handler<ImportBook> for Importer {
+    type Result = Result<Book, ImportError>;
+
+    fn handle(&mut self, msg: ImportBook, _: &mut Self::Context) -> Self::Result {
+        let ImportBook { title, file } = msg;
+
+        self.create_book(title, file)
     }
 }
 
