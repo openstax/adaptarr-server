@@ -10,6 +10,7 @@ use crate::db::{
     models as db,
     schema::books,
 };
+use super::bookpart::{BookPart, FindBookPartError};
 
 /// A book is a collection of modules and their structure.
 #[derive(Debug)]
@@ -65,6 +66,18 @@ impl Book {
         Ok(())
     }
 
+    /// Load root part of this book.
+    pub fn root_part(&self, dbconn: &Connection) -> Result<BookPart, DbError> {
+        BookPart::by_id(dbconn, self.data.id, 0)
+            .map_err(|e| match e {
+                FindBookPartError::Database(e) => e,
+                FindBookPartError::NotFound => panic!(
+                    "Inconsistent database: no root part for book {}",
+                    self.data.id,
+                ),
+            })
+    }
+
     /// Get the public portion of this book's data.
     pub fn get_public(&self) -> PublicData {
         PublicData {
@@ -80,6 +93,14 @@ impl Book {
             .execute(dbconn)?;
         self.data.title = title;
         Ok(())
+    }
+}
+
+impl std::ops::Deref for Book {
+    type Target = db::Book;
+
+    fn deref(&self) -> &db::Book {
+        &self.data
     }
 }
 

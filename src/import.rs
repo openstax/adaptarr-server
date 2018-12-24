@@ -15,6 +15,8 @@ use crate::{
     config::Storage,
     db::{Connection, Pool},
     models::{
+        Book,
+        bookpart::CreatePartError,
         file::{File, CreateFileError},
         module::{Module, ReplaceModuleError},
     },
@@ -237,6 +239,48 @@ impl Importer {
         }
 
         Ok((index_file, files))
+    }
+
+    /// Load contents of a book from a collection ZIP.
+    fn load_collection_zip(
+        &mut self,
+        dbconn: &Connection,
+        book: &mut Book,
+        mut zip: ZipArchive<&mut std::fs::File>,
+        coldata: Collection,
+        base: PathBuf,
+    ) -> Result<(), ImportError> {
+        let root = book.root_part(dbconn)?;
+
+        let mut queue = vec![(root, &coldata.content)];
+
+        while let Some((group, content)) = queue.pop() {
+            for (inx, element) in content.iter().enumerate() {
+                match element {
+                    Element::Module(ModuleElement { title, document }) => {
+                        let path = base.join(document);
+                        let (index, files) = self.load_collection_module(
+                            dbconn, &mut zip, path)?;
+                        let module = Module::create(dbconn, &title, index, files)?;
+                        group.insert_module(dbconn, inx as i32, &title, &module)
+                            .map_err(|e| match e {
+                                CreatePartError::Database(e) => e,
+                                CreatePartError::IsAModule => unreachable!(),
+                            })?;
+                    }
+                    Element::Subcollection(Subcollection { title, content }) => {
+                        let new = group.create_group(dbconn, inx as i32, &title)
+                            .map_err(|e| match e {
+                                CreatePartError::Database(e) => e,
+                                CreatePartError::IsAModule => unreachable!(),
+                            })?;
+                        queue.push((new, content));
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
