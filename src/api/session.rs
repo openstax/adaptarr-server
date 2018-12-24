@@ -81,8 +81,11 @@ pub trait Policy {
 pub enum Validation {
     /// Let this session through.
     Pass,
-    /// Let this session through, but update its settings.
-    Update(SessionSetting),
+    /// Update this session.
+    ///
+    /// If the second argument is true then the session should be let through,
+    /// otherwise it should be rejected. It will be updated regardless.
+    Update(SessionSetting, bool),
     /// Reject this session.
     Reject,
 }
@@ -137,7 +140,7 @@ impl SessionManager {
         if ses.is_super && diff > Duration::minutes(SUPER_EXPIRATION) {
             return Validation::Update(SessionSetting {
                 is_super: false,
-            });
+            }, false);
         }
 
         Validation::Pass
@@ -176,12 +179,12 @@ impl<S> Middleware<S> for SessionManager {
 
         let pass = match SessionManager::validate(&session) {
             Validation::Pass => true,
-            Validation::Update(settings) => {
+            Validation::Update(settings, pass) => {
                 diesel::update(&session)
                     .set(sessions::is_super.eq(settings.is_super))
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-                true
+                pass
             }
             Validation::Reject => {
                 diesel::delete(&session)
@@ -301,11 +304,15 @@ where
 
             match P::validate(&session) {
                 Validation::Pass => (),
-                Validation::Update(settings) => {
+                Validation::Update(settings, pass) => {
                     let db = req.state().db.get()?;
                     diesel::update(&session)
                         .set(sessions::is_super.eq(settings.is_super))
                         .execute(&*db)?;
+
+                    if !pass {
+                        return Err(SessionFromRequestError::Policy);
+                    }
                 }
                 Validation::Reject => return Err(SessionFromRequestError::Policy),
             }
