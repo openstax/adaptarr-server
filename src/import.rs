@@ -2,7 +2,10 @@
 
 use actix::{Actor, Addr, Handler, SyncArbiter, SyncContext, Message};
 use actix_web::{HttpResponse, ResponseError};
-use diesel::result::Error as DbError;
+use diesel::{
+    Connection as _Connection,
+    result::Error as DbError,
+};
 use minidom::Element as XmlElement;
 use std::{path::PathBuf, io::Read, str::FromStr};
 use tempfile::NamedTempFile;
@@ -10,7 +13,7 @@ use zip::{ZipArchive, result::ZipError};
 
 use crate::{
     config::Storage,
-    db::Pool,
+    db::{Connection, Pool},
     models::{
         file::{File, CreateFileError},
         module::{Module, ReplaceModuleError},
@@ -187,6 +190,53 @@ impl Importer {
         let coldata = Collection::from_xml(&coldata)?;
 
         Ok((zip, coldata, base_path))
+    }
+
+    /// Import a single module from a collection ZIP.
+    fn load_collection_module(
+        &mut self,
+        dbconn: &Connection,
+        zip: &mut ZipArchive<&mut std::fs::File>,
+        base_path: PathBuf,
+    ) -> Result<(File, Vec<(String, File)>), ImportError> {
+        let index_file = {
+            let index = zip.by_name(base_path.join("index.cnxml").to_str().unwrap())?;
+            File::from_read(dbconn, &self.config, index)?
+        };
+
+        let mut files = Vec::new();
+
+        for inx in 0..zip.len() {
+            let file = zip.by_index(inx)?;
+
+            // Don't import directories.
+            if file.size() == 0 {
+                continue;
+            }
+
+            let path = file.sanitized_name();
+
+            if !path.starts_with(&base_path) {
+                continue;
+            }
+
+            let name = path
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
+
+            // Don't import index.cnxml twice.
+            if name == "index.cnxml" {
+                continue;
+            }
+
+            let file = File::from_read(dbconn, &self.config, file)?;
+            files.push((name, file));
+        }
+
+        Ok((index_file, files))
     }
 }
 
