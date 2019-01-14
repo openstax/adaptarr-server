@@ -182,7 +182,7 @@ impl Handler<events::NewEvent> for Listener {
 
     fn handle(&mut self, msg: events::NewEvent, ctx: &mut Self::Context) {
         let events::NewEvent { id, timestamp, event } = msg;
-        ctx.binary(serde_json::to_vec(&EventData {
+        ctx.text(serde_json::to_vec(&EventData {
             id,
             kind: event.kind(),
             timestamp,
