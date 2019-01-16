@@ -1,16 +1,146 @@
 {% extends "_base.html" %}
+{% block head %}
+    <style type="text/css">
+        body {
+            position: fixed;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+
+            margin: 0;
+            padding: 0;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            background-color: #efefef;
+        }
+
+        form {
+            position: relative;
+
+            display: flex;
+            flex-direction: column;
+
+            padding: 12px;
+            width: 260px;
+
+            box-shadow: 0px 2px 4px 2px rgba(0, 0, 0, 0.24);
+            border-radius: 2px;
+
+            background-color: white;
+        }
+
+        form > * {
+            margin: 0;
+            margin-bottom: 4px;
+        }
+
+        form > p, div.error {
+            margin-bottom: 8px;
+        }
+
+        form > div.overlay {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            margin: 0;
+
+            display: none;
+
+            background-color: rgba(0, 0, 0, 0.24);
+            border-radius: 2px;
+        }
+
+        div.error {
+            display: none;
+
+            margin: 0 -12px 8px -12px;
+            padding: 4px 12px;
+
+            background-color: rgba(255, 0, 0, 0.24);
+        }
+    </style>
+{% endblock %}
 {% block body %}
     <form method="post">
+        <p>You're entering superuser mode</p>
+        <p>We won't ask for your password again in the next 15 minutes</p>
+
         {% if error %}
             <div class="error">{{ error }}</div>
+        {% elif action == 'message' %}
+            <div class="error"></div>
         {% endif %}
 
         <input type="password" name="password" placeholder="Password">
+        <input type="hidden" name="action" value="{{ action }}">
 
         {% if next %}
             <input type="hidden" name="next" value="{{ next }}">
         {% endif %}
 
-        <input type="submit" name="Authorize">
+        <input type="submit" value="Authorize">
+
+        {% if action == "message" %}
+            <div class="overlay">
+            </div>
+        {% endif %}
     </form>
+
+{% if action == "message" %}
+    <script type="text/javascript">
+        const form = document.forms[0]
+        const overlay = document.querySelector('div.overlay')
+        const message = document.querySelector('div.error')
+
+        function onsubmit(ev) {
+            ev.preventDefault()
+
+            overlay.style.display = 'block'
+
+            const data = new URLSearchParams()
+            for (const element of form.elements) {
+                data.append(element.name, element.value)
+            }
+
+            fetch('/elevate', {
+                method: 'post',
+                body: data,
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                },
+            }).then(r => {
+                r.json().then(data => {
+                    switch (r.status) {
+                    case 400:
+                        overlay.style.display = 'none'
+                        message.innerText = data.message
+                        message.style.display = 'block'
+                        break
+
+                    case 200:
+                        window.opener.postMessage({ authorized: true }, location.origin)
+                        window.close()
+                        break
+                    }
+                })
+            })
+        }
+
+        function onclose() {
+            window.opener.postMessage('closed', location.origin)
+        }
+
+        if (window.opener) {
+            form.onsubmit = onsubmit
+            form.onclose = onclose
+        }
+    </script>
+{% endif %}
 {% endblock body %}

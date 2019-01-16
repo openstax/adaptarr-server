@@ -7,6 +7,7 @@ use actix_web::{
     error::{Error, ErrorInternalServerError},
     http::{Method, StatusCode},
     middleware::Logger,
+    pred,
 };
 
 use crate::models::{
@@ -34,6 +35,9 @@ pub fn app(state: State) -> App<State> {
         })
         .resource("/elevate", |r| {
             r.get().with(elevate);
+            r.post()
+                .filter(pred::Header("Accept", "application/json"))
+                .with(do_elevate_json);
             r.post().with(do_elevate);
         })
         .route("/logout", Method::GET, logout)
@@ -46,17 +50,36 @@ pub fn app(state: State) -> App<State> {
             r.get().with(register);
             r.post().with(do_register);
         })
+        .route("/test", Method::GET, test)
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum LoginAction {
+    /// Redirect to the URl specified in `next`.
+    Next,
+    /// Use `window.postMessage()` to notify opener.
+    Message,
+}
+
+impl Default for LoginAction {
+    fn default() -> LoginAction {
+        LoginAction::Next
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LoginQuery {
     next: Option<String>,
+    #[serde(default)]
+    action: LoginAction,
 }
 
 #[derive(Debug, Serialize)]
 struct LoginTemplate {
     error: Option<String>,
     next: Option<String>,
+    action: LoginAction,
 }
 
 /// Render a login screen.
@@ -79,9 +102,12 @@ pub fn login((
             .finish());
     }
 
+    let LoginQuery { next, action } = query.into_inner();
+
     render("login.html", &LoginTemplate {
         error: None,
-        next: query.into_inner().next,
+        next,
+        action,
     })
 }
 
@@ -120,6 +146,7 @@ pub fn do_login((
             &LoginTemplate {
                 error: Some(err.to_string()),
                 next: params.into_inner().next,
+                action: LoginAction::default(),
             },
         ),
     };
@@ -152,6 +179,7 @@ pub fn elevate((
     let db = state.db.get()
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
     let user = User::by_id(&*db, session.user)?;
+    let LoginQuery { next, action } = query.into_inner();
 
     if !user.is_super {
         return Ok(HttpResponse::Forbidden().finish());
@@ -159,14 +187,18 @@ pub fn elevate((
 
     render("elevate.html", &LoginTemplate {
         error: None,
-        next: query.into_inner().next,
+        next,
+        action,
     })
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ElevateCredentials {
     password: String,
+    #[serde(default)]
     next: Option<String>,
+    #[serde(default)]
+    action: LoginAction,
 }
 
 /// Perform session elevation.
@@ -190,18 +222,20 @@ pub fn do_elevate((
     let db = state.db.get()
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
     let user = User::by_id(&*db, session.user)?;
+    let ElevateCredentials { next, action, password } = form.into_inner();
 
     if !user.is_super {
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    if !user.check_password(&form.password) {
+    if !user.check_password(&password) {
         return render_code(
             StatusCode::BAD_REQUEST,
             "elevate.html",
             &LoginTemplate {
                 error: Some("Bad password".to_string()),
-                next: form.into_inner().next,
+                next,
+                action,
             },
         );
     }
@@ -209,8 +243,57 @@ pub fn do_elevate((
     Session::<Normal>::create(&req, user.id, true);
 
     Ok(HttpResponse::SeeOther()
-        .header("Location", form.next.as_ref().map_or("/", String::as_str))
+        .header("Location", next.as_ref().map_or("/", String::as_str))
         .finish())
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ElevationResult {
+    Error {
+        message: String,
+    },
+    Success,
+}
+
+/// Perform session elevation, returning response as JSON.
+///
+/// ## Method
+///
+/// ```
+/// POST /elevate
+/// Accept: application/json
+/// ```
+pub fn do_elevate_json((
+    req,
+    state,
+    session,
+    form,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    Session,
+    Form<ElevateCredentials>,
+)) -> RenderedTemplate {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let user = User::by_id(&*db, session.user)?;
+    let ElevateCredentials { next, action, password } = form.into_inner();
+
+    if !user.is_super {
+        return Ok(HttpResponse::Forbidden().finish());
+    }
+
+    if !user.check_password(&password) {
+        return Ok(HttpResponse::BadRequest()
+            .json(ElevationResult::Error {
+                message: "Bad password".to_string(),
+            }));
+    }
+
+    Session::<Normal>::create(&req, user.id, true);
+
+    Ok(HttpResponse::Ok().json(ElevationResult::Success))
 }
 
 /// Log an user out and destroy their session.
@@ -417,6 +500,10 @@ pub fn do_register((
     Ok(HttpResponse::SeeOther()
         .header("Location", "/")
         .finish())
+}
+
+fn test(_req: HttpRequest<State>) -> RenderedTemplate {
+    render("test.html", &Empty {})
 }
 
 /// Empty serializable structure to serve as empty context.
