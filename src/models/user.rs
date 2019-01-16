@@ -35,6 +35,7 @@ pub struct User {
 pub struct PublicData {
     id: i32,
     name: String,
+    is_super: bool,
 }
 
 impl User {
@@ -130,11 +131,12 @@ impl User {
 
     /// Get the public portion of this user's data.
     pub fn get_public(&self) -> PublicData {
-        let db::User { id, ref name, .. } = self.data;
+        let db::User { id, ref name, is_super, .. } = self.data;
 
         PublicData {
             id,
             name: name.clone(),
+            is_super,
         }
     }
 
