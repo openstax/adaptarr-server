@@ -99,6 +99,13 @@ impl Draft {
     /// a new file will be created.
     pub fn write_file(&self, dbconn: &Connection, name: &str, file: &File)
     -> Result<(), DbError> {
+        if name == "index.cnxml" {
+            diesel::update(&*self.document)
+                .set(documents::index.eq(file.id))
+                .execute(dbconn)?;
+            return Ok(());
+        }
+
         diesel::insert_into(document_files::table)
             .values(&db::NewDocumentFile {
                 document: self.document.id,
