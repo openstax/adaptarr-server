@@ -20,6 +20,7 @@ use actix_web::{
     ws::{self, WebsocketContext},
 };
 use chrono::NaiveDateTime;
+use std::time::Duration;
 
 use crate::{
     events,
@@ -155,6 +156,9 @@ impl Actor for Listener {
             .into_actor(self)
             .then(|_, _, _| actix::fut::ok(()))
             .wait(ctx);
+
+        // Ping client every 30 seconds to keep connection open.
+        ctx.run_interval(Duration::from_secs(30), |_, ctx| ctx.ping(""));
     }
 
     /// Unregister as an event listener.
