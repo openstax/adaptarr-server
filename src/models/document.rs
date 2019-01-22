@@ -66,11 +66,14 @@ impl Document {
     }
 
     /// Get list of files in this document.
-    pub fn get_files(&self, dbconn: &Connection) -> Result<Vec<String>, DbError> {
+    pub fn get_files(&self, dbconn: &Connection) -> Result<Vec<(String, File)>, DbError> {
         document_files::table
             .filter(document_files::document.eq(self.data.id))
-            .get_results::<db::DocumentFile>(dbconn)
-            .map(|r| r.into_iter().map(|f| f.name).collect())
+            .inner_join(files::table)
+            .get_results::<(db::DocumentFile, db::File)>(dbconn)
+            .map(|r| r.into_iter()
+                .map(|(d, f)| (d.name, File::from_db(f)))
+                .collect())
     }
 
     /// Get a file from this document.

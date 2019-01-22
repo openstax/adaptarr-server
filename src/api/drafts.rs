@@ -165,6 +165,12 @@ pub fn add_comment(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
+#[derive(Debug, Serialize)]
+pub struct FileInfo {
+    name: String,
+    mime: String,
+}
+
 /// List files in a draft.
 ///
 /// ## Method
@@ -180,15 +186,22 @@ pub fn list_files((
     actix_web::State<State>,
     Session,
     Path<Uuid>,
-)) -> Result<Json<Vec<String>>> {
+)) -> Result<Json<Vec<FileInfo>>> {
     let db = state.db.get()
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
     let draft = Draft::by_id(&*db, *id, session.user)
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
-    draft.get_files(&*db)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))
-        .map(Json)
+    let files = draft.get_files(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?
+        .into_iter()
+        .map(|(name, file)| FileInfo {
+            name,
+            mime: file.into_db().mime,
+        })
+        .collect();
+
+    Ok(Json(files))
 }
 
 /// Get a file from a draft.

@@ -173,6 +173,11 @@ impl File {
         }
     }
 
+    /// Unpack database data.
+    pub fn into_db(self) -> db::File {
+        self.data
+    }
+
     /// Get an Actix responder streaming contents of this file.
     pub fn stream(&self, cfg: &Config) -> impl Responder {
         let hash = hash_to_hex(&self.data.hash);

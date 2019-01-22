@@ -374,6 +374,12 @@ pub fn add_comment(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
+#[derive(Debug, Serialize)]
+pub struct FileInfo {
+    name: String,
+    mime: String,
+}
+
 /// List files in a module.
 ///
 /// ## Method
@@ -389,14 +395,21 @@ pub fn list_files((
     actix_web::State<State>,
     Session,
     Path<Uuid>,
-)) -> Result<Json<Vec<String>>> {
+)) -> Result<Json<Vec<FileInfo>>> {
     let db = state.db.get()
         .map_err(|e| ErrorInternalServerError(e.to_string()))?;
     let module = Module::by_id(&*db, *id)?;
 
-    module.get_files(&*db)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))
-        .map(Json)
+    let files = module.get_files(&*db)
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?
+        .into_iter()
+        .map(|(name, file)| FileInfo {
+            name,
+            mime: file.into_db().mime,
+        })
+        .collect();
+
+    Ok(Json(files))
 }
 
 /// Get a file from a module.
