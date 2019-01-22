@@ -1,5 +1,7 @@
 use actix_web::{
     App,
+    Either,
+    Form,
     HttpRequest,
     HttpResponse,
     Json,
@@ -11,11 +13,11 @@ use serde::de::{Deserialize, Deserializer};
 
 use crate::models::{
     Invite,
-    user::{User, PublicData},
+    user::{User, PublicData, UserAuthenticateError},
 };
 use super::{
     State,
-    session::{Session, ElevatedSession},
+    session::{Session, Normal, ElevatedSession},
 };
 
 /// Configure routes.
@@ -130,6 +132,13 @@ pub fn modify_user(_req: &HttpRequest<State>) -> HttpResponse {
     unimplemented!()
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PasswordChangeRequest {
+    current: String,
+    new: String,
+    new2: String,
+}
+
 /// Change password.
 ///
 /// ## Method
@@ -137,8 +146,42 @@ pub fn modify_user(_req: &HttpRequest<State>) -> HttpResponse {
 /// ```
 /// PUT /users/me/password
 /// ```
-pub fn modify_password(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn modify_password((
+    req,
+    state,
+    session,
+    form,
+): (
+    HttpRequest<State>,
+    actix_web::State<State>,
+    Session,
+    Either<Form<PasswordChangeRequest>, Json<PasswordChangeRequest>>,
+)) -> Result<HttpResponse, Error> {
+    let db = state.db.get()
+        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let mut user = User::by_id(&*db, session.user)?;
+
+    let form = match form {
+        Either::A(form) => form.into_inner(),
+        Either::B(json) => json.into_inner(),
+    };
+
+    if !user.check_password(&form.current) {
+        return Err(ErrorInternalServerError(
+            UserAuthenticateError::BadPassword.to_string()));
+    }
+
+    if form.new != form.new2 {
+        return Err(ErrorInternalServerError(
+            UserAuthenticateError::BadPassword.to_string()));
+    }
+
+    user.change_password(&*db, &form.new)?;
+
+    // Changing password invalidates all sessions.
+    Session::<Normal>::create(&req, user.id, false);
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// ID of a user, can be either a number of a string `"me"`.

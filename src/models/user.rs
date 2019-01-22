@@ -272,3 +272,12 @@ pub enum ChangePasswordError {
 impl_from! { for ChangePasswordError ;
     DbError => |e| ChangePasswordError::Internal(e),
 }
+
+impl ResponseError for ChangePasswordError {
+    fn error_response(&self) -> HttpResponse {
+        match *self {
+            ChangePasswordError::Internal(_) =>
+                HttpResponse::InternalServerError().finish(),
+        }
+    }
+}
