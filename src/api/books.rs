@@ -74,13 +74,10 @@ type Result<T, E=Error> = std::result::Result<T, E>;
 /// ```
 /// GET /books
 /// ```
-pub fn list_books((
-    state,
-    _session,
-): (
-    actix_web::State<State>,
-    Session,
-)) -> Result<Json<Vec<BookData>>> {
+pub fn list_books(
+    state: actix_web::State<State>,
+    _session: Session,
+) -> Result<Json<Vec<BookData>>> {
     let db = state.db.get()?;
     let books = Book::all(&*db)?;
     Ok(Json(books.into_iter()
@@ -101,15 +98,11 @@ pub struct NewBook {
 /// POST /books
 /// Content-Type: application/json
 /// ```
-pub fn create_book((
-    state,
-    _session,
-    form,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Json<NewBook>,
-)) -> Result<Json<BookData>> {
+pub fn create_book(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    form: Json<NewBook>,
+) -> Result<Json<BookData>> {
     let db = state.db.get()?;
     let book = Book::create(&*db, &form.title)?;
     Ok(Json(book.get_public()))
@@ -135,15 +128,11 @@ from_multipart! {
 /// POST /books
 /// Content-Type: multipart/form-data
 /// ```
-pub fn create_book_from_zip((
-    state,
-    _session,
-    data,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Multipart<NewBookZip>,
-)) -> impl Future<Item = Json<BookData>, Error = Error> {
+pub fn create_book_from_zip(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    data: Multipart<NewBookZip>,
+) -> impl Future<Item = Json<BookData>, Error = Error> {
     let NewBookZip { title, file } = data.into_inner();
     state.importer.send(ImportBook { title, file })
         .from_err()
@@ -158,15 +147,11 @@ pub fn create_book_from_zip((
 /// ```
 /// GET /books/:id
 /// ```
-pub fn get_book((
-    state,
-    _session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<Json<BookData>> {
+pub fn get_book(
+    state: actix_web::State<State>,
+    _session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<BookData>> {
     let db = state.db.get()?;
     let book = Book::by_id(&*db, *id)?;
 
@@ -185,17 +170,12 @@ pub struct BookChange {
 /// ```
 /// PUT /books/:id
 /// ```
-pub fn update_book((
-    state,
-    _session,
-    id,
-    change,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Path<Uuid>,
-    Json<BookChange>,
-)) -> Result<Json<BookData>> {
+pub fn update_book(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    id: Path<Uuid>,
+    change: Json<BookChange>,
+) -> Result<Json<BookData>> {
     let db = state.db.get()?;
     let mut book = Book::by_id(&*db, *id)?;
 
@@ -204,17 +184,12 @@ pub fn update_book((
     Ok(Json(book.get_public()))
 }
 
-pub fn replace_book((
-    req,
-    state,
-    _session,
-    id,
-): (
-    HttpRequest<State>,
-    actix_web::State<State>,
-    ElevatedSession,
-    Path<Uuid>,
-)) -> impl Future<Item = Json<BookData>, Error = Error> {
+pub fn replace_book(
+    req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    id: Path<Uuid>,
+) -> impl Future<Item = Json<BookData>, Error = Error> {
     future::result(
         state.db.get()
             .map_err(Into::into)
@@ -250,15 +225,11 @@ pub fn replace_book((
 /// ```
 /// DELETE /books/:id
 /// ```
-pub fn delete_book((
-    state,
-    _session,
-    id,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Path<Uuid>,
-)) -> Result<HttpResponse> {
+pub fn delete_book(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    id: Path<Uuid>,
+) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let book = Book::by_id(&*db, *id)?;
 
@@ -274,15 +245,11 @@ pub fn delete_book((
 /// ```
 /// GET /books/:id/parts
 /// ```
-pub fn book_contents((
-    state,
-    _session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<Json<Tree>> {
+pub fn book_contents(
+    state: actix_web::State<State>,
+    _session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<Tree>> {
     let db = state.db.get()?;
     let book = BookPart::by_id(&*db, *id, 0)?;
 
@@ -327,17 +294,12 @@ pub struct NewPartData {
 /// ```
 /// POST /books/:id/parts
 /// ```
-pub fn create_part((
-    state,
-    _session,
-    book,
-    part,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Path<Uuid>,
-    Json<NewPartRoot>,
-)) -> Result<Json<NewPartData>> {
+pub fn create_part(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    book: Path<Uuid>,
+    part: Json<NewPartRoot>,
+) -> Result<Json<NewPartData>> {
     let db = state.db.get()?;
     let NewPartRoot { part, parent, index } = part.into_inner();
     let parent = BookPart::by_id(&*db, *book, parent)?;
@@ -417,15 +379,11 @@ impl_from! { for RealizeTemplateError ;
 /// ```
 /// GET /book/:id/parts/:number
 /// ```
-pub fn get_part((
-    state,
-    _session,
-    path,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<(Uuid, i32)>,
-)) -> Result<Json<PartData>> {
+pub fn get_part(
+    state: actix_web::State<State>,
+    _session: Session,
+    path: Path<(Uuid, i32)>,
+) -> Result<Json<PartData>> {
     let db = state.db.get()?;
     let (book, id) = path.into_inner();
     let part = BookPart::by_id(&*db, book, id)?;
@@ -442,15 +400,11 @@ pub fn get_part((
 /// ```
 /// DELETE /book/:id/parts/:number
 /// ```
-pub fn delete_part((
-    state,
-    _session,
-    path,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<(Uuid, i32)>,
-)) -> Result<HttpResponse> {
+pub fn delete_part(
+    state: actix_web::State<State>,
+    _session: Session,
+    path: Path<(Uuid, i32)>,
+) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let (book, id) = path.into_inner();
 
@@ -480,17 +434,12 @@ pub struct PartLocation {
 /// ```
 /// PUT /book/:id/parts/:number
 /// ```
-pub fn update_part((
-    state,
-    _session,
-    path,
-    update,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Path<(Uuid, i32)>,
-    Json<PartUpdate>,
-)) -> Result<HttpResponse> {
+pub fn update_part(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    path: Path<(Uuid, i32)>,
+    update: Json<PartUpdate>,
+) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let (book, id) = path.into_inner();
     let mut part = BookPart::by_id(&*db, book, id)?;

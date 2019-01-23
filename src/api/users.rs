@@ -52,13 +52,10 @@ struct InviteTemplate {
 /// ```
 /// GET /users
 /// ```
-pub fn list_users((
-    state,
-    _session,
-): (
-    actix_web::State<State>,
-    Session,
-)) -> Result<Json<Vec<PublicData>>, Error> {
+pub fn list_users(
+    state: actix_web::State<State>,
+    _session: Session,
+) -> Result<Json<Vec<PublicData>>, Error> {
     let db = state.db.get()?;
 
     User::all(&*db)
@@ -76,15 +73,11 @@ pub fn list_users((
 /// ```
 /// POST /users/invite
 /// ```
-pub fn create_invitation((
-    state,
-    _session,
-    params,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Json<InviteParams>,
-)) -> Result<HttpResponse, Error> {
+pub fn create_invitation(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    params: Json<InviteParams>,
+) -> Result<HttpResponse, Error> {
     let db = state.db.get()?;
     let invite = Invite::create(&*db, &params.email)?;
 
@@ -109,15 +102,11 @@ pub fn create_invitation((
 /// ```
 /// GET /users/:id
 /// ```
-pub fn get_user((
-    state,
-    session,
-    path,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<UserId>,
-)) -> Result<Json<PublicData>, Error> {
+pub fn get_user(
+    state: actix_web::State<State>,
+    session: Session,
+    path: Path<UserId>,
+) -> Result<Json<PublicData>, Error> {
     let user = path.get_user(&*state, &session)?;
 
     Ok(Json(user.get_public()))
@@ -148,17 +137,12 @@ pub struct PasswordChangeRequest {
 /// ```
 /// PUT /users/me/password
 /// ```
-pub fn modify_password((
-    req,
-    state,
-    session,
-    form,
-): (
-    HttpRequest<State>,
-    actix_web::State<State>,
-    Session,
-    Either<Form<PasswordChangeRequest>, Json<PasswordChangeRequest>>,
-)) -> Result<HttpResponse, Error> {
+pub fn modify_password(
+    req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    session: Session,
+    form: Either<Form<PasswordChangeRequest>, Json<PasswordChangeRequest>>,
+) -> Result<HttpResponse, Error> {
     let db = state.db.get()?;
     let mut user = User::by_id(&*db, session.user)?;
 

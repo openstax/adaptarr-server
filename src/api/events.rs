@@ -58,13 +58,10 @@ pub struct EventData {
 /// ```
 /// GET /notifications
 /// ```
-pub fn list_notifications((
-    state,
-    session,
-): (
-    actix_web::State<State>,
-    Session,
-)) -> Result<Json<Vec<EventData>>> {
+pub fn list_notifications(
+    state: actix_web::State<State>,
+    session: Session,
+) -> Result<Json<Vec<EventData>>> {
     let db = state.db.get()?;
     let events = Event::unread(&*db, session.user)?
         .into_iter()
@@ -95,17 +92,12 @@ pub struct EventUpdate {
 /// ```
 /// PUT /notifications/:id
 /// ```
-pub fn update_notifiation((
-    state,
-    session,
-    id,
-    update,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<i32>,
-    Json<EventUpdate>,
-)) -> Result<HttpResponse> {
+pub fn update_notifiation(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<i32>,
+    update: Json<EventUpdate>,
+) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let mut event = Event::by_id(&*db, *id, session.user)?;
 
@@ -124,13 +116,10 @@ pub fn update_notifiation((
 /// ```
 /// GET /events
 /// ```
-pub fn event_stream((
-    req,
-    _session,
-): (
-    HttpRequest<State>,
-    Session,
-)) -> Result<HttpResponse, actix_web::error::Error> {
+pub fn event_stream(
+    req: HttpRequest<State>,
+    _session: Session,
+) -> Result<HttpResponse, actix_web::error::Error> {
     ws::start(&req, Listener)
 }
 

@@ -90,13 +90,10 @@ struct LoginTemplate {
 /// ```
 /// GET /login
 /// ```
-pub fn login((
-    session,
-    query,
-): (
-    Option<Session>,
-    Query<LoginQuery>,
-)) -> RenderedTemplate {
+pub fn login(
+    session: Option<Session>,
+    query: Query<LoginQuery>,
+) -> RenderedTemplate {
     if let Some(_) = session {
         return Ok(HttpResponse::SeeOther()
             .header("Location", query.next.as_ref().map_or("/", String::as_str))
@@ -126,13 +123,10 @@ pub struct LoginCredentials {
 /// ```
 /// POST /login
 /// ```
-pub fn do_login((
-    req,
-    params,
-): (
-    HttpRequest<State>,
-    Form<LoginCredentials>,
-)) -> RenderedTemplate {
+pub fn do_login(
+    req: HttpRequest<State>,
+    params: Form<LoginCredentials>,
+) -> RenderedTemplate {
     let db = &*req.state().db.get()?;
 
     let user = match User::authenticate(db, &params.email, &params.password) {
@@ -169,15 +163,11 @@ pub fn do_login((
 /// ```
 /// GET /elevate
 /// ```
-pub fn elevate((
-    state,
-    session,
-    query,
-): (
-    actix_web::State<State>,
-    Session,
-    Query<LoginQuery>,
-)) -> RenderedTemplate {
+pub fn elevate(
+    state: actix_web::State<State>,
+    session: Session,
+    query: Query<LoginQuery>,
+) -> RenderedTemplate {
     let db = state.db.get()?;
     let user = User::by_id(&*db, session.user)?;
     let LoginQuery { next, action } = query.into_inner();
@@ -209,17 +199,12 @@ pub struct ElevateCredentials {
 /// ```
 /// POST /elevate
 /// ```
-pub fn do_elevate((
-    req,
-    state,
-    session,
-    form,
-): (
-    HttpRequest<State>,
-    actix_web::State<State>,
-    Session,
-    Form<ElevateCredentials>,
-)) -> RenderedTemplate {
+pub fn do_elevate(
+    req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    session: Session,
+    form: Form<ElevateCredentials>,
+) -> RenderedTemplate {
     let db = state.db.get()?;
     let user = User::by_id(&*db, session.user)?;
     let ElevateCredentials { next, action, password } = form.into_inner();
@@ -264,17 +249,12 @@ enum ElevationResult {
 /// POST /elevate
 /// Accept: application/json
 /// ```
-pub fn do_elevate_json((
-    req,
-    state,
-    session,
-    form,
-): (
-    HttpRequest<State>,
-    actix_web::State<State>,
-    Session,
-    Form<ElevateCredentials>,
-)) -> RenderedTemplate {
+pub fn do_elevate_json(
+    req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    session: Session,
+    form: Form<ElevateCredentials>,
+) -> RenderedTemplate {
     let db = state.db.get()?;
     let user = User::by_id(&*db, session.user)?;
     let ElevateCredentials { password, .. } = form.into_inner();
@@ -355,16 +335,11 @@ struct ResetMail<'s> {
 /// ```
 /// POST /reset
 /// ```
-pub fn do_reset((
-    req,
-    state,
-    form,
-): (
-    HttpRequest<State>,
-    actix_web::State<State>,
-    Form<ResetForm>,
-))
--> RenderedTemplate {
+pub fn do_reset(
+    req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    form: Form<ResetForm>,
+) -> RenderedTemplate {
     let db = state.db.get()?;
 
     match form.into_inner() {
@@ -425,13 +400,10 @@ struct RegisterTemplate<'s> {
 /// ```
 /// GET /register
 /// ```
-pub fn register((
-    state,
-    query,
-): (
-    actix_web::State<State>,
-    Query<RegisterQuery>,
-)) -> RenderedTemplate {
+pub fn register(
+    state: actix_web::State<State>,
+    query: Query<RegisterQuery>,
+) -> RenderedTemplate {
     let db = state.db.get()?;
     let invite = Invite::from_code(&*db, &state.config, &query.invite)?;
 
@@ -458,15 +430,11 @@ pub struct RegisterForm {
 /// ```
 /// POST /register
 /// ```
-pub fn do_register((
-    req,
-    state,
-    form,
-): (
-    HttpRequest<State>,
-    actix_web::State<State>,
-    Form<RegisterForm>,
-)) -> RenderedTemplate {
+pub fn do_register(
+    req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    form: Form<RegisterForm>,
+) -> RenderedTemplate {
     let db = state.db.get()?;
     let invite = Invite::from_code(&*db, &state.config, &form.invite)?;
 

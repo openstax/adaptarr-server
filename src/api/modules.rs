@@ -78,13 +78,10 @@ pub struct NewModule {
 /// ```
 /// Get /modules
 /// ```
-pub fn list_modules((
-    state,
-    _session,
-): (
-    actix_web::State<State>,
-    Session,
-)) -> Result<Json<Vec<ModuleData>>> {
+pub fn list_modules(
+    state: actix_web::State<State>,
+    _session: Session,
+) -> Result<Json<Vec<ModuleData>>> {
     let db = state.db.get()?;
     let modules = Module::all(&*db)?;
     Ok(Json(modules.into_iter()
@@ -99,15 +96,11 @@ pub fn list_modules((
 /// ```
 /// GET /modules/assigned/to/:user
 /// ```
-pub fn list_assigned((
-    state,
-    session,
-    user,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<UserId>,
-)) -> Result<Json<Vec<ModuleData>>, Error> {
+pub fn list_assigned(
+    state: actix_web::State<State>,
+    session: Session,
+    user: Path<UserId>,
+) -> Result<Json<Vec<ModuleData>>, Error> {
     let db = state.db.get()?;
     let user = user.get_user(&*state, &session)?;
     let modules = Module::assigned_to(&*db, user.id)?;
@@ -124,15 +117,11 @@ pub fn list_assigned((
 /// POST /modules
 /// Content-Type: application/json
 /// ```
-pub fn create_module((
-    state,
-    _session,
-    data,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Json<NewModule>,
-)) -> Result<Json<ModuleData>> {
+pub fn create_module(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    data: Json<NewModule>,
+) -> Result<Json<ModuleData>> {
     let db = state.db.get()?;
 
     let content = format!(
@@ -174,15 +163,11 @@ from_multipart! {
 /// POST /modules
 /// Content-Type: multipart/form-data
 /// ```
-pub fn create_module_from_zip((
-    state,
-    _session,
-    data,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Multipart<NewModuleZip>
-)) -> impl Future<Item = Json<ModuleData>, Error = Error> {
+pub fn create_module_from_zip(
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    data: Multipart<NewModuleZip>,
+) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     let NewModuleZip { title, file } = data.into_inner();
     state.importer.send(ImportModule { title, file })
         .from_err()
@@ -197,15 +182,11 @@ pub fn create_module_from_zip((
 /// ```
 /// GET /modules/:id
 /// ```
-pub fn get_module((
-    state,
-    _session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<Json<ModuleData>> {
+pub fn get_module(
+    state: actix_web::State<State>,
+    _session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<ModuleData>> {
     let db = state.db.get()?;
     let module = Module::by_id(&*db, id.into_inner())?;
 
@@ -219,15 +200,11 @@ pub fn get_module((
 /// ```
 /// POST /modules/:id
 /// ```
-pub fn crete_draft((
-    state,
-    session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<Json<DraftData>> {
+pub fn crete_draft(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
     let module = Module::by_id(&*db, id.into_inner())?;
     let draft = module.create_draft(&*db, session.user)?;
@@ -249,17 +226,12 @@ pub struct ModuleUpdate {
 /// PUT /modules/:id
 /// Content-Type: application/json
 /// ```
-pub fn update_module((
-    state,
-    session,
-    id,
-    update,
-): (
-    actix_web::State<State>,
-    ElevatedSession,
-    Path<Uuid>,
-    Json<ModuleUpdate>,
-)) -> Result<HttpResponse> {
+pub fn update_module(
+    state: actix_web::State<State>,
+    session: ElevatedSession,
+    id: Path<Uuid>,
+    update: Json<ModuleUpdate>,
+) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let module = Module::by_id(&*db, id.into_inner())?;
 
@@ -291,17 +263,12 @@ pub fn update_module((
 /// ```
 /// PUT /modules/:id
 /// ```
-pub fn replace_module((
-    req,
-    state,
-    _session,
-    id,
-): (
-    HttpRequest<State>,
-    actix_web::State<State>,
-    ElevatedSession,
-    Path<Uuid>,
-)) -> impl Future<Item = Json<ModuleData>, Error = Error> {
+pub fn replace_module(
+    req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    _session: ElevatedSession,
+    id: Path<Uuid>,
+) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     future::result(
         state.db.get()
             .map_err(Into::into)
@@ -376,15 +343,11 @@ pub struct FileInfo {
 /// ```
 /// GET /modules/:id/files
 /// ```
-pub fn list_files((
-    state,
-    _session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<Json<Vec<FileInfo>>> {
+pub fn list_files(
+    state: actix_web::State<State>,
+    _session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<Vec<FileInfo>>> {
     let db = state.db.get()?;
     let module = Module::by_id(&*db, *id)?;
 
@@ -406,15 +369,11 @@ pub fn list_files((
 /// ```
 /// GET /modules/:id/files/:name
 /// ```
-pub fn get_file((
-    state,
-    _session,
-    path,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<(Uuid, String)>,
-)) -> Result<impl Responder> {
+pub fn get_file(
+    state: actix_web::State<State>,
+    _session: Session,
+    path: Path<(Uuid, String)>,
+) -> Result<impl Responder> {
     let (id, name) = path.into_inner();
     let db = state.db.get()?;
     let module = Module::by_id(&*db, id)?;

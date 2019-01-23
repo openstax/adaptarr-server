@@ -53,13 +53,10 @@ type Result<T, E=Error> = std::result::Result<T, E>;
 /// ```
 /// GET /drafts
 /// ```
-pub fn list_drafts((
-    state,
-    session,
-): (
-    actix_web::State<State>,
-    Session,
-)) -> Result<Json<Vec<DraftData>>> {
+pub fn list_drafts(
+    state: actix_web::State<State>,
+    session: Session,
+) -> Result<Json<Vec<DraftData>>> {
     let db = state.db.get()?;
     let drafts = Draft::all_of(&*db, session.user)?;
     Ok(Json(drafts.into_iter().map(|d| d.get_public()).collect()))
@@ -72,15 +69,11 @@ pub fn list_drafts((
 /// ```
 /// GET /drafts/:id
 /// ```
-pub fn get_draft((
-    state,
-    session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<Json<DraftData>> {
+pub fn get_draft(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, *id, session.user)?;
 
@@ -94,15 +87,11 @@ pub fn get_draft((
 /// ```
 /// DELTE /drafts/:id
 /// ```
-pub fn delete_draft((
-    state,
-    session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<HttpResponse> {
+pub fn delete_draft(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<Uuid>,
+) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, *id, session.user)?;
 
@@ -118,15 +107,11 @@ pub fn delete_draft((
 /// ```
 /// POST /drafts/:id/save
 /// ```
-pub fn save_draft((
-    state,
-    session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<HttpResponse> {
+pub fn save_draft(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<Uuid>,
+) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, *id, session.user)?;
 
@@ -170,15 +155,11 @@ pub struct FileInfo {
 /// ```
 /// GET /drafts/:id/files
 /// ```
-pub fn list_files((
-    state,
-    session,
-    id,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<Uuid>,
-)) -> Result<Json<Vec<FileInfo>>> {
+pub fn list_files(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<Vec<FileInfo>>> {
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, *id, session.user)?;
 
@@ -200,15 +181,11 @@ pub fn list_files((
 /// ```
 /// GET /drafts/:id/files/:name
 /// ```
-pub fn get_file((
-    state,
-    session,
-    path,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<(Uuid, String)>,
-)) -> Result<impl Responder> {
+pub fn get_file(
+    state: actix_web::State<State>,
+    session: Session,
+    path: Path<(Uuid, String)>,
+) -> Result<impl Responder> {
     let (id, name) = path.into_inner();
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, id, session.user)?;
@@ -224,17 +201,12 @@ pub fn get_file((
 /// ```
 /// PUT /drafts/:id/files/:name
 /// ```
-pub fn update_file((
-    req,
-    state,
-    session,
-    path,
-): (
-    HttpRequest<State>,
-    actix_web::State<State>,
-    Session,
-    Path<(Uuid, String)>,
-)) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+pub fn update_file(
+    req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    session: Session,
+    path: Path<(Uuid, String)>,
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let (id, name) = path.into_inner();
     let storage = state.config.storage.path.clone();
 
@@ -267,15 +239,11 @@ pub fn update_file((
 /// ```
 /// DELETE /drafts/:id/files/:name
 /// ```
-pub fn delete_file((
-    state,
-    session,
-    path,
-): (
-    actix_web::State<State>,
-    Session,
-    Path<(Uuid, String)>,
-)) -> Result<HttpResponse> {
+pub fn delete_file(
+    state: actix_web::State<State>,
+    session: Session,
+    path: Path<(Uuid, String)>,
+) -> Result<HttpResponse> {
     let (id, name) = path.into_inner();
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, id, session.user)?;
