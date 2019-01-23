@@ -14,9 +14,14 @@ use super::{
     mail::Mailer,
 };
 
+pub use self::error::{ApiError, Error};
+
+pub(self) use self::error::{RouteExt, RouterExt};
+
 mod books;
 mod conversations;
 mod drafts;
+mod error;
 mod events;
 mod modules;
 mod pages;
