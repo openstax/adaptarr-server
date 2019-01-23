@@ -1,12 +1,10 @@
 use actix_web::{
     App,
-    AsyncResponder,
     HttpMessage,
     HttpRequest,
     HttpResponse,
     Json,
     Path,
-    error::ErrorInternalServerError,
     pred,
 };
 use diesel::result::Error as DbError;
@@ -32,6 +30,8 @@ use crate::{
     import::{ImportBook, ReplaceBook}
 };
 use super::{
+    Error,
+    RouteExt,
     State,
     session::{ElevatedSession, Session},
 };
@@ -40,32 +40,32 @@ use super::{
 pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/books", |r| {
-            r.get().with(list_books);
+            r.get().api_with(list_books);
             r.post()
                 .filter(pred::Header("Content-Type", "application/json"))
-                .with(create_book);
-            r.post().with_async(create_book_from_zip);
+                .api_with(create_book);
+            r.post().api_with_async(create_book_from_zip);
         })
         .resource("/books/{id}", |r| {
-            r.get().with(get_book);
+            r.get().api_with(get_book);
             r.put()
                 .filter(pred::Header("Content-Type", "application/json"))
-                .with(update_book);
-            r.put().with_async(replace_book);
-            r.delete().with(delete_book);
+                .api_with(update_book);
+            r.put().api_with_async(replace_book);
+            r.delete().api_with(delete_book);
         })
         .resource("/books/{id}/parts", |r| {
-            r.get().with(book_contents);
-            r.post().with(create_part);
+            r.get().api_with(book_contents);
+            r.post().api_with(create_part);
         })
         .resource("/books/{id}/parts/{number}", |r| {
-            r.get().with(get_part);
-            r.delete().with(delete_part);
-            r.put().with(update_part);
+            r.get().api_with(get_part);
+            r.delete().api_with(delete_part);
+            r.put().api_with(update_part);
         })
 }
 
-type Result<T> = std::result::Result<T, actix_web::Error>;
+type Result<T, E=Error> = std::result::Result<T, E>;
 
 /// List all books.
 ///
@@ -81,10 +81,8 @@ pub fn list_books((
     actix_web::State<State>,
     Session,
 )) -> Result<Json<Vec<BookData>>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-    let books = Book::all(&*db)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
+    let books = Book::all(&*db)?;
     Ok(Json(books.into_iter()
         .map(|book| book.get_public())
         .collect()))
@@ -112,10 +110,8 @@ pub fn create_book((
     ElevatedSession,
     Json<NewBook>,
 )) -> Result<Json<BookData>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-    let book = Book::create(&*db, &form.title)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
+    let book = Book::create(&*db, &form.title)?;
     Ok(Json(book.get_public()))
 }
 
@@ -147,13 +143,12 @@ pub fn create_book_from_zip((
     actix_web::State<State>,
     ElevatedSession,
     Multipart<NewBookZip>,
-)) -> Box<dyn Future<Item = Json<BookData>, Error = actix_web::error::Error>> {
+)) -> impl Future<Item = Json<BookData>, Error = Error> {
     let NewBookZip { title, file } = data.into_inner();
     state.importer.send(ImportBook { title, file })
         .from_err()
         .and_then(|r| future::result(r).from_err())
         .map(|book| Json(book.get_public()))
-        .responder()
 }
 
 /// Get a book by ID.
@@ -172,8 +167,7 @@ pub fn get_book((
     Session,
     Path<Uuid>,
 )) -> Result<Json<BookData>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let book = Book::by_id(&*db, *id)?;
 
     Ok(Json(book.get_public()))
@@ -202,12 +196,10 @@ pub fn update_book((
     Path<Uuid>,
     Json<BookChange>,
 )) -> Result<Json<BookData>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let mut book = Book::by_id(&*db, *id)?;
 
-    book.set_title(&*db, change.into_inner().title)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    book.set_title(&*db, change.into_inner().title)?;
 
     Ok(Json(book.get_public()))
 }
@@ -222,15 +214,15 @@ pub fn replace_book((
     actix_web::State<State>,
     ElevatedSession,
     Path<Uuid>,
-)) -> Box<dyn Future<Item = Json<BookData>, Error = actix_web::Error>> {
+)) -> impl Future<Item = Json<BookData>, Error = Error> {
     future::result(
         state.db.get()
-            .map_err(|e| ErrorInternalServerError(e.to_string()))
+            .map_err(Into::into)
             .and_then(|db| Book::by_id(&*db, *id)
-                .map_err(|e| ErrorInternalServerError(e.to_string()))))
+                .map_err(Into::into)))
         .and_then(|book| future::result(
             NamedTempFile::new()
-                .map_err(|e| ErrorInternalServerError(e.to_string()))
+                .map_err(Into::into)
                 .map(|file| (book, file))))
         .and_then(move |(book, file)| {
             req.payload()
@@ -249,7 +241,6 @@ pub fn replace_book((
         })
         .and_then(|r| future::result(r).from_err())
         .map(|book| Json(book.get_public()))
-        .responder()
 }
 
 /// Delete a book by ID.
@@ -268,11 +259,10 @@ pub fn delete_book((
     ElevatedSession,
     Path<Uuid>,
 )) -> Result<HttpResponse> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let book = Book::by_id(&*db, *id)?;
 
-    book.delete(&*db).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    book.delete(&*db)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -293,12 +283,11 @@ pub fn book_contents((
     Session,
     Path<Uuid>,
 )) -> Result<Json<Tree>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let book = BookPart::by_id(&*db, *id, 0)?;
 
     book.get_tree(&*db)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))
+        .map_err(Into::into)
         .map(Json)
 }
 
@@ -349,8 +338,7 @@ pub fn create_part((
     Path<Uuid>,
     Json<NewPartRoot>,
 )) -> Result<Json<NewPartData>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let NewPartRoot { part, parent, index } = part.into_inner();
     let parent = BookPart::by_id(&*db, *book, parent)?;
 
@@ -359,7 +347,7 @@ pub fn create_part((
     use diesel::Connection;
     let data = db.transaction(|| {
         create_part_inner(&*db, &parent, index, part)
-    }).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    })?;
 
     Ok(Json(data))
 }
@@ -404,14 +392,16 @@ fn create_part_inner(
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 enum RealizeTemplateError {
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     #[fail(display = "Module not found: {}", _0)]
+    #[api(code = "module:not-found", status = "NOT_FOUND")]
     ModuleNotFound(#[cause] FindModuleError),
     #[fail(display = "Part could not be created: {}", _0)]
-    PartCreation(CreatePartError),
+    PartCreation(#[cause] CreatePartError),
 }
 
 impl_from! { for RealizeTemplateError ;
@@ -436,13 +426,12 @@ pub fn get_part((
     Session,
     Path<(Uuid, i32)>,
 )) -> Result<Json<PartData>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let (book, id) = path.into_inner();
     let part = BookPart::by_id(&*db, book, id)?;
 
     part.get_public(&*db)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))
+        .map_err(Into::into)
         .map(Json)
 }
 
@@ -462,13 +451,11 @@ pub fn delete_part((
     Session,
     Path<(Uuid, i32)>,
 )) -> Result<HttpResponse> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let (book, id) = path.into_inner();
 
     BookPart::by_id(&*db, book, id)?
-        .delete(&*db)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+        .delete(&*db)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -504,8 +491,7 @@ pub fn update_part((
     Path<(Uuid, i32)>,
     Json<PartUpdate>,
 )) -> Result<HttpResponse> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let (book, id) = path.into_inner();
     let mut part = BookPart::by_id(&*db, book, id)?;
     let parent = update.location
@@ -527,7 +513,7 @@ pub fn update_part((
         }
 
         Ok(())
-    }).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    })?;
 
     Ok(HttpResponse::Ok().finish())
 }

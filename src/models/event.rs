@@ -1,4 +1,3 @@
-use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     prelude::*,
     result::Error as DbError,
@@ -63,13 +62,15 @@ impl std::ops::Deref for Event {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum FindEventError {
     /// Database error
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// No event matching given criteria found
     #[fail(display = "Event not found")]
+    #[api(code = "event:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
@@ -78,15 +79,4 @@ impl_from! { for FindEventError ;
         DbError::NotFound => FindEventError::NotFound,
         e => FindEventError::Database(e),
     },
-}
-
-impl ResponseError for FindEventError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            FindEventError::Database(_) => HttpResponse::InternalServerError()
-                .finish(),
-            FindEventError::NotFound => HttpResponse::NotFound()
-                .finish(),
-        }
-    }
 }

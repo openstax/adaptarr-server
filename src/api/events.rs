@@ -15,7 +15,6 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
-    error::ErrorInternalServerError,
     http::Method,
     ws::{self, WebsocketContext},
 };
@@ -27,19 +26,21 @@ use crate::{
     models::Event,
 };
 use super::{
+    Error,
     State,
+    RouterExt,
     session::{Session, Normal},
 };
 
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
     app
-        .route("/notifications", Method::GET, list_notifications)
-        .route("/notifications/{id}", Method::PUT, update_notifiation)
+        .api_route("/notifications", Method::GET, list_notifications)
+        .api_route("/notifications/{id}", Method::PUT, update_notifiation)
         .route("/events", Method::GET, event_stream)
 }
 
-type Result<T> = std::result::Result<T, actix_web::Error>;
+type Result<T, E=Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Serialize)]
 pub struct EventData {
@@ -64,10 +65,8 @@ pub fn list_notifications((
     actix_web::State<State>,
     Session,
 )) -> Result<Json<Vec<EventData>>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-    let events = Event::unread(&*db, session.user)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?
+    let db = state.db.get()?;
+    let events = Event::unread(&*db, session.user)?
         .into_iter()
         .map(|event| {
             let data = event.load();
@@ -107,12 +106,10 @@ pub fn update_notifiation((
     Path<i32>,
     Json<EventUpdate>,
 )) -> Result<HttpResponse> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let mut event = Event::by_id(&*db, *id, session.user)?;
 
-    event.set_unread(&*db, update.unread)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    event.set_unread(&*db, update.unread)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -133,7 +130,7 @@ pub fn event_stream((
 ): (
     HttpRequest<State>,
     Session,
-)) -> Result<HttpResponse> {
+)) -> Result<HttpResponse, actix_web::error::Error> {
     ws::start(&req, Listener)
 }
 

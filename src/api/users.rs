@@ -6,7 +6,6 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
-    error::{Error, ErrorInternalServerError},
     http::Method,
 };
 use serde::de::{Deserialize, Deserializer};
@@ -16,6 +15,9 @@ use crate::models::{
     user::{User, PublicData, UserAuthenticateError},
 };
 use super::{
+    Error,
+    RouteExt,
+    RouterExt,
     State,
     session::{Session, Normal, ElevatedSession},
 };
@@ -23,14 +25,14 @@ use super::{
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
     app
-        .route("/users", Method::GET, list_users)
+        .api_route("/users", Method::GET, list_users)
         .scope("/users", |scope| scope
-        .route("/invite", Method::POST, create_invitation)
+        .api_route("/invite", Method::POST, create_invitation)
         .resource("/{id}", |r| {
-            r.get().with(get_user);
+            r.get().api_with(get_user);
             r.put().f(modify_user);
         })
-        .route("/me/password", Method::PUT, modify_password))
+        .api_route("/me/password", Method::PUT, modify_password))
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,12 +59,12 @@ pub fn list_users((
     actix_web::State<State>,
     Session,
 )) -> Result<Json<Vec<PublicData>>, Error> {
-    let db = state.db.get().map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
 
     User::all(&*db)
         .map(|v| v.into_iter().map(|u| u.get_public()).collect())
         .map(Json)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))
+        .map_err(Into::into)
 }
 
 /// Create an invitation.
@@ -83,7 +85,7 @@ pub fn create_invitation((
     ElevatedSession,
     Json<InviteParams>,
 )) -> Result<HttpResponse, Error> {
-    let db = state.db.get().map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let invite = Invite::create(&*db, &params.email)?;
 
     let code = invite.get_code(&state.config);
@@ -157,8 +159,7 @@ pub fn modify_password((
     Session,
     Either<Form<PasswordChangeRequest>, Json<PasswordChangeRequest>>,
 )) -> Result<HttpResponse, Error> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let mut user = User::by_id(&*db, session.user)?;
 
     let form = match form {
@@ -167,13 +168,11 @@ pub fn modify_password((
     };
 
     if !user.check_password(&form.current) {
-        return Err(ErrorInternalServerError(
-            UserAuthenticateError::BadPassword.to_string()));
+        return Err(UserAuthenticateError::BadPassword.into());
     }
 
     if form.new != form.new2 {
-        return Err(ErrorInternalServerError(
-            UserAuthenticateError::BadPassword.to_string()));
+        return Err(UserAuthenticateError::BadPassword.into());
     }
 
     user.change_password(&*db, &form.new)?;
@@ -203,9 +202,8 @@ impl UserId {
         }
     }
 
-    pub fn get_user(&self, state: &State, session: &Session) -> Result<User, Error> {
-        let db = state.db.get()
-            .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    pub fn get_user(&self, state: &State, session: &Session) -> Result<User, super::Error> {
+        let db = state.db.get()?;
         User::by_id(&*db, self.as_id(&session))
             .map_err(Into::into)
     }

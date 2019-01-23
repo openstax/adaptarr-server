@@ -1,4 +1,3 @@
-use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -194,13 +193,15 @@ impl std::ops::Deref for Module {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum FindModuleError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// No module found matching given criteria.
     #[fail(display = "No such module")]
+    #[api(code = "module:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
@@ -208,27 +209,19 @@ impl_from! { for FindModuleError ;
     DbError => |e| FindModuleError::Database(e),
 }
 
-impl ResponseError for FindModuleError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            FindModuleError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-            FindModuleError::NotFound =>
-                HttpResponse::NotFound().finish(),
-        }
-    }
-}
-
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum CreateDraftError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// Tried to create draft for an user other than the one assigned.
     #[fail(display = "Only assigned user can create a draft")]
+    #[api(code = "draft:create:not-assigned", status = "BAD_REQUEST")]
     UserNotAssigned,
     /// User already has a draft of this module.
     #[fail(display = "User already has a draft")]
+    #[api(code = "draft:create:exists", status = "BAD_REQUEST")]
     Exists,
 }
 
@@ -240,38 +233,18 @@ impl_from! { for CreateDraftError ;
     }
 }
 
-impl ResponseError for CreateDraftError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            CreateDraftError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-            CreateDraftError::UserNotAssigned | CreateDraftError::Exists =>
-                HttpResponse::BadRequest().finish(),
-        }
-    }
-}
-
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum ReplaceModuleError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// Module has drafts.
     #[fail(display = "Module with drafts cannot be replaced")]
+    #[api(code = "module:replace:has-draft", status = "BAD_REQUEST")]
     HasDrafts,
 }
 
 impl_from! { for ReplaceModuleError ;
     DbError => |e| ReplaceModuleError::Database(e),
-}
-
-impl ResponseError for ReplaceModuleError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            ReplaceModuleError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-            ReplaceModuleError::HasDrafts =>
-                HttpResponse::BadRequest().body("module has drafts"),
-        }
-    }
 }

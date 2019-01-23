@@ -1,4 +1,3 @@
-use actix_web::{HttpResponse, ResponseError};
 use chrono::{Duration, Utc};
 use diesel::{
     prelude::*,
@@ -71,23 +70,28 @@ impl PasswordResetToken {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 #[fail(display = "Cannot create reset token: {}", _0)]
+#[api(internal)]
 pub struct CreateTokenError(#[cause] DbError);
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum FromCodeError {
-    /// Invitation has expired or was already used.
-    #[fail(display = "Invitation expired")]
+    /// Reset token has expired or was already used.
+    #[fail(display = "Reset token expired")]
+    #[api(code = "password:reset:expired", status = "BAD_REQUEST")]
     Expired,
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// Code was not valid base64.
     #[fail(display = "Invalid base64: {}", _0)]
+    #[api(code = "password:reset:invalid", status = "BAD_REQUEST")]
     Decoding(#[cause] base64::DecodeError),
     /// Code could not be unsealed.
     #[fail(display = "Unsealing error: {}", _0)]
+    #[api(code = "password:reset:invalid", status = "BAD_REQUEST")]
     Unsealing(#[cause] utils::UnsealingError),
 }
 
@@ -97,23 +101,11 @@ impl_from! { for FromCodeError ;
     utils::UnsealingError => |e| FromCodeError::Unsealing(e),
 }
 
-impl ResponseError for FromCodeError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            FromCodeError::Expired =>
-                HttpResponse::BadRequest().body("invitation expired"),
-            FromCodeError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-            FromCodeError::Decoding(_) | FromCodeError::Unsealing(_) =>
-                HttpResponse::BadRequest().body("invalid invitation code"),
-        }
-    }
-}
-
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum ResetPasswordError {
     /// Internal database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Internal(#[cause] DbError),
 }
 

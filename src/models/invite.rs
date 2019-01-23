@@ -1,4 +1,3 @@
-use actix_web::{HttpResponse, ResponseError};
 use chrono::{Duration, Utc};
 use diesel::{
     Connection as _Connection,
@@ -91,13 +90,15 @@ impl std::ops::Deref for Invite {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum CreateInviteError {
     /// There is already an account associated with the email address given.
     #[fail(display = "User exists")]
+    #[api(code = "user:new:exists", status = "BAD_REQUEST")]
     UserExists,
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
 }
 
@@ -105,30 +106,23 @@ impl_from! { for CreateInviteError ;
     DbError => |e| CreateInviteError::Database(e),
 }
 
-impl ResponseError for CreateInviteError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            CreateInviteError::UserExists =>
-                HttpResponse::BadRequest().body("user exists"),
-            CreateInviteError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-        }
-    }
-}
-
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum FromCodeError {
     /// Invitation has expired or was already used.
     #[fail(display = "Invitation expired")]
+    #[api(code = "invitation:expired", status = "BAD_REQUEST")]
     Expired,
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// Code was not valid base64.
     #[fail(display = "Invalid base64: {}", _0)]
+    #[api(code = "invitation:invalid", status = "BAD_REQUEST")]
     Decoding(#[cause] base64::DecodeError),
     /// Code could not be unsealed.
     #[fail(display = "Unsealing error: {}", _0)]
+    #[api(code = "invitation:invalid", status = "BAD_REQUEST")]
     Unsealing(#[cause] utils::UnsealingError),
 }
 
@@ -136,17 +130,4 @@ impl_from! { for FromCodeError ;
     DbError => |e| FromCodeError::Database(e),
     base64::DecodeError => |e| FromCodeError::Decoding(e),
     utils::UnsealingError => |e| FromCodeError::Unsealing(e),
-}
-
-impl ResponseError for FromCodeError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            FromCodeError::Expired =>
-                HttpResponse::BadRequest().body("invitation expired"),
-            FromCodeError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-            FromCodeError::Decoding(_) | FromCodeError::Unsealing(_) =>
-                HttpResponse::BadRequest().body("invalid invitation code"),
-        }
-    }
 }

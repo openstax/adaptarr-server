@@ -1,4 +1,3 @@
-use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     prelude::*,
     result::Error as DbError,
@@ -104,27 +103,18 @@ impl std::ops::Deref for Book {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum FindBookError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
-    /// No module found matching given criteria.
-    #[fail(display = "No such module")]
+    /// No book found matching given criteria.
+    #[fail(display = "No such book")]
+    #[api(code = "book:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
 impl_from! { for FindBookError ;
     DbError => |e| FindBookError::Database(e),
-}
-
-impl ResponseError for FindBookError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            FindBookError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-            FindBookError::NotFound =>
-                HttpResponse::NotFound().finish(),
-        }
-    }
 }

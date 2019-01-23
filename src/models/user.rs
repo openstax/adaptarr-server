@@ -1,4 +1,3 @@
-use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -6,10 +5,12 @@ use diesel::{
 };
 use rand::RngCore;
 
-use crate::db::{
-    Connection,
-    models as db,
-    schema::{invites, users, password_reset_tokens, sessions},
+use crate::{
+    db::{
+        Connection,
+        models as db,
+        schema::{invites, users, password_reset_tokens, sessions},
+    },
 };
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
@@ -189,13 +190,15 @@ impl std::ops::Deref for User {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum FindUserError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Internal(#[cause] DbError),
     /// No user found for given email address.
     #[fail(display = "No such user")]
+    #[api(code = "user:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
@@ -203,24 +206,15 @@ impl_from! { for FindUserError ;
     DbError => |e| FindUserError::Internal(e),
 }
 
-impl ResponseError for FindUserError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            FindUserError::Internal(_) =>
-                HttpResponse::InternalServerError().finish(),
-            FindUserError::NotFound =>
-                HttpResponse::NotFound().finish(),
-        }
-    }
-}
-
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum CreateUserError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Internal(#[cause] DbError),
     /// Duplicate user.
     #[fail(display = "Duplicate user")]
+    #[api(code = "user:new:exists", status = "BAD_REQUEST")]
     Duplicate,
 }
 
@@ -232,16 +226,19 @@ impl_from! { for CreateUserError ;
     },
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum UserAuthenticateError {
     /// Authentication failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Internal(#[cause] DbError),
     /// No user found for given email address.
     #[fail(display = "No such user")]
+    #[api(code = "user:not-found", status = "NOT_FOUND")]
     NotFound,
     /// Provided password was not valid for the user.
     #[fail(display = "Bad password")]
+    #[api(code = "user:authenticate:bad-password", status = "BAD_REQUEST")]
     BadPassword,
 }
 
@@ -262,22 +259,14 @@ impl_from! { for UserAuthenticateError ;
     },
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum ChangePasswordError {
     /// Authentication failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Internal(#[cause] DbError),
 }
 
 impl_from! { for ChangePasswordError ;
     DbError => |e| ChangePasswordError::Internal(e),
-}
-
-impl ResponseError for ChangePasswordError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            ChangePasswordError::Internal(_) =>
-                HttpResponse::InternalServerError().finish(),
-        }
-    }
 }

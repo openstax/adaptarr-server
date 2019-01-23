@@ -1,13 +1,11 @@
 use actix_web::{
     App,
-    AsyncResponder,
     HttpMessage,
     HttpRequest,
     HttpResponse,
     Json,
     Path,
     Responder,
-    error::ErrorInternalServerError,
     http::Method,
     pred,
 };
@@ -29,6 +27,9 @@ use crate::{
     multipart::Multipart,
 };
 use super::{
+    Error,
+    RouteExt,
+    RouterExt,
     State,
     session::{Session, ElevatedSession},
     users::UserId,
@@ -38,32 +39,32 @@ use super::{
 pub fn routes(app: App<State>) -> App<State> {
     app
         .resource("/modules", |r| {
-            r.get().with(list_modules);
+            r.get().api_with(list_modules);
             r.post()
                 .filter(pred::Header("Content-Type", "application/json"))
-                .with(create_module);
+                .api_with(create_module);
             r.post()
-                .with_async(create_module_from_zip);
+                .api_with_async(create_module_from_zip);
         })
-        .route("/modules/assigned/to/{user}", Method::GET, list_assigned)
+        .api_route("/modules/assigned/to/{user}", Method::GET, list_assigned)
         .resource("/modules/{id}", |r| {
-            r.get().with(get_module);
-            r.post().with(crete_draft);
+            r.get().api_with(get_module);
+            r.post().api_with(crete_draft);
             r.put()
                 .filter(pred::Header("Content-Type", "application/json"))
-                .with(update_module);
-            r.put().with_async(replace_module);
+                .api_with(update_module);
+            r.put().api_with_async(replace_module);
             r.delete().f(delete_module);
         })
         .resource("/modules/{id}/comments", |r| {
             r.get().f(list_comments);
             r.post().f(add_comment);
         })
-        .route("/modules/{id}/files", Method::GET, list_files)
-        .route("/modules/{id}/files/{name}", Method::GET, get_file)
+        .api_route("/modules/{id}/files", Method::GET, list_files)
+        .api_route("/modules/{id}/files/{name}", Method::GET, get_file)
 }
 
-type Result<T> = std::result::Result<T, actix_web::error::Error>;
+type Result<T, E=Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Deserialize)]
 pub struct NewModule {
@@ -84,10 +85,8 @@ pub fn list_modules((
     actix_web::State<State>,
     Session,
 )) -> Result<Json<Vec<ModuleData>>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-    let modules = Module::all(&*db)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
+    let modules = Module::all(&*db)?;
     Ok(Json(modules.into_iter()
         .map(|module| module.get_public())
         .collect()))
@@ -108,12 +107,10 @@ pub fn list_assigned((
     actix_web::State<State>,
     Session,
     Path<UserId>,
-)) -> Result<Json<Vec<ModuleData>>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+)) -> Result<Json<Vec<ModuleData>>, Error> {
+    let db = state.db.get()?;
     let user = user.get_user(&*state, &session)?;
-    let modules = Module::assigned_to(&*db, user.id)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let modules = Module::assigned_to(&*db, user.id)?;
     Ok(Json(modules.into_iter()
         .map(|module| module.get_public())
         .collect()))
@@ -136,8 +133,7 @@ pub fn create_module((
     ElevatedSession,
     Json<NewModule>,
 )) -> Result<Json<ModuleData>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
 
     let content = format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
@@ -151,11 +147,9 @@ pub fn create_module((
         tera::escape_html(&data.title),
     );
 
-    let index = File::from_data(&*db, &state.config, &content)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let index = File::from_data(&*db, &state.config, &content)?;
 
-    let module = Module::create::<&str, _>(&*db, &data.title, index, std::iter::empty())
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let module = Module::create::<&str, _>(&*db, &data.title, index, std::iter::empty())?;
 
     Ok(Json(module.get_public()))
 }
@@ -188,13 +182,12 @@ pub fn create_module_from_zip((
     actix_web::State<State>,
     ElevatedSession,
     Multipart<NewModuleZip>
-)) -> Box<dyn Future<Item = Json<ModuleData>, Error = actix_web::Error>> {
+)) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     let NewModuleZip { title, file } = data.into_inner();
     state.importer.send(ImportModule { title, file })
         .from_err()
         .and_then(|r| future::result(r).from_err())
         .map(|module| Json(module.get_public()))
-        .responder()
 }
 
 /// Get a module by ID.
@@ -213,8 +206,7 @@ pub fn get_module((
     Session,
     Path<Uuid>,
 )) -> Result<Json<ModuleData>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let module = Module::by_id(&*db, id.into_inner())?;
 
     Ok(Json(module.get_public()))
@@ -236,8 +228,7 @@ pub fn crete_draft((
     Session,
     Path<Uuid>,
 )) -> Result<Json<DraftData>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let module = Module::by_id(&*db, id.into_inner())?;
     let draft = module.create_draft(&*db, session.user)?;
 
@@ -269,13 +260,12 @@ pub fn update_module((
     Path<Uuid>,
     Json<ModuleUpdate>,
 )) -> Result<HttpResponse> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let module = Module::by_id(&*db, id.into_inner())?;
 
     use diesel::Connection;
     let dbconn = &*db;
-    dbconn.transaction::<_, failure::Error, _>(|| {
+    dbconn.transaction::<_, Error, _>(|| {
         if let Some(user) = update.assignee {
             module.set_assignee(dbconn, user)?;
 
@@ -289,7 +279,7 @@ pub fn update_module((
         }
 
         Ok(())
-    }).map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    })?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -311,16 +301,16 @@ pub fn replace_module((
     actix_web::State<State>,
     ElevatedSession,
     Path<Uuid>,
-)) -> Box<dyn Future<Item = Json<ModuleData>, Error = actix_web::Error>> {
+)) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     future::result(
         state.db.get()
-            .map_err(|e| ErrorInternalServerError(e.to_string()))
+            .map_err(Into::into)
             .and_then(|db| Module::by_id(&*db, id.into_inner())
-                .map_err(|e| ErrorInternalServerError(e.to_string()))))
+                .map_err(Into::into)))
         .and_then(|module| future::result(
             NamedTempFile::new()
-                .map_err(|e| ErrorInternalServerError(e.to_string()))
-                .map(|file| (module, file))))
+                .map(|file| (module, file))
+                .map_err(Into::into)))
         .and_then(move |(module, file)| {
             req.payload()
                 .from_err()
@@ -338,7 +328,6 @@ pub fn replace_module((
         })
         .and_then(|r| future::result(r).from_err())
         .map(|module| Json(module.get_public()))
-        .responder()
 }
 
 /// Delete a module
@@ -396,12 +385,10 @@ pub fn list_files((
     Session,
     Path<Uuid>,
 )) -> Result<Json<Vec<FileInfo>>> {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let module = Module::by_id(&*db, *id)?;
 
-    let files = module.get_files(&*db)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?
+    let files = module.get_files(&*db)?
         .into_iter()
         .map(|(name, file)| FileInfo {
             name,
@@ -429,8 +416,7 @@ pub fn get_file((
     Path<(Uuid, String)>,
 )) -> Result<impl Responder> {
     let (id, name) = path.into_inner();
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let module = Module::by_id(&*db, id)?;
 
     Ok(module.get_file(&*db, &name)?

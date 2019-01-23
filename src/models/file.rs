@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, Responder, ResponseError, fs::NamedFile};
+use actix_web::{Responder, fs::NamedFile};
 use blake2::blake2b::{Blake2b, Blake2bResult};
 use diesel::{
     prelude::*,
@@ -194,13 +194,15 @@ impl std::ops::Deref for File {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum FindFileError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// File not found.
     #[fail(display = "No such file")]
+    #[api(code = "file:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
@@ -208,16 +210,19 @@ impl_from! { for FindFileError ;
     DbError => |e| FindFileError::Database(e),
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum CreateFileError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// Obtaining connection from a pool of database connections.
     #[fail(display = "Pooling database connection: {}", _0)]
+    #[api(internal)]
     DbPool(#[cause] r2d2::Error),
     /// System error.
     #[fail(display = "System error: {}", _0)]
+    #[api(internal)]
     System(#[cause] io::Error),
 }
 
@@ -226,12 +231,6 @@ impl_from! { for CreateFileError ;
     r2d2::Error => |e| CreateFileError::DbPool(e),
     io::Error => |e| CreateFileError::System(e),
     tempfile::PersistError => |e| CreateFileError::System(e.error),
-}
-
-impl ResponseError for CreateFileError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::InternalServerError().finish()
-    }
 }
 
 /// Write stream into a sink and return hash of its contents.

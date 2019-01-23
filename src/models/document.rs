@@ -1,4 +1,3 @@
-use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -107,27 +106,18 @@ impl std::ops::Deref for Document {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum GetFileError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// No such file.
     #[fail(display = "No such file")]
+    #[api(code = "file:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
 impl_from! { for GetFileError ;
     DbError => |e| GetFileError::Database(e),
-}
-
-impl ResponseError for GetFileError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            GetFileError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-            GetFileError::NotFound =>
-                HttpResponse::NotFound().finish(),
-        }
-    }
 }

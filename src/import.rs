@@ -1,7 +1,6 @@
 //! File upload and importing ZIPs of modules and collections.
 
 use actix::{Actor, Addr, Handler, SyncArbiter, SyncContext, Message};
-use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     Connection as _Connection,
     result::Error as DbError,
@@ -379,37 +378,45 @@ impl Handler<ReplaceBook> for Importer {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum ImportError {
     /// There was a problem with the ZIP archive.
     #[fail(display = "{}", _0)]
+    #[api(code = "import:zip:invalid", status = "BAD_REQUEST")]
     Archive(#[cause] ZipError),
     /// There was no file named index.cnxml in the ZIP archive.
     #[fail(display = "Archive is missing index.cnxml")]
+    #[api(code = "import:zip:index-missing", status = "BAD_REQUEST")]
     IndexMissing,
     /// There was no file named collection.xml in the ZIP archive.
     #[fail(display = "Archive is missing collection.xml")]
+    #[api(code = "import:zip:collection-xml-missing", status = "BAD_REQUEST")]
     ColxmlMissing,
     /// There was a problem obtaining database connection.
     #[fail(display = "Cannot obtain database connection: {}", _0)]
+    #[api(internal)]
     DbPool(#[cause] r2d2::Error),
     /// A file could not be created.
     #[fail(display = "Cannot create file: {}", _0)]
     FileCreation(#[cause] CreateFileError),
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// Replacing module's contents failed.
     #[fail(display = "{}", _0)]
     ReplaceModule(#[cause] ReplaceModuleError),
     /// One of the XML files was invalid.
     #[fail(display = "Invalid XML: {}", _0)]
+    #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
     InvalidXml(#[cause] minidom::Error),
     /// collection.xml did not conform to schema.
     #[fail(display = "Invalid collection.xml: {}", _0)]
+    #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
     MalformedXml(#[cause] ParseCollectionError),
     /// An operating system error.
     #[fail(display = "System error: {}", _0)]
+    #[api(internal)]
     System(#[cause] std::io::Error),
 }
 
@@ -422,22 +429,6 @@ impl_from! { for ImportError ;
     minidom::Error => |e| ImportError::InvalidXml(e),
     ParseCollectionError => |e| ImportError::MalformedXml(e),
     std::io::Error => |e| ImportError::System(e),
-}
-
-impl ResponseError for ImportError {
-    fn error_response(&self) -> HttpResponse {
-        use self::ImportError::*;
-
-        match *self {
-            Archive(_) | IndexMissing | ColxmlMissing | InvalidXml(_)
-            | MalformedXml(_) =>
-                HttpResponse::BadRequest().body(self.to_string()),
-            DbPool(_) | Database(_) | System(_) =>
-                HttpResponse::InternalServerError().finish(),
-            FileCreation(ref e) => e.error_response(),
-            ReplaceModule(ref e) => e.error_response(),
-        }
-    }
 }
 
 #[derive(Debug)]

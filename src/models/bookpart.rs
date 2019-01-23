@@ -1,4 +1,3 @@
-use actix_web::{HttpResponse, ResponseError};
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -270,13 +269,15 @@ impl std::ops::Deref for BookPart {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum FindBookPartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// No module found matching given criteria.
     #[fail(display = "No such module")]
+    #[api(internal)]
     NotFound,
 }
 
@@ -284,24 +285,15 @@ impl_from! { for FindBookPartError ;
     DbError => |e| FindBookPartError::Database(e),
 }
 
-impl ResponseError for FindBookPartError {
-    fn error_response(&self) -> HttpResponse {
-        match *self {
-            FindBookPartError::Database(_) =>
-                HttpResponse::InternalServerError().finish(),
-            FindBookPartError::NotFound =>
-                HttpResponse::NotFound().finish(),
-        }
-    }
-}
-
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum DeletePartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// Deleting group 0 is not possible.
     #[fail(display = "Cannot delete group 0")]
+    #[api(code = "bookpart:delete:is-root", status = "BAD_REQUEST")]
     RootGroup,
 }
 
@@ -309,13 +301,15 @@ impl_from! { for DeletePartError ;
     DbError => |e| DeletePartError::Database(e),
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum GetPartsError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// This part is a module, it has no parts of its own.
     #[fail(display = "Module has no parts")]
+    #[api(code = "bookpart:get-parts:is-module", status = "BAD_REQUEST")]
     IsAModule,
 }
 
@@ -323,13 +317,15 @@ impl_from! { for GetPartsError ;
     DbError => |e| GetPartsError::Database(e),
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum CreatePartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// This part is a module, it has no parts of its own.
     #[fail(display = "Module has no parts")]
+    #[api(code = "bookpart:create-part:is-module", status = "BAD_REQUEST")]
     IsAModule,
 }
 
@@ -337,13 +333,15 @@ impl_from! { for CreatePartError ;
     DbError => |e| CreatePartError::Database(e),
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum ReparentPartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
     Database(#[cause] DbError),
     /// New parent is a module, it has no parts of its own.
     #[fail(display = "Parent cannot be a module")]
+    #[api(code = "bookpart:reparent:is-module", status = "BAD_REQUEST")]
     IsAModule,
 }
 

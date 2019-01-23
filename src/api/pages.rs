@@ -4,7 +4,6 @@ use actix_web::{
     HttpRequest,
     HttpResponse,
     Query,
-    error::{Error, ErrorInternalServerError},
     http::{Method, StatusCode},
     middleware::Logger,
     pred,
@@ -16,6 +15,9 @@ use crate::models::{
     user::{User, PublicData as UserData},
 };
 use super::{
+    Error,
+    RouteExt,
+    RouterExt,
     State,
     session::{SessionManager, Session, Normal},
 };
@@ -30,27 +32,26 @@ pub fn app(state: State) -> App<State> {
         .middleware(Logger::default())
         .middleware(sessions)
         .resource("/login", |r| {
-            r.get().with(login);
-            r.post().with(do_login);
+            r.get().api_with(login);
+            r.post().api_with(do_login);
         })
         .resource("/elevate", |r| {
-            r.get().with(elevate);
+            r.get().api_with(elevate);
             r.post()
                 .filter(pred::Header("Accept", "application/json"))
-                .with(do_elevate_json);
-            r.post().with(do_elevate);
+                .api_with(do_elevate_json);
+            r.post().api_with(do_elevate);
         })
-        .route("/logout", Method::GET, logout)
+        .api_route("/logout", Method::GET, logout)
         .resource("/reset", |r| {
-            r.get().with(reset);
-            r.post().with(do_reset);
+            r.get().api_with(reset);
+            r.post().api_with(do_reset);
         })
         .resource("/register", |r| {
             r.name("register");
-            r.get().with(register);
-            r.post().with(do_register);
+            r.get().api_with(register);
+            r.post().api_with(do_register);
         })
-        .route("/test", Method::GET, test)
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -132,23 +133,24 @@ pub fn do_login((
     HttpRequest<State>,
     Form<LoginCredentials>,
 )) -> RenderedTemplate {
-    let db = &*req.state().db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = &*req.state().db.get()?;
 
     let user = match User::authenticate(db, &params.email, &params.password) {
         Ok(user) => user,
-        Err(ref err) if err.is_internal() => {
-            return Err(ErrorInternalServerError(err.to_string()));
+        Err(err) => {
+            if err.is_internal() {
+                return Err(err.into());
+            }
+            return render_code(
+                StatusCode::BAD_REQUEST,
+                "login.html",
+                &LoginTemplate {
+                    error: Some(err.to_string()),
+                    next: params.into_inner().next,
+                    action: LoginAction::default(),
+                },
+            );
         }
-        Err(err) => return render_code(
-            StatusCode::BAD_REQUEST,
-            "login.html",
-            &LoginTemplate {
-                error: Some(err.to_string()),
-                next: params.into_inner().next,
-                action: LoginAction::default(),
-            },
-        ),
     };
 
     // NOTE: This will automatically remove any session that may still exist,
@@ -176,8 +178,7 @@ pub fn elevate((
     Session,
     Query<LoginQuery>,
 )) -> RenderedTemplate {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let user = User::by_id(&*db, session.user)?;
     let LoginQuery { next, action } = query.into_inner();
 
@@ -219,8 +220,7 @@ pub fn do_elevate((
     Session,
     Form<ElevateCredentials>,
 )) -> RenderedTemplate {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let user = User::by_id(&*db, session.user)?;
     let ElevateCredentials { next, action, password } = form.into_inner();
 
@@ -275,10 +275,9 @@ pub fn do_elevate_json((
     Session,
     Form<ElevateCredentials>,
 )) -> RenderedTemplate {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let user = User::by_id(&*db, session.user)?;
-    let ElevateCredentials { next, action, password } = form.into_inner();
+    let ElevateCredentials { password, .. } = form.into_inner();
 
     if !user.is_super {
         return Ok(HttpResponse::Forbidden().finish());
@@ -366,14 +365,12 @@ pub fn do_reset((
     Form<ResetForm>,
 ))
 -> RenderedTemplate {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
 
     match form.into_inner() {
         ResetForm::CreateToken { email } => {
             let user = User::by_email(&*db, &email)?;
-            let token = PasswordResetToken::create(&*db, &user)
-                .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+            let token = PasswordResetToken::create(&*db, &user)?;
 
             let code = token.get_code(&state.config);
             // TODO: get URL from Actix.
@@ -399,8 +396,7 @@ pub fn do_reset((
                 });
             }
 
-            let user = token.fulfil(&*db, &password)
-                .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+            let user = token.fulfil(&*db, &password)?;
             Session::<Normal>::create(&req, user.id, false);
 
             Ok(HttpResponse::SeeOther()
@@ -436,8 +432,7 @@ pub fn register((
     actix_web::State<State>,
     Query<RegisterQuery>,
 )) -> RenderedTemplate {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let invite = Invite::from_code(&*db, &state.config, &query.invite)?;
 
     render("register.html", &RegisterTemplate {
@@ -472,8 +467,7 @@ pub fn do_register((
     actix_web::State<State>,
     Form<RegisterForm>,
 )) -> RenderedTemplate {
-    let db = state.db.get()
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let db = state.db.get()?;
     let invite = Invite::from_code(&*db, &state.config, &form.invite)?;
 
     if form.password != form.password1 {
@@ -492,18 +486,13 @@ pub fn do_register((
         });
     }
 
-    let user = invite.fulfil(&*db, &form.name, &form.password)
-        .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+    let user = invite.fulfil(&*db, &form.name, &form.password)?;
 
     Session::<Normal>::create(&req, user.id, false);
 
     Ok(HttpResponse::SeeOther()
         .header("Location", "/")
         .finish())
-}
-
-fn test(_req: HttpRequest<State>) -> RenderedTemplate {
-    render("test.html", &Empty {})
 }
 
 /// Empty serializable structure to serve as empty context.
@@ -535,5 +524,5 @@ where
     crate::templates::PAGES
         .render(name, context)
         .map(|r| HttpResponse::build(code).body(r))
-        .map_err(|e| ErrorInternalServerError(e.to_string()))
+        .map_err(Into::into)
 }
