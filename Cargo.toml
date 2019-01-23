@@ -3,9 +3,13 @@ name = "adaptarr-server"
 version = "0.0.0"
 authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
 
+[workspace]
+members = [".", "api-derive"]
+
 [dependencies]
 actix = "0.7.9"
 actix-web = "0.7.14"
+api-derive = { path = "./api-derive" }
 base64 = "0.10.0"
 blake2-rfc = "0.2.18"
 bytes = "0.4.11"
