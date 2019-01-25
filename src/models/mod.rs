@@ -10,6 +10,7 @@ pub mod invite;
 pub mod module;
 pub mod password;
 pub mod user;
+pub mod xref_target;
 
 pub use self::{
     book::Book,
@@ -22,4 +23,5 @@ pub use self::{
     module::Module,
     password::PasswordResetToken,
     user::User,
+    xref_target::XrefTarget,
 };

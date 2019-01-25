@@ -9,9 +9,9 @@ use crate::db::{
     Connection,
     functions::duplicate_document,
     models as db,
-    schema::{documents, drafts, modules},
+    schema::{documents, drafts, modules, xref_targets},
 };
-use super::{Document, Draft, File};
+use super::{Document, Draft, File, XrefTarget};
 
 /// A module is a version of Document that can be part of a Book.
 #[derive(Debug)]
@@ -118,6 +118,20 @@ impl Module {
             title: self.document.title.clone(),
             assignee: self.data.assignee,
         }
+    }
+
+    /// Get list of all possible cross-reference targets within this module.
+    pub fn xref_targets(&self, dbconn: &Connection)
+    -> Result<Vec<XrefTarget>, GetXrefTargetsError> {
+        if !self.document.xrefs_ready {
+            return Err(GetXrefTargetsError::NotReady);
+        }
+
+        xref_targets::table
+            .filter(xref_targets::document.eq(self.document.id))
+            .get_results::<db::XrefTarget>(dbconn)
+            .map_err(Into::into)
+            .map(|v| v.into_iter().map(XrefTarget::from_db).collect())
     }
 
     /// Create a new draft of this module for a given user.
@@ -247,4 +261,20 @@ pub enum ReplaceModuleError {
 
 impl_from! { for ReplaceModuleError ;
     DbError => |e| ReplaceModuleError::Database(e),
+}
+
+#[derive(ApiError, Debug, Fail)]
+pub enum GetXrefTargetsError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
+    Database(#[cause] DbError),
+    /// List of cross-reference targets is yet to be generated for this module.
+    #[fail(display = "List of cross references is not yet ready for this module")]
+    #[api(code = "module:xref:not-ready", status = "SERVICE_UNAVAILABLE")]
+    NotReady,
+}
+
+impl_from! { for GetXrefTargetsError ;
+    DbError => |e| GetXrefTargetsError::Database(e),
 }

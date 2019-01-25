@@ -22,6 +22,7 @@ use crate::{
         User,
         draft::PublicData as DraftData,
         module::{Module, PublicData as ModuleData},
+        xref_target::PublicData as XrefTargetData,
     },
     import::{ImportModule, ReplaceModule},
     multipart::Multipart,
@@ -62,6 +63,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .api_route("/modules/{id}/files", Method::GET, list_files)
         .api_route("/modules/{id}/files/{name}", Method::GET, get_file)
+        .api_route("/modules/{id}/xref-targets", Method::GET, list_xref_targets)
 }
 
 type Result<T, E=Error> = std::result::Result<T, E>;
@@ -380,6 +382,29 @@ pub fn get_file(
 
     Ok(module.get_file(&*db, &name)?
         .stream(&state.config))
+}
+
+/// Get a list of all possible cross-reference targets within a module.
+///
+/// ## Method
+///
+/// ```
+/// GET /modules/:id/xref-targets
+/// ```
+pub fn list_xref_targets(
+    state: actix_web::State<State>,
+    _session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<Vec<XrefTargetData>>> {
+    let db = state.db.get()?;
+    let module = Module::by_id(&*db, *id)?;
+
+    let targets = module.xref_targets(&*db)?
+        .into_iter()
+        .map(|x| x.get_public())
+        .collect();
+
+    Ok(Json(targets))
 }
 
 fn de_optional_null<'de, T, D>(de: D) -> std::result::Result<Option<T>, D::Error>
