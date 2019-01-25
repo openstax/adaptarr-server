@@ -30,6 +30,7 @@ table! {
         id -> Int4,
         title -> Varchar,
         index -> Int4,
+        xrefs_ready -> Bool,
     }
 }
 
@@ -114,6 +115,18 @@ table! {
     }
 }
 
+table! {
+    xref_targets (document, element) {
+        document -> Int4,
+        element -> Varchar,
+        #[sql_name = "type"]
+        type_ -> Varchar,
+        description -> Nullable<Varchar>,
+        context -> Nullable<Varchar>,
+        counter -> Int4,
+    }
+}
+
 joinable!(book_parts -> books (book));
 joinable!(book_parts -> modules (module));
 joinable!(document_files -> documents (document));
@@ -129,6 +142,7 @@ joinable!(modules -> documents (document));
 joinable!(modules -> users (assignee));
 joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
+joinable!(xref_targets -> documents (document));
 
 allow_tables_to_appear_in_same_query!(
     book_parts,
@@ -144,4 +158,5 @@ allow_tables_to_appear_in_same_query!(
     password_reset_tokens,
     sessions,
     users,
+    xref_targets,
 );

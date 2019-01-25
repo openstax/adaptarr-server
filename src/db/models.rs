@@ -127,6 +127,9 @@ pub struct Document {
     pub title: String,
     /// ID of file serving as this document's `index.cnxml`.
     pub index: i32,
+    /// Whether a list of possible cross-reference targets has been generated
+    /// for this document.
+    pub xrefs_ready: bool,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -262,4 +265,44 @@ pub struct NewEvent<'a> {
     pub user: i32,
     pub kind: &'a str,
     pub data: &'a [u8],
+}
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+#[primary_key(document, element)]
+pub struct XrefTarget {
+    /// ID of the document in this this element exists.
+    pub document: i32,
+    /// ID of the element.
+    ///
+    /// Note that this is an XML ID, not a database ID.
+    pub element: String,
+    /// Type of this element.
+    pub type_: String,
+    /// A short description of this element intended to make it easier for users
+    /// to select the correct element when creating a cross-document reference.
+    ///
+    /// This field may be `None` if it was not possible to generate
+    /// a description.
+    pub description: Option<String>,
+    /// ID of a reference target “owning” this one.
+    ///
+    /// This field is used for elements such as subfigures or exercise
+    /// solutions, to refer to their parent (figure or exercise in those cases),
+    /// so that they can be better grouped in a selection UI.
+    pub context: Option<String>,
+    /// Value of the type-counter at this element.
+    ///
+    /// For elements that have `context` type counter resets at context.
+    pub counter: i32,
+}
+
+#[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
+#[table_name = "xref_targets"]
+pub struct NewXrefTarget<'s> {
+    pub document: i32,
+    pub element: &'s str,
+    pub type_: &'s str,
+    pub description: Option<&'s str>,
+    pub context: Option<&'s str>,
+    pub counter: i32,
 }

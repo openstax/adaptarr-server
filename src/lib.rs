@@ -53,6 +53,7 @@ mod events;
 mod import;
 mod mail;
 mod models;
+mod processing;
 mod templates;
 mod utils;
 

@@ -6,6 +6,7 @@ use diesel::{
 };
 use futures::{Future, Stream, future};
 use std::{
+    fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
 };
@@ -183,6 +184,11 @@ impl File {
         let hash = hash_to_hex(&self.data.hash);
         let path = cfg.storage.path.join(hash);
         NamedFile::open(path)
+    }
+
+    /// Read contents of this file into memory as a [`String`].
+    pub fn read_to_string(&self) -> Result<String, io::Error> {
+        fs::read_to_string(&self.data.path)
     }
 }
 
