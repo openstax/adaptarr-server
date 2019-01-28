@@ -11,9 +11,12 @@ use actix_web::{
 use futures::{Future, future};
 use uuid::Uuid;
 
-use crate::models::{
-    File,
-    draft::{Draft, PublicData as DraftData},
+use crate::{
+    models::{
+        File,
+        draft::{Draft, PublicData as DraftData},
+    },
+    processing::ProcessDocument,
 };
 use super::{
     Error,
@@ -114,6 +117,12 @@ pub fn save_draft(
 ) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, *id, session.user)?;
+
+    if let Err(err) = state.xref_processor.try_send(ProcessDocument {
+        document: (**draft).clone(),
+    }) {
+        error!("Could not send document {} for processing: {}", draft.id, err);
+    }
 
     draft.save(&*db)?;
 

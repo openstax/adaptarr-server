@@ -1,3 +1,4 @@
+use actix::{Actor, Addr, Handler, Message, SyncArbiter, SyncContext};
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -12,6 +13,7 @@ use std::{
 use crate::{
     db::{
         Connection,
+        Pool,
         models as db,
         schema::{documents, modules, xref_targets},
     },
@@ -220,6 +222,66 @@ impl<T> Iterator for Pair<T> {
                 Some(b)
             }
             Pair::Empty => None,
+        }
+    }
+}
+
+pub struct ProcessDocument {
+    pub document: db::Document,
+}
+
+/// Request a cross-reference target list to be generated for a document.
+impl Message for ProcessDocument {
+    type Result = ();
+}
+
+/// Actix actor handling generation of cross-reference target lists for newly
+/// uploaded documents.
+pub struct TargetProcessor {
+    pool: Pool,
+}
+
+impl TargetProcessor {
+    pub fn new(pool: Pool) -> TargetProcessor {
+        TargetProcessor {
+            pool,
+        }
+    }
+
+    pub fn start(pool: Pool) -> Addr<TargetProcessor> {
+        SyncArbiter::start(1, move || TargetProcessor::new(pool.clone()))
+    }
+
+    fn process(&mut self, document: &db::Document) -> Result<(), Error> {
+        let db = self.pool.get()?;
+        process_document(&*db, document)?;
+        Ok(())
+    }
+
+    fn process_stale(&mut self) -> Result<(), Error> {
+        let db = self.pool.get()?;
+        process_stale(&*db)?;
+        Ok(())
+    }
+}
+
+impl Actor for TargetProcessor {
+    type Context = SyncContext<Self>;
+
+    fn started(&mut self, _: &mut Self::Context) {
+        if let Err(err) = self.process_stale() {
+            error!("Could not process stale documents: {}", err);
+        }
+    }
+}
+
+impl Handler<ProcessDocument> for TargetProcessor {
+    type Result = ();
+
+    fn handle(&mut self, msg: ProcessDocument, _: &mut Self::Context) {
+        if let Err(err) = self.process(&msg.document) {
+            error!("Could not process xrefs for document {}: {}",
+                msg.document.id, err);
         }
     }
 }

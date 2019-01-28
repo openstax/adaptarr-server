@@ -12,6 +12,7 @@ use super::{
     events::{self as event_manager, EventManager},
     import::Importer,
     mail::Mailer,
+    processing::TargetProcessor,
 };
 
 pub use self::error::{ApiError, Error};
@@ -39,6 +40,7 @@ pub fn start(cfg: Config) -> Result<()> {
         mailer: Mailer::from_config(cfg.mail.clone())?,
         events: event_manager::start(db.clone()),
         importer: Importer::start(db.clone(), cfg.storage.clone()),
+        xref_processor: TargetProcessor::start(db.clone()),
     };
 
     let server = server::new(move || vec![
@@ -73,6 +75,8 @@ pub struct State {
     pub events: Addr<EventManager>,
     /// ZIP importer.
     pub importer: Addr<Importer>,
+    /// Cross-reference processing service.
+    pub xref_processor: Addr<TargetProcessor>,
 }
 
 fn api_app(state: State) -> App<State> {
