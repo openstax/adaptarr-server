@@ -135,6 +135,7 @@ dependencies = [
  "lettre 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "lettre_email 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "listenfd 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "magic 0.12.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "minidom 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "r2d2 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
