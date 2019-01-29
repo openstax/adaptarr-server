@@ -84,7 +84,7 @@ impl Importer {
     /// Process a zipped module and extract index.cnxml and other media files
     /// from it.
     fn process_module_zip(&mut self, mut file: NamedTempFile)
-    -> Result<(File, Vec<(String, File)>), ImportError> {
+    -> Result<ModuleZip, ImportError> {
         let mut zip = ZipArchive::new(file.as_file_mut())?;
 
         // NOTE: Looking for index imperatively because rustc doesn't seem able
@@ -109,6 +109,11 @@ impl Importer {
         }
 
         let (index, base_path) = index.ok_or(ImportError::IndexMissing)?;
+
+        let mut data = String::new();
+        zip.by_index(index)?.read_to_string(&mut data)?;
+        let data = XmlElement::from_str(&data)?;
+        let data = Document::from_xml(&data)?;
 
         let db = self.pool.get()?;
 
@@ -151,15 +156,23 @@ impl Importer {
             files.push((name, file));
         }
 
-        Ok((index_file, files))
+        Ok(ModuleZip {
+            title: data.title,
+            language: data.language,
+            index: index_file,
+            files,
+        })
     }
 
     /// Create a new module from a ZIP of its contents.
     fn create_module(&mut self, title: String, file: NamedTempFile)
     -> Result<Module, ImportError> {
-        let (index, files) = self.process_module_zip(file)?;
+        let ModuleZip {
+            language, index, files, ..
+        } = self.process_module_zip(file)?;
+
         let db = self.pool.get()?;
-        let module = Module::create(&*db, &title, index, files)?;
+        let module = Module::create(&*db, &title, &language, index, files)?;
 
         Ok(module)
     }
@@ -167,7 +180,7 @@ impl Importer {
     /// Import a zipped module onto an existing one.
     fn replace_module(&mut self, mut module: Module, file: NamedTempFile)
     -> Result<Module, ImportError> {
-        let (index, files) = self.process_module_zip(file)?;
+        let ModuleZip { index, files, .. } = self.process_module_zip(file)?;
 
         let db = self.pool.get()?;
         module.replace(&*db, index, files)?;
@@ -220,9 +233,17 @@ impl Importer {
         dbconn: &Connection,
         zip: &mut ZipArchive<&mut std::fs::File>,
         base_path: PathBuf,
-    ) -> Result<(File, Vec<(String, File)>), ImportError> {
+    ) -> Result<ModuleZip, ImportError> {
+        let index_path = base_path.join("index.cnxml");
+        let index_path = index_path.to_str().unwrap();
+
+        let mut data = String::new();
+        zip.by_name(index_path)?.read_to_string(&mut data)?;
+        let data = XmlElement::from_str(&data)?;
+        let data = Document::from_xml(&data)?;
+
         let index_file = {
-            let index = zip.by_name(base_path.join("index.cnxml").to_str().unwrap())?;
+            let index = zip.by_name(index_path)?;
             File::from_read(dbconn, &self.config, index)?
         };
 
@@ -258,7 +279,12 @@ impl Importer {
             files.push((name, file));
         }
 
-        Ok((index_file, files))
+        Ok(ModuleZip {
+            title: data.title,
+            language: data.language,
+            index: index_file,
+            files,
+        })
     }
 
     /// Load contents of a book from a collection ZIP.
@@ -279,9 +305,11 @@ impl Importer {
                 match element {
                     Element::Module(ModuleElement { title, document }) => {
                         let path = base.join(document);
-                        let (index, files) = self.load_collection_module(
+                        let ModuleZip {
+                            language, index, files, ..
+                        } = self.load_collection_module(
                             dbconn, &mut zip, path)?;
-                        let module = Module::create(dbconn, &title, index, files)?;
+                        let module = Module::create(dbconn, &title, &language, index, files)?;
                         group.insert_module(dbconn, inx as i32, &title, &module)
                             .map_err(|e| match e {
                                 CreatePartError::Database(e) => e,
@@ -332,6 +360,14 @@ impl Importer {
             Ok(book)
         })
     }
+}
+
+#[derive(Debug)]
+struct ModuleZip {
+    title: String,
+    language: String,
+    index: File,
+    files: Vec<(String, File)>,
 }
 
 impl Actor for Importer {
@@ -413,7 +449,11 @@ pub enum ImportError {
     /// collection.xml did not conform to schema.
     #[fail(display = "Invalid collection.xml: {}", _0)]
     #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
-    MalformedXml(#[cause] ParseCollectionError),
+    MalformedColXml(#[cause] ParseCollectionError),
+    /// index.cnxml did not conform to schema.
+    #[fail(display = "Invalid index.cnxml: {}", _0)]
+    #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
+    MalformedIndexCnxml(#[cause] ParseDocumentError),
     /// An operating system error.
     #[fail(display = "System error: {}", _0)]
     #[api(internal)]
@@ -427,8 +467,15 @@ impl_from! { for ImportError ;
     DbError => |e| ImportError::Database(e),
     ReplaceModuleError => |e| ImportError::ReplaceModule(e),
     minidom::Error => |e| ImportError::InvalidXml(e),
-    ParseCollectionError => |e| ImportError::MalformedXml(e),
+    ParseCollectionError => |e| ImportError::MalformedColXml(e),
+    ParseDocumentError => |e| ImportError::MalformedIndexCnxml(e),
     std::io::Error => |e| ImportError::System(e),
+}
+
+#[derive(Debug)]
+struct Document {
+    title: String,
+    language: String,
 }
 
 #[derive(Debug)]
@@ -456,6 +503,17 @@ struct Subcollection {
 }
 
 #[derive(Debug, Fail)]
+pub enum ParseDocumentError {
+    #[fail(display = "Missing required element {} from namespace {}", _1, _0)]
+    MissingElement(&'static str, &'static str),
+    #[fail(
+        display = "Missing required attribute {} of element {} from namespace {}",
+        _0, _2, _1,
+    )]
+    MissingAttribute(&'static str, &'static str, &'static str),
+}
+
+#[derive(Debug, Fail)]
 pub enum ParseCollectionError {
     #[fail(display = "Missing required element {} from namespace {}", _1, _0)]
     MissingElement(&'static str, &'static str),
@@ -468,8 +526,29 @@ pub enum ParseCollectionError {
     MissingAttribute(&'static str, &'static str, &'static str),
 }
 
+const CNXML_NS: &str = "http://cnx.rice.edu/cnxml";
 const COL_NS: &str = "http://cnx.rice.edu/collxml";
 const MDML_NS: &str = "http://cnx.rice.edu/mdml";
+
+impl Document {
+    fn from_xml(e: &XmlElement) -> Result<Document, ParseDocumentError> {
+        if !e.is("document", CNXML_NS) {
+            return Err(
+                ParseDocumentError::MissingElement(CNXML_NS, "document"));
+        }
+
+        let language = e.attr("xml:lang")
+            .ok_or(ParseDocumentError::MissingAttribute(
+                "xml:lang", CNXML_NS, "document"))?
+            .to_string();
+
+        let title = e.get_child("title", MDML_NS)
+            .ok_or(ParseDocumentError::MissingElement(MDML_NS, "title"))?
+            .text();
+
+        Ok(Document { language, title })
+    }
+}
 
 impl Collection {
     fn from_xml(e: &XmlElement) -> Result<Collection, ParseCollectionError> {

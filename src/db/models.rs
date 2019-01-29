@@ -130,6 +130,8 @@ pub struct Document {
     /// Whether a list of possible cross-reference targets has been generated
     /// for this document.
     pub xrefs_ready: bool,
+    /// This document's language.
+    pub language: String,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -137,6 +139,7 @@ pub struct Document {
 pub struct NewDocument<'a> {
     pub title: &'a str,
     pub index: i32,
+    pub language: &'a str,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]

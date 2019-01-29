@@ -10,7 +10,10 @@ use crate::db::{
     models as db,
     schema::{documents, document_files, drafts, modules},
 };
-use super::{Document, File};
+use super::{
+    File,
+    document::{Document, PublicData as DocumentData},
+};
 
 #[derive(Debug)]
 pub struct Draft {
@@ -21,7 +24,8 @@ pub struct Draft {
 #[derive(Debug, Serialize)]
 pub struct PublicData {
     pub module: Uuid,
-    pub title: String,
+    #[serde(flatten)]
+    pub document: DocumentData,
 }
 
 impl Draft {
@@ -89,7 +93,7 @@ impl Draft {
     pub fn get_public(&self) -> PublicData {
         PublicData {
             module: self.data.module,
-            title: self.document.title.clone(),
+            document: self.document.get_public(),
         }
     }
 

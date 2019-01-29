@@ -71,6 +71,7 @@ type Result<T, E=Error> = std::result::Result<T, E>;
 #[derive(Debug, Deserialize)]
 pub struct NewModule {
     title: String,
+    language: String,
 }
 
 /// Get list of all modules.
@@ -140,7 +141,8 @@ pub fn create_module(
 
     let index = File::from_data(&*db, &state.config, &content)?;
 
-    let module = Module::create::<&str, _>(&*db, &data.title, index, std::iter::empty())?;
+    let module = Module::create::<&str, _>(
+        &*db, &data.title, &data.language, index, std::iter::empty())?;
 
     Ok(Json(module.get_public()))
 }

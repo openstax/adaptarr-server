@@ -19,6 +19,13 @@ pub struct Document {
     data: db::Document,
 }
 
+/// A subset of document's data that can safely be publicly exposed.
+#[derive(Debug, Serialize)]
+pub struct PublicData {
+    pub title: String,
+    pub language: String,
+}
+
 impl Document {
     /// Construct `Document` from its database counterpart.
     pub(super) fn from_db(data: db::Document) -> Document {
@@ -29,6 +36,7 @@ impl Document {
     pub(super) fn create<N, I>(
         dbconn: &Connection,
         title: &str,
+        language: &str,
         index: File,
         files: I,
     )  -> Result<Document, DbError>
@@ -40,6 +48,7 @@ impl Document {
             let data = diesel::insert_into(documents::table)
                 .values(&db::NewDocument {
                     title,
+                    language,
                     index: index.id,
                 })
                 .get_result::<db::Document>(dbconn)?;
@@ -62,6 +71,14 @@ impl Document {
     pub(super) fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
         diesel::delete(&self.data).execute(dbconn)?;
         Ok(())
+    }
+
+    /// Get the public portion of this document's data.
+    pub fn get_public(&self) -> PublicData {
+        PublicData {
+            title: self.data.title.clone(),
+            language: self.data.language.clone(),
+        }
     }
 
     /// Get list of files in this document.

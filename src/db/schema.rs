@@ -31,6 +31,7 @@ table! {
         title -> Varchar,
         index -> Int4,
         xrefs_ready -> Bool,
+        language -> Varchar,
     }
 }
 

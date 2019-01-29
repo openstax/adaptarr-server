@@ -11,7 +11,12 @@ use crate::db::{
     models as db,
     schema::{documents, drafts, modules, xref_targets},
 };
-use super::{Document, Draft, File, XrefTarget};
+use super::{
+    Draft,
+    File,
+    XrefTarget,
+    document::{Document, PublicData as DocumentData},
+};
 
 /// A module is a version of Document that can be part of a Book.
 #[derive(Debug)]
@@ -24,8 +29,9 @@ pub struct Module {
 #[derive(Debug, Serialize)]
 pub struct PublicData {
     pub id: Uuid,
-    pub title: String,
     pub assignee: Option<i32>,
+    #[serde(flatten)]
+    pub document: DocumentData,
 }
 
 impl Module {
@@ -81,6 +87,7 @@ impl Module {
     pub fn create<N, I>(
         dbconn: &Connection,
         title: &str,
+        language: &str,
         index: File,
         files: I,
     ) -> Result<Module, DbError>
@@ -89,7 +96,7 @@ impl Module {
         N: AsRef<str>,
     {
         dbconn.transaction(|| {
-            let document = Document::create(dbconn, title, index, files)?;
+            let document = Document::create(dbconn, title, language, index, files)?;
 
             let data = diesel::insert_into(modules::table)
                 .values(&db::Module {
@@ -115,8 +122,8 @@ impl Module {
     pub fn get_public(&self) -> PublicData {
         PublicData {
             id: self.data.id,
-            title: self.document.title.clone(),
             assignee: self.data.assignee,
+            document: self.document.get_public(),
         }
     }
 
@@ -177,7 +184,7 @@ impl Module {
                 return Err(ReplaceModuleError::HasDrafts);
             }
 
-            let document = Document::create(dbconn, &self.title, index, files)?;
+            let document = Document::create(dbconn, &self.title, &self.language, index, files)?;
 
             diesel::update(modules::table.filter(modules::id.eq(self.data.id)))
                 .set(modules::document.eq(document.id))
