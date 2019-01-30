@@ -32,6 +32,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .api_route("/drafts", Method::GET, list_drafts)
         .resource("/drafts/{id}", |r| {
             r.get().api_with(get_draft);
+            r.put().api_with(update_draft);
             r.delete().api_with(delete_draft);
         })
         .api_route("/drafts/{id}/save", Method::POST, save_draft)
@@ -79,6 +80,32 @@ pub fn get_draft(
 ) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, *id, session.user)?;
+
+    Ok(Json(draft.get_public()))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DraftUpdate {
+    title: String,
+}
+
+/// Update a draft.
+///
+/// ## Method
+///
+/// ```
+/// PUT /drafts/:id
+/// ```
+pub fn update_draft(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<Uuid>,
+    update: Json<DraftUpdate>,
+) -> Result<Json<DraftData>> {
+    let db = state.db.get()?;
+    let mut draft = Draft::by_id(&*db, *id, session.user)?;
+
+    draft.set_title(&*db, &update.title)?;
 
     Ok(Json(draft.get_public()))
 }

@@ -113,6 +113,18 @@ impl Document {
             .ok_or(GetFileError::NotFound)
             .map(|(_, data)| File::from_db(data))
     }
+
+    /// Set this document's title.
+    pub(super) fn set_title(&mut self, dbconn: &Connection, title: &str)
+    -> Result<(), DbError> {
+        diesel::update(&self.data)
+            .set(documents::title.eq(title))
+            .execute(dbconn)?;
+
+        self.data.title = title.to_string();
+
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for Document {

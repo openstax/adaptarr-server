@@ -131,6 +131,11 @@ impl Draft {
             .execute(dbconn)?;
         Ok(())
     }
+
+    /// Change title of this draft's document.
+    pub fn set_title(&mut self, dbconn: &Connection, title: &str) -> Result<(), DbError> {
+        self.document.set_title(dbconn, title)
+    }
 }
 
 impl std::ops::Deref for Draft {
