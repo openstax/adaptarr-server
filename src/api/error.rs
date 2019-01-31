@@ -103,6 +103,7 @@ impl<R: Responder> Responder for ApiResult<R> {
                     HttpResponse::build(err.status())
                         .json(ErrorResponse {
                             error: code,
+                            raw: err.to_string(),
                         })
                 } else {
                     HttpResponse::new(err.status())
@@ -121,6 +122,7 @@ impl<R: Responder> Responder for ApiResult<R> {
 #[derive(Debug, Serialize)]
 struct ErrorResponse<'s> {
     error: &'s str,
+    raw: String,
 }
 
 /// An alternative version of Actix's request handler, that may fail with
