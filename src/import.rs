@@ -19,6 +19,7 @@ use crate::{
         file::{File, CreateFileError},
         module::{Module, ReplaceModuleError},
     },
+    processing::{TargetProcessor, ProcessDocument},
 };
 
 /// Request a new module to be created from contents of a ZIP file
@@ -67,18 +68,29 @@ impl Message for ReplaceBook {
 pub struct Importer {
     pool: Pool,
     config: Storage,
+    xref_processor: Addr<TargetProcessor>,
 }
 
 impl Importer {
-    pub fn new(pool: Pool, config: Storage) -> Importer {
+    pub fn new(
+        pool: Pool,
+        config: Storage,
+        xref_processor: Addr<TargetProcessor>,
+    ) -> Importer {
         Importer {
             pool,
             config,
+            xref_processor,
         }
     }
 
-    pub fn start(pool: Pool, config: Storage) -> Addr<Importer> {
-        SyncArbiter::start(1, move || Importer::new(pool.clone(), config.clone()))
+    pub fn start(
+        pool: Pool,
+        config: Storage,
+        xref_processor: Addr<TargetProcessor>,
+    ) -> Addr<Importer> {
+        SyncArbiter::start(1, move || Importer::new(
+            pool.clone(), config.clone(), xref_processor.clone()))
     }
 
     /// Process a zipped module and extract index.cnxml and other media files
@@ -176,6 +188,13 @@ impl Importer {
         let db = self.pool.get()?;
         let module = Module::create(&*db, &title, &language, index, files)?;
 
+        if let Err(err) = self.xref_processor.try_send(ProcessDocument {
+            document: (**module).clone()
+        }) {
+            error!("Could not send document {} for processing: {}",
+                module.id, err);
+        }
+
         Ok(module)
     }
 
@@ -186,6 +205,13 @@ impl Importer {
 
         let db = self.pool.get()?;
         module.replace(&*db, index, files)?;
+
+        if let Err(err) = self.xref_processor.try_send(ProcessDocument {
+            document: (**module).clone()
+        }) {
+            error!("Could not send document {} for processing: {}",
+                module.id, err);
+        }
 
         Ok(module)
     }
@@ -319,6 +345,16 @@ impl Importer {
                                 CreatePartError::Database(e) => e,
                                 CreatePartError::IsAModule => unreachable!(),
                             })?;
+
+                        if let Err(err) = self.xref_processor.try_send(
+                            ProcessDocument { document: (**module).clone() })
+                        {
+                            error!(
+                                "Could not send document {} for processing: {}",
+                                module.id,
+                                err,
+                            );
+                        }
                     }
                     Element::Subcollection(Subcollection { title, content }) => {
                         let new = group.create_group(dbconn, inx as i32, &title)

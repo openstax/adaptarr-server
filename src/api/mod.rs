@@ -34,13 +34,16 @@ pub fn start(cfg: Config) -> Result<()> {
     let system = System::new("adaptarr");
 
     let db = db::pool(&cfg)?;
+    let xref_processor = TargetProcessor::start(db.clone());
+
     let state = State {
         config: cfg.clone(),
         db: db.clone(),
         mailer: Mailer::from_config(cfg.mail.clone())?,
         events: event_manager::start(db.clone()),
-        importer: Importer::start(db.clone(), cfg.storage.clone()),
-        xref_processor: TargetProcessor::start(db.clone()),
+        importer: Importer::start(
+            db.clone(), cfg.storage.clone(), xref_processor.clone()),
+        xref_processor,
     };
 
     let server = server::new(move || vec![
