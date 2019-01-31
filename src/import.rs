@@ -113,7 +113,9 @@ impl Importer {
         let mut data = String::new();
         zip.by_index(index)?.read_to_string(&mut data)?;
         let data = XmlElement::from_str(&data)?;
-        let data = Document::from_xml(&data)?;
+        let data = Document::from_xml(&data)
+            .map_err(|e| ImportError::MalformedIndexCnxml(
+                "index.cnxml".to_string(), e))?;
 
         let db = self.pool.get()?;
 
@@ -240,7 +242,9 @@ impl Importer {
         let mut data = String::new();
         zip.by_name(index_path)?.read_to_string(&mut data)?;
         let data = XmlElement::from_str(&data)?;
-        let data = Document::from_xml(&data)?;
+        let data = Document::from_xml(&data)
+            .map_err(|e| ImportError::MalformedIndexCnxml(
+                index_path.to_string(), e))?;
 
         let index_file = {
             let index = zip.by_name(index_path)?;
@@ -451,9 +455,9 @@ pub enum ImportError {
     #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
     MalformedColXml(#[cause] ParseCollectionError),
     /// index.cnxml did not conform to schema.
-    #[fail(display = "Invalid index.cnxml: {}", _0)]
+    #[fail(display = "invalid {}: {}", _0, _1)]
     #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
-    MalformedIndexCnxml(#[cause] ParseDocumentError),
+    MalformedIndexCnxml(String, #[cause] ParseDocumentError),
     /// An operating system error.
     #[fail(display = "System error: {}", _0)]
     #[api(internal)]
@@ -468,7 +472,6 @@ impl_from! { for ImportError ;
     ReplaceModuleError => |e| ImportError::ReplaceModule(e),
     minidom::Error => |e| ImportError::InvalidXml(e),
     ParseCollectionError => |e| ImportError::MalformedColXml(e),
-    ParseDocumentError => |e| ImportError::MalformedIndexCnxml(e),
     std::io::Error => |e| ImportError::System(e),
 }
 
