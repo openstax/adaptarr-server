@@ -540,13 +540,20 @@ impl Document {
                 ParseDocumentError::MissingElement(CNXML_NS, "document"));
         }
 
-        let language = e.attr("xml:lang")
-            .ok_or(ParseDocumentError::MissingAttribute(
-                "xml:lang", CNXML_NS, "document"))?
-            .to_string();
+        let language = match e.attr("xml:lang") {
+            Some(attr) => attr.to_string(),
+            None => {
+                let metadata = e.get_child("metadata", CNXML_NS)
+                    .ok_or(ParseDocumentError::MissingElement(CNXML_NS, "metadata"))?;
 
-        let title = e.get_child("title", MDML_NS)
-            .ok_or(ParseDocumentError::MissingElement(MDML_NS, "title"))?
+                metadata.get_child("language", MDML_NS)
+                    .ok_or(ParseDocumentError::MissingElement(MDML_NS, "language"))?
+                    .text()
+            }
+        };
+
+        let title = e.get_child("title", CNXML_NS)
+            .ok_or(ParseDocumentError::MissingElement(CNXML_NS, "title"))?
             .text();
 
         Ok(Document { language, title })
