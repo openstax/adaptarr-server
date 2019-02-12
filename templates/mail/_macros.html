@@ -1,0 +1,64 @@
+{# Macros for easier insertion of elements into an HTML email.
+ #
+ # Since Tera currently doesn't support block macros, we use pairs of macros.
+ # That is, where you would like to do
+ #
+ # {% call macros::para() %}
+ #     Paragraph
+ # {% endcall %}
+ #
+ # we need to do this instead
+ #
+ # {{ macros::para() }}
+ #     Paragraph
+ # {{ macros::endpara() }}
+ #}
+
+{# A paragraph. Use this where on a normal webpage you'd use <p>.
+ #
+ # Arguments:
+ # - top (string): padding before paragraph
+ #}
+{% macro para(top="0") %}
+    <tr>
+        <td style="padding: {{ top }} 14px 10px 14px;">
+{% endmacro %}
+{% macro endpara() %}
+        </td>
+    </tr>
+{% endmacro %}
+
+{# A variation of para() whit additional styling for footer #}
+{% macro footer() %}
+    <tr>
+        <td style="color: #666666; font-size: 13px; line-height: 14px; padding: 12px 14px 12px 14px; border-top: 1px solid #bbbbbb;">
+{% endmacro %}
+
+{# A big, centred button.
+ #
+ # Arguments:
+ # - url (string): target URL this button will take you to
+ # - text (string): text on the button
+ #}
+{% macro button(url, text) %}
+    <tr>
+        <td style="padding: 8px 0 18px 0;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+                <tr>
+                    <td width="50%"></td>
+                    <td align="center" bgcolor="#3e4e64" style="border-radius: 4px;">
+                        <a
+                            href="{{ url }}"
+                            target="_blank"
+                            rel="noopener"
+                            style="color: #ffffff; font-size: 18px; line-height: 36px; text-decoration: none; white-space: nowrap; padding: 5px 14px 5px 14px; display: block;"
+                            >
+                            <strong>{{ text }}</strong>
+                        </a>
+                    </td>
+                    <td width="50%"></td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+{% endmacro %}

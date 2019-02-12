@@ -1,12 +1,24 @@
 {% extends "_base.html" %}
-{% block body %}
-    <p>Hello, {{ user.name }}.</p>
-    <p>To reset your password place click the link bellow</p>
-    <p><a href="{{ url }}">Reset password</a></p>
-    <p>Or enter this URL into your browser's address bar</p>
-    <pre>{{ url }}</pre>
-    <p>
+{% import "_macros.html" as m %}
+
+{% block content %}
+    {{ m::para(top="10px") }}
+        Hello, {{ username }}
+    {{ m::endpara() }}
+
+    {{ m::para() }}
+        To reset your password place click the link bellow
+    {{ m::endpara() }}
+
+    {{ m::button(url=url, text="Reset password") }}
+
+    {{ m::para() }}
+        Or enter this URL into your browser's address bar:
+        <a href="{{ url }}">{{ url }}</a>
+    {{ m::endpara() }}
+
+    {{ m::para() }}
         If you have not requested a password reset you don't have to
         do anything, your account is still secure.
-    </p>
-{% endblock body %}
+    {{ m::endpara() }}
+{% endblock %}

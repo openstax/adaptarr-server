@@ -1,9 +1,27 @@
-{% block body %}
-    <p>You have been invited to join Adaptarr!, Katalyst Education's
-    service for book translators.</p>
-    <p>To complete you registration please click the follow the button
-    below</p>
-    <p><a href="{{ url }}">Register here</a></p>
-    <p>Or copy the following URL into your address bar:</p>
-    <pre>{{ url }}</pre>
+{% extends "_base.html" %}
+{% import "_macros.html" as m %}
+
+{% block content %}
+    {{ m::para(top="10px") }}
+        You have been invited to join Adaptarr!, Katalyst Education's
+        service for book translators.
+    {{ m::endpara() }}
+
+    {{ m::para() }}
+        To complete you registration please click the button below
+    {{ m::endpara() }}
+
+    {{ m::button(url=url, text="Register here") }}
+
+    {{ m::para() }}
+        Or copy the following URL into your address bar:
+        <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
+    {{ m::endpara() }}
+{% endblock %}
+
+{% block footer %}
+    {{ m::footer(top="6px") }}
+        You are receiving this message because someone has invited {{ email }}
+        to join Adaptarr!.
+    {{ m::endpara() }}
 {% endblock %}
