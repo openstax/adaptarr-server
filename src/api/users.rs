@@ -41,8 +41,9 @@ pub struct InviteParams {
 }
 
 #[derive(Serialize)]
-struct InviteTemplate {
-    url: String,
+struct InviteTemplate<'s> {
+    url: &'s str,
+    email: &'s str,
 }
 
 /// Get list of all users.
@@ -90,7 +91,14 @@ pub fn create_invitation(
     );
 
     state.mailer.send(
-        "invite", params.email.as_str(), "Invitation", &InviteTemplate { url });
+        "invite",
+        params.email.as_str(),
+        "Invitation",
+        &InviteTemplate {
+            url: &url,
+            email: params.email.as_str(),
+        },
+    );
 
     Ok(HttpResponse::Ok().finish())
 }
