@@ -9,7 +9,7 @@ use crate::db::{
     Connection,
     functions::duplicate_document,
     models as db,
-    schema::{documents, drafts, modules, xref_targets},
+    schema::{book_parts, documents, drafts, modules, xref_targets},
 };
 use super::{
     Draft,
@@ -125,6 +125,16 @@ impl Module {
             assignee: self.data.assignee,
             document: self.document.get_public(),
         }
+    }
+
+    /// Query list of books containing this module.
+    pub fn get_books(&self, dbconn: &Connection) -> Result<Vec<Uuid>, DbError> {
+        Ok(book_parts::table
+            .filter(book_parts::module.eq(self.data.id))
+            .get_results::<db::BookPart>(dbconn)?
+            .into_iter()
+            .map(|part| part.book)
+            .collect())
     }
 
     /// Get list of all possible cross-reference targets within this module.

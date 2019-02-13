@@ -64,6 +64,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .api_route("/modules/{id}/files", Method::GET, list_files)
         .api_route("/modules/{id}/files/{name}", Method::GET, get_file)
         .api_route("/modules/{id}/xref-targets", Method::GET, list_xref_targets)
+        .api_route("/modules/{id}/books", Method::GET, list_containing_books)
 }
 
 type Result<T, E=Error> = std::result::Result<T, E>;
@@ -407,6 +408,26 @@ pub fn list_xref_targets(
         .collect();
 
     Ok(Json(targets))
+}
+
+/// Get a list of all books containing this module in them.
+///
+/// ## Method
+///
+/// ```
+/// GET /modules/:id/books
+/// ```
+pub fn list_containing_books(
+    state: actix_web::State<State>,
+    _session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<Vec<Uuid>>> {
+    let db = state.db.get()?;
+    let module = Module::by_id(&*db, *id)?;
+
+    module.get_books(&*db)
+        .map(Json)
+        .map_err(Into::into)
 }
 
 fn de_optional_null<'de, T, D>(de: D) -> std::result::Result<Option<T>, D::Error>
