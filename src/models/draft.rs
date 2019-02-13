@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::db::{
     Connection,
     models as db,
-    schema::{documents, document_files, drafts, modules},
+    schema::{book_parts, documents, document_files, drafts, modules},
 };
 use super::{
     File,
@@ -95,6 +95,16 @@ impl Draft {
             module: self.data.module,
             document: self.document.get_public(),
         }
+    }
+
+    /// Query list of books containing module this draft was derived from.
+    pub fn get_books(&self, dbconn: &Connection) -> Result<Vec<Uuid>, DbError> {
+        Ok(book_parts::table
+            .filter(book_parts::module.eq(self.data.module))
+            .get_results::<db::BookPart>(dbconn)?
+            .into_iter()
+            .map(|part| part.book)
+            .collect())
     }
 
     /// Write into a file in this draft.

@@ -46,6 +46,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.put().api_with_async(update_file);
             r.delete().api_with(delete_file);
         })
+        .api_route("/drafts/{id}/books", Method::GET, list_containing_books)
 }
 
 type Result<T, E=Error> = std::result::Result<T, E>;
@@ -287,4 +288,24 @@ pub fn delete_file(
     draft.delete_file(&*db, &name)?;
 
     Ok(HttpResponse::Ok().finish())
+}
+
+/// Get a list of all books containing the module this draft was derived from.
+///
+/// ## Method
+///
+/// ```
+/// GET /modules/:id/books
+/// ```
+pub fn list_containing_books(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<Uuid>,
+) -> Result<Json<Vec<Uuid>>> {
+    let db = state.db.get()?;
+    let draft = Draft::by_id(&*db, *id, session.user)?;
+
+    draft.get_books(&*db)
+        .map(Json)
+        .map_err(Into::into)
 }
