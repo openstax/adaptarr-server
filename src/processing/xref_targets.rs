@@ -58,6 +58,13 @@ pub fn process_document(dbconn: &Connection, document: &db::Document)
             _ => continue,
         };
 
+        let type_ = match element.name() {
+            "note" => element.attr("type")
+                .unwrap_or("note"),
+            "subfigure" => "figure",
+            name => name,
+        };
+
         let context = match element.name() {
             // Targets which can own other targets set context.
             "exercise" | "figure" => {
@@ -91,7 +98,7 @@ pub fn process_document(dbconn: &Connection, document: &db::Document)
         let target = db::NewXrefTarget {
             document: document.id,
             element: id,
-            type_: element.name(),
+            type_,
             description: description.as_ref().map(String::as_str),
             context,
             counter,
