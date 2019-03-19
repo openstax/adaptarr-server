@@ -11,6 +11,7 @@ use crate::{
         models as db,
         schema::{invites, users, password_reset_tokens, sessions},
     },
+    permissions::PermissionBits,
 };
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
@@ -74,6 +75,7 @@ impl User {
         name: &str,
         password: &str,
         is_super: bool,
+        permissions: PermissionBits,
     ) -> Result<User, CreateUserError> {
         // Generate salt and hash password.
         let mut salt = [0; 16];
@@ -99,6 +101,11 @@ impl User {
                     password: &hash,
                     salt: &salt,
                     is_super,
+                    permissions: if is_super {
+                        std::i32::MAX
+                    } else {
+                        permissions.bits()
+                    },
                 })
                 .get_result::<db::User>(dbcon)
                 .map(|data| User { data })

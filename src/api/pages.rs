@@ -9,10 +9,12 @@ use actix_web::{
     pred,
 };
 
-use crate::models::{
-    Invite,
-    PasswordResetToken,
-    user::{User, PublicData as UserData},
+use crate::{
+    models::{
+        Invite,
+        PasswordResetToken,
+        user::{User, PublicData as UserData},
+    },
 };
 use super::{
     Error,
@@ -149,7 +151,7 @@ pub fn do_login(
 
     // NOTE: This will automatically remove any session that may still exist,
     // we don't have to do it manually here.
-    Session::<Normal>::create(&req, user.id, false);
+    Session::<Normal>::create(&req, &user, false);
 
     Ok(HttpResponse::SeeOther()
         .header("Location", params.next.as_ref().map_or("/", String::as_str))
@@ -225,7 +227,7 @@ pub fn do_elevate(
         );
     }
 
-    Session::<Normal>::create(&req, user.id, true);
+    Session::<Normal>::create(&req, &user, true);
 
     Ok(HttpResponse::SeeOther()
         .header("Location", next.as_ref().map_or("/", String::as_str))
@@ -270,7 +272,7 @@ pub fn do_elevate_json(
             }));
     }
 
-    Session::<Normal>::create(&req, user.id, true);
+    Session::<Normal>::create(&req, &user, true);
 
     Ok(HttpResponse::Ok().json(ElevationResult::Success))
 }
@@ -372,7 +374,7 @@ pub fn do_reset(
             }
 
             let user = token.fulfil(&*db, &password)?;
-            Session::<Normal>::create(&req, user.id, false);
+            Session::<Normal>::create(&req, &user, false);
 
             Ok(HttpResponse::SeeOther()
                 .header("Location", "/")
@@ -456,7 +458,7 @@ pub fn do_register(
 
     let user = invite.fulfil(&*db, &form.name, &form.password)?;
 
-    Session::<Normal>::create(&req, user.id, false);
+    Session::<Normal>::create(&req, &user, false);
 
     Ok(HttpResponse::SeeOther()
         .header("Location", "/")

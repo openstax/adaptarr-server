@@ -101,7 +101,8 @@ table! {
         user -> Int4,
         expires -> Timestamp,
         last_used -> Timestamp,
-        is_super -> Bool,
+        is_elevated -> Bool,
+        permissions -> Int4,
     }
 }
 
@@ -113,6 +114,7 @@ table! {
         password -> Bytea,
         salt -> Bytea,
         is_super -> Bool,
+        permissions -> Int4,
     }
 }
 

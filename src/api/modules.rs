@@ -26,13 +26,14 @@ use crate::{
     },
     import::{ImportModule, ReplaceModule},
     multipart::Multipart,
+    permissions::EditModule,
 };
 use super::{
     Error,
     RouteExt,
     RouterExt,
     State,
-    session::{Session, ElevatedSession},
+    session::Session,
     users::UserId,
 };
 
@@ -123,7 +124,7 @@ pub fn list_assigned(
 /// ```
 pub fn create_module(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditModule>,
     data: Json<NewModule>,
 ) -> Result<Json<ModuleData>> {
     let db = state.db.get()?;
@@ -170,7 +171,7 @@ from_multipart! {
 /// ```
 pub fn create_module_from_zip(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditModule>,
     data: Multipart<NewModuleZip>,
 ) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     let NewModuleZip { title, file } = data.into_inner();
@@ -233,7 +234,7 @@ pub struct ModuleUpdate {
 /// ```
 pub fn update_module(
     state: actix_web::State<State>,
-    session: ElevatedSession,
+    session: Session<EditModule>,
     id: Path<Uuid>,
     update: Json<ModuleUpdate>,
 ) -> Result<HttpResponse> {
@@ -271,7 +272,7 @@ pub fn update_module(
 pub fn replace_module(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditModule>,
     id: Path<Uuid>,
 ) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     future::result(

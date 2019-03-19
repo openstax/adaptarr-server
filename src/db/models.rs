@@ -17,6 +17,8 @@ pub struct User {
     pub salt: Vec<u8>,
     /// Is this user an administrator?
     pub is_super: bool,
+    /// Permissions this user has.
+    pub permissions: i32,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -27,6 +29,7 @@ pub struct NewUser<'a> {
     pub password: &'a [u8],
     pub salt: &'a [u8],
     pub is_super: bool,
+    pub permissions: i32,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug)]
@@ -48,10 +51,12 @@ pub struct Session {
     /// Date of the last use of a session. Sessions which were not used for some
     /// time should expire, even if they are still valid according to `expires`.
     pub last_used: NaiveDateTime,
-    /// If this an administrative session? To limit attack surface
-    /// administrative sessions are granted for a short time, after which they
-    /// become normal sessions again.
-    pub is_super: bool,
+    /// If this an elevated session? To limit attack surface elevated sessions
+    /// are granted for a short time, after which they become normal sessions
+    /// again.
+    pub is_elevated: bool,
+    /// Permissions this session has.
+    pub permissions: i32,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -60,7 +65,8 @@ pub struct NewSession {
     pub user: i32,
     pub expires: NaiveDateTime,
     pub last_used: NaiveDateTime,
-    pub is_super: bool,
+    pub is_elevated: bool,
+    pub permissions: i32,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]

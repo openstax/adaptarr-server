@@ -8,6 +8,7 @@ use crate::{
     db,
     mail::Mailer,
     models::{Invite, User},
+    permissions::PermissionBits,
 };
 
 #[derive(StructOpt)]
@@ -51,7 +52,13 @@ pub struct AddOpts {
 pub fn add_user(cfg: Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let user = User::create(
-        &db, &opts.email, &opts.name, &opts.password, opts.is_super)?;
+        &db,
+        &opts.email,
+        &opts.name,
+        &opts.password,
+        opts.is_super,
+        PermissionBits::normal(),
+    )?;
 
     println!("Created user {}", user.id);
 

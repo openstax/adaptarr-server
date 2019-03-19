@@ -10,16 +10,19 @@ use actix_web::{
 };
 use serde::de::{Deserialize, Deserializer};
 
-use crate::models::{
-    Invite,
-    user::{User, PublicData, UserAuthenticateError},
+use crate::{
+    models::{
+        Invite,
+        user::{User, PublicData, UserAuthenticateError},
+    },
+    permissions::{InviteUser, PermissionBits},
 };
 use super::{
     Error,
     RouteExt,
     RouterExt,
     State,
-    session::{Session, Normal, ElevatedSession},
+    session::{Session, Normal},
 };
 
 /// Configure routes.
@@ -76,7 +79,7 @@ pub fn list_users(
 /// ```
 pub fn create_invitation(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<InviteUser>,
     params: Json<InviteParams>,
 ) -> Result<HttpResponse, Error> {
     let db = state.db.get()?;
@@ -170,7 +173,7 @@ pub fn modify_password(
     user.change_password(&*db, &form.new)?;
 
     // Changing password invalidates all sessions.
-    Session::<Normal>::create(&req, user.id, false);
+    Session::<Normal>::create(&req, &user, false);
 
     Ok(HttpResponse::Ok().finish())
 }

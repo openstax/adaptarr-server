@@ -13,6 +13,7 @@ use crate::{
         schema::{invites, users},
     },
     models::user::{User, CreateUserError},
+    permissions::PermissionBits,
     utils,
 };
 
@@ -78,7 +79,14 @@ impl Invite {
     /// Fulfil an invitation by creating a user.
     pub fn fulfil(self, dbconn: &Connection, name: &str, password: &str)
     -> Result<User, CreateUserError> {
-        User::create(dbconn, &self.email, name, password, false)
+        User::create(
+            dbconn,
+            &self.email,
+            name,
+            password,
+            false,
+            PermissionBits::normal(),
+        )
     }
 }
 

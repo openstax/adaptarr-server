@@ -28,6 +28,7 @@ extern crate uuid;
 extern crate zip;
 
 #[macro_use] extern crate api_derive;
+#[macro_use] extern crate bitflags;
 #[macro_use] extern crate diesel;
 #[macro_use] extern crate failure_derive;
 #[macro_use] extern crate lazy_static;
@@ -54,6 +55,7 @@ mod events;
 mod import;
 mod mail;
 mod models;
+mod permissions;
 mod processing;
 mod templates;
 mod utils;
