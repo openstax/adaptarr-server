@@ -96,6 +96,14 @@ table! {
 }
 
 table! {
+    roles (id) {
+        id -> Int4,
+        name -> Varchar,
+        permissions -> Int4,
+    }
+}
+
+table! {
     sessions (id) {
         id -> Int4,
         user -> Int4,
@@ -115,6 +123,7 @@ table! {
         salt -> Bytea,
         is_super -> Bool,
         permissions -> Int4,
+        role -> Nullable<Int4>,
     }
 }
 
@@ -145,6 +154,7 @@ joinable!(modules -> documents (document));
 joinable!(modules -> users (assignee));
 joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
+joinable!(users -> roles (role));
 joinable!(xref_targets -> documents (document));
 
 allow_tables_to_appear_in_same_query!(
@@ -159,6 +169,7 @@ allow_tables_to_appear_in_same_query!(
     modules,
     module_versions,
     password_reset_tokens,
+    roles,
     sessions,
     users,
     xref_targets,

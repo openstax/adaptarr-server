@@ -19,6 +19,8 @@ pub struct User {
     pub is_super: bool,
     /// Permissions this user has.
     pub permissions: i32,
+    /// ID of this user's role.
+    pub role: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -314,4 +316,21 @@ pub struct NewXrefTarget<'s> {
     pub description: Option<&'s str>,
     pub context: Option<&'s str>,
     pub counter: i32,
+}
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct Role {
+    /// ID of this role.
+    pub id: i32,
+    /// Name of this role.
+    pub name: String,
+    /// Additional permissions a user has when they are a member of this role.
+    pub permissions: i32,
+}
+
+#[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
+#[table_name = "roles"]
+pub struct NewRole<'s> {
+    pub name: &'s str,
+    pub permissions: i32,
 }
