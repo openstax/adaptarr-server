@@ -9,10 +9,11 @@ use crate::{
     db::{
         Connection,
         models as db,
-        schema::{invites, users, password_reset_tokens, sessions},
+        schema::{invites, users, password_reset_tokens, roles, sessions},
     },
     permissions::PermissionBits,
 };
+use super::role::{Role, PublicData as RoleData};
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
     ad: &[],
@@ -30,6 +31,7 @@ static ARGON2_CONFIG: argon2::Config = argon2::Config {
 #[derive(Debug)]
 pub struct User {
     data: db::User,
+    role: Option<Role>,
 }
 
 /// A subset of user's data that can safely be publicly exposed.
@@ -38,34 +40,51 @@ pub struct PublicData {
     id: i32,
     name: String,
     is_super: bool,
+    role: Option<RoleData>,
 }
 
 impl User {
     /// Get all users.
     pub fn all(dbcon: &Connection) -> Result<Vec<User>, DbError> {
         users::table
-            .get_results::<db::User>(dbcon)
-            .map(|v| v.into_iter().map(|data| User { data }).collect())
+            .left_join(roles::table)
+            .get_results::<(db::User, Option<db::Role>)>(dbcon)
+            .map(|v| {
+                v.into_iter()
+                    .map(|(data, role)| User {
+                        data,
+                        role: role.map(Role::from_db),
+                    })
+                    .collect()
+            })
     }
 
     /// Find an user by ID.
     pub fn by_id(dbcon: &Connection, id: i32) -> Result<User, FindUserError> {
         users::table
             .filter(users::id.eq(id))
-            .get_result::<db::User>(dbcon)
+            .left_join(roles::table)
+            .get_result::<(db::User, Option<db::Role>)>(dbcon)
             .optional()?
             .ok_or(FindUserError::NotFound)
-            .map(|data| User { data })
+            .map(|(data, role)| User {
+                data,
+                role: role.map(Role::from_db),
+            })
     }
 
     /// Find an user by email address.
     pub fn by_email(dbcon: &Connection, email: &str) -> Result<User, FindUserError> {
         users::table
             .filter(users::email.eq(email))
-            .get_result::<db::User>(dbcon)
+            .left_join(roles::table)
+            .get_result::<(db::User, Option<db::Role>)>(dbcon)
             .optional()?
             .ok_or(FindUserError::NotFound)
-            .map(|data| User { data })
+            .map(|(data, role)| User {
+                data,
+                role: role.map(Role::from_db),
+            })
     }
 
     /// Create a new user.
@@ -108,7 +127,7 @@ impl User {
                     },
                 })
                 .get_result::<db::User>(dbcon)
-                .map(|data| User { data })
+                .map(|data| User { data, role: None })
                 .map_err(Into::into)
         })
     }
@@ -145,6 +164,7 @@ impl User {
             id,
             name: name.clone(),
             is_super,
+            role: self.role.as_ref().map(Role::get_public),
         }
     }
 

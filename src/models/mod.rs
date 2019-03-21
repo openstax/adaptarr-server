@@ -9,6 +9,7 @@ pub mod file;
 pub mod invite;
 pub mod module;
 pub mod password;
+pub mod role;
 pub mod user;
 pub mod xref_target;
 
@@ -22,6 +23,7 @@ pub use self::{
     invite::Invite,
     module::Module,
     password::PasswordResetToken,
+    role::Role,
     user::User,
     xref_target::XrefTarget,
 };
