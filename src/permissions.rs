@@ -1,4 +1,5 @@
-use serde::ser::{self, SerializeSeq};
+use serde::{de, ser::{self, SerializeSeq}};
+use std::fmt;
 
 bitflags! {
     /// Permissions allow for a fine-grained control over what actions a given
@@ -125,5 +126,73 @@ impl ser::Serialize for PermissionBits {
             seq.serialize_element("module:edit")?;
         }
         seq.end()
+    }
+}
+
+impl<'de> de::Deserialize<'de> for PermissionBits {
+    fn deserialize<D>(de: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        de.deserialize_any(BitsVisitor)
+    }
+}
+
+struct BitsVisitor;
+
+impl<'de> de::Visitor<'de> for BitsVisitor {
+    type Value = PermissionBits;
+
+    fn expecting(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "a set of permissions")
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<PermissionBits, E>
+    where
+        E: de::Error,
+    {
+        if v < std::i32::MIN.into() || v > std::i32::MAX.into() {
+            return Err(E::invalid_type(
+                de::Unexpected::Signed(v), &"a 32-bit integer"));
+        }
+
+        PermissionBits::from_bits(v as i32)
+            .ok_or_else(|| E::invalid_value(
+                de::Unexpected::Signed(v), &"a bit-flag of permissions"))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<PermissionBits, E>
+    where
+        E: de::Error,
+    {
+        self.visit_i64(v as i64)
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<PermissionBits, E>
+    where
+        E: de::Error,
+    {
+        Ok(match v {
+            "user:invite" => PermissionBits::INVITE_USER,
+            "user:delete" => PermissionBits::DELETE_USER,
+            "user:edit-permissions" => PermissionBits::EDIT_USER_PERMISSIONS,
+            "book:edit" => PermissionBits::EDIT_BOOK,
+            "module:edit" => PermissionBits::EDIT_MODULE,
+            _ => return Err(E::invalid_value(
+                de::Unexpected::Str(v), &"a permission name")),
+        })
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<PermissionBits, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        let mut bits = PermissionBits::empty();
+
+        while let Some(permission) = seq.next_element()? {
+            bits.insert(permission);
+        }
+
+        Ok(bits)
     }
 }

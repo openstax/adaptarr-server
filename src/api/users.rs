@@ -15,7 +15,7 @@ use crate::{
         Invite,
         user::{User, PublicData, UserAuthenticateError},
     },
-    permissions::{InviteUser, PermissionBits},
+    permissions::{EditUserPermissions, InviteUser, PermissionBits},
 };
 use super::{
     Error,
@@ -35,7 +35,8 @@ pub fn routes(app: App<State>) -> App<State> {
             r.get().api_with(get_user);
             r.put().f(modify_user);
         })
-        .api_route("/me/password", Method::PUT, modify_password))
+        .api_route("/me/password", Method::PUT, modify_password)
+        .api_route("/{id}/permissions", Method::PUT, modify_permissions))
 }
 
 #[derive(Debug, Deserialize)]
@@ -178,6 +179,33 @@ pub fn modify_password(
     Ok(HttpResponse::Ok().finish())
 }
 
+/// Change user's permissions
+///
+/// ## Method
+///
+/// ```
+/// PUT /users/:id/permissions
+/// ```
+pub fn modify_permissions(
+    _req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    session: Session<EditUserPermissions>,
+    path: Path<UserId>,
+    form: Either<Form<PermissionBits>, Json<PermissionBits>>,
+) -> Result<HttpResponse, Error> {
+    let db = state.db.get()?;
+    let mut user = path.get_user(&*state, &session)?;
+
+    let form = match form {
+        Either::A(form) => form.into_inner(),
+        Either::B(json) => json.into_inner(),
+    };
+
+    user.set_permissions(&*db, form)?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 /// ID of a user, can be either a number of a string `"me"`.
 #[derive(Debug)]
 pub enum UserId {
@@ -197,7 +225,7 @@ impl UserId {
         }
     }
 
-    pub fn get_user(&self, state: &State, session: &Session) -> Result<User, super::Error> {
+    pub fn get_user<P>(&self, state: &State, session: &Session<P>) -> Result<User, super::Error> {
         let db = state.db.get()?;
         User::by_id(&*db, self.as_id(&session))
             .map_err(Into::into)

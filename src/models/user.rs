@@ -187,6 +187,26 @@ impl User {
 
         Ok(())
     }
+
+    /// Change user's permissions.
+    pub fn set_permissions(
+        &mut self,
+        dbcon: &Connection,
+        permissions: PermissionBits,
+    ) -> Result<(), DbError> {
+        // Superusers have all permissions.
+        if self.data.is_super {
+            return Ok(());
+        }
+
+        let data = diesel::update(&self.data)
+            .set(users::permissions.eq(permissions.bits()))
+            .get_result::<db::User>(dbcon)?;
+
+        self.data = data;
+
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for User {
