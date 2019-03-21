@@ -4,6 +4,7 @@ use std::fmt;
 bitflags! {
     /// Permissions allow for a fine-grained control over what actions a given
     /// user can take.
+    #[derive(Default)]
     pub struct PermissionBits: i32 {
         /// All bits allocated for user management permissions.
         const MANAGE_USERS_BITS = 0x0000000f;
@@ -13,12 +14,18 @@ bitflags! {
         const DELETE_USER = 0x00000002;
         /// Permission holder can change other user's permissions.
         const EDIT_USER_PERMISSIONS = 0x00000004;
+        /// Permission holder can change other user's roles.
+        const ASSIGN_ROLE = 0x00000008;
         /// All bits allocated for content management permissions.
         const MANAGE_CONTENT_BITS = 0x000000f0;
         /// Permission holder can create, edit, and delete books.
         const EDIT_BOOK = 0x00000010;
         /// Permission holder can create, edit, and delete modules.
         const EDIT_MODULE = 0x00000020;
+        /// All bits allocated for role management permissions.
+        const MANAGE_ROLES_BITS = 0x00000f00;
+        /// Create, edit, and delete roles.
+        const EDIT_ROLE = 0x00000100;
     }
 }
 
@@ -73,8 +80,10 @@ macro_rules! permission {
 permission!(InviteUser = PermissionBits::INVITE_USER);
 permission!(DeleteUser = PermissionBits::DELETE_USER);
 permission!(EditUserPermissions = PermissionBits::EDIT_USER_PERMISSIONS);
+permission!(AssignRole = PermissionBits::ASSIGN_ROLE);
 permission!(EditBook = PermissionBits::EDIT_BOOK);
 permission!(EditModule = PermissionBits::EDIT_MODULE);
+permission!(EditRole = PermissionBits::EDIT_ROLE);
 
 #[derive(ApiError, Debug, Fail)]
 #[api(status = "FORBIDDEN", code = "user:insufficient-permissions")]
@@ -119,11 +128,17 @@ impl ser::Serialize for PermissionBits {
         if self.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
             seq.serialize_element("user:edit-permissions")?;
         }
+        if self.contains(PermissionBits::ASSIGN_ROLE) {
+            seq.serialize_element("user:assign-role")?;
+        }
         if self.contains(PermissionBits::EDIT_BOOK) {
             seq.serialize_element("book:edit")?;
         }
         if self.contains(PermissionBits::EDIT_MODULE) {
             seq.serialize_element("module:edit")?;
+        }
+        if self.contains(PermissionBits::EDIT_ROLE) {
+            seq.serialize_element("role:edit")?;
         }
         seq.end()
     }
@@ -176,8 +191,10 @@ impl<'de> de::Visitor<'de> for BitsVisitor {
             "user:invite" => PermissionBits::INVITE_USER,
             "user:delete" => PermissionBits::DELETE_USER,
             "user:edit-permissions" => PermissionBits::EDIT_USER_PERMISSIONS,
+            "user:assign-role" => PermissionBits::ASSIGN_ROLE,
             "book:edit" => PermissionBits::EDIT_BOOK,
             "module:edit" => PermissionBits::EDIT_MODULE,
+            "role:edit" => PermissionBits::EDIT_ROLE,
             _ => return Err(E::invalid_value(
                 de::Unexpected::Str(v), &"a permission name")),
         })
