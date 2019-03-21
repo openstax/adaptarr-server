@@ -1,3 +1,5 @@
+use serde::ser::{self, SerializeSeq};
+
 bitflags! {
     /// Permissions allow for a fine-grained control over what actions a given
     /// user can take.
@@ -99,4 +101,29 @@ macro_rules! impl_permissons {
 impl_permissons! {
     (A, B);
     (A, B, C);
+}
+
+impl ser::Serialize for PermissionBits {
+    fn serialize<S>(&self, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        let mut seq = ser.serialize_seq(Some(self.bits().count_ones() as usize))?;
+        if self.contains(PermissionBits::INVITE_USER) {
+            seq.serialize_element("user:invite")?;
+        }
+        if self.contains(PermissionBits::DELETE_USER) {
+            seq.serialize_element("user:delete")?;
+        }
+        if self.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
+            seq.serialize_element("user:edit-permissions")?;
+        }
+        if self.contains(PermissionBits::EDIT_BOOK) {
+            seq.serialize_element("book:edit")?;
+        }
+        if self.contains(PermissionBits::EDIT_MODULE) {
+            seq.serialize_element("module:edit")?;
+        }
+        seq.end()
+    }
 }
