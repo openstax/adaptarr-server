@@ -286,6 +286,10 @@ impl<P> Session<P> {
             destroy: true,
         })
     }
+
+    pub fn user_id(&self) -> i32 {
+        self.data.user
+    }
 }
 
 impl<P> std::ops::Deref for Session<P> {

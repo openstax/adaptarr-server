@@ -168,6 +168,19 @@ impl User {
         }
     }
 
+    /// Get all permissions this user has.
+    ///
+    /// The `role` argument controls whether role permissions are included in
+    /// the returned permission set.
+    pub fn permissions(&self, role: bool) -> PermissionBits {
+        let role = if role {
+            self.role.as_ref().map(Role::permissions).unwrap_or_default()
+        } else {
+            PermissionBits::empty()
+        };
+        PermissionBits::from_bits_truncate(self.data.permissions) | role
+    }
+
     /// Change user's password.
     pub fn change_password(&mut self, dbcon: &Connection, password: &str)
     -> Result<(), ChangePasswordError> {

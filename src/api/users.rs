@@ -36,7 +36,10 @@ pub fn routes(app: App<State>) -> App<State> {
             r.put().f(modify_user);
         })
         .api_route("/me/password", Method::PUT, modify_password)
-        .api_route("/{id}/permissions", Method::PUT, modify_permissions))
+        .resource("/{id}/permissions", |r| {
+            r.get().api_with(get_permissions);
+            r.put().api_with(modify_permissions);
+        }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -179,6 +182,33 @@ pub fn modify_password(
     Ok(HttpResponse::Ok().finish())
 }
 
+/// Get user's permissions
+///
+/// ## Method
+///
+/// ```
+/// GET /users/:id/permissions
+/// ```
+pub fn get_permissions(
+    state: actix_web::State<State>,
+    session: Session,
+    path: Path<UserId>,
+) -> Result<Json<PermissionBits>, Error> {
+    let db = state.db.get()?;
+    let user = path.get_user(&*state, &session)?;
+    let current = User::by_id(&*db, session.user_id())
+        .expect("active session for a deleted user")
+        .permissions(false);
+
+    if path.is_current() {
+        Ok(Json(user.permissions(true)))
+    } else if !current.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
+        Err(Forbidden.into())
+    } else {
+        Ok(Json(user.permissions(false)))
+    }
+}
+
 /// Change user's permissions
 ///
 /// ## Method
@@ -230,6 +260,13 @@ impl UserId {
         User::by_id(&*db, self.as_id(&session))
             .map_err(Into::into)
     }
+
+    pub fn is_current(&self) -> bool {
+        match *self {
+            UserId::Current => true,
+            _ => false,
+        }
+    }
 }
 
 // We need to implement it manually, as untagged unions are not supported
@@ -254,3 +291,8 @@ impl<'de> Deserialize<'de> for UserId {
                 "data was neither a number nor a valid string"))
     }
 }
+
+#[derive(ApiError, Debug, Fail)]
+#[api(status = "FORBIDDEN")]
+#[fail(display = "Forbidden")]
+struct Forbidden;

@@ -77,6 +77,11 @@ impl Role {
         }
     }
 
+    /// Get all permissions this role has.
+    pub fn permissions(&self) -> PermissionBits {
+        PermissionBits::from_bits_truncate(self.data.permissions)
+    }
+
     /// Set this role's name.
     pub fn set_name(&mut self, dbcon: &Connection, name: &str)
     -> Result<(), DbError> {
