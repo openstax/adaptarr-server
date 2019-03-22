@@ -232,9 +232,28 @@ impl User {
             return Ok(());
         }
 
-        let data = diesel::update(&self.data)
-            .set(users::permissions.eq(permissions.bits()))
-            .get_result::<db::User>(dbcon)?;
+        let sessions_perms = permissions
+            | self.role.as_ref().map_or(PermissionBits::empty(), Role::permissions);
+
+        let data = dbcon.transaction(|| {
+            // Since we might be removing a permission we also need to update
+            // user's sessions.
+            diesel::update(sessions::table.filter(
+                    sessions::user.eq(self.id).and(
+                        sessions::is_elevated.eq(false))))
+                .set(sessions::permissions.eq(
+                    (sessions_perms & PermissionBits::normal()).bits()))
+                .execute(dbcon)?;
+            diesel::update(sessions::table.filter(
+                    sessions::user.eq(self.id).and(
+                        sessions::is_elevated.eq(false))))
+                .set(sessions::permissions.eq(sessions_perms.bits()))
+                .execute(dbcon)?;
+
+            diesel::update(&self.data)
+                .set(users::permissions.eq(permissions.bits()))
+                .get_result::<db::User>(dbcon)
+        })?;
 
         self.data = data;
 
@@ -247,11 +266,33 @@ impl User {
         dbcon: &Connection,
         role: Option<&Role>,
     ) -> Result<(), DbError> {
-        let role_id = role.map(|role| role.id);
+        let (role_id, sessions_perms) = match role {
+            Some(role) => (
+                Some(role.id),
+                self.permissions(false) | role.permissions(),
+            ),
+            None => (None, self.permissions(false)),
+        };
 
-        let data = diesel::update(&self.data)
-            .set(users::role.eq(role_id))
-            .get_result::<db::User>(dbcon)?;
+        let data = dbcon.transaction(|| {
+            // Since user's previous role might have had more permissions
+            // we also need to update user's sessions.
+            diesel::update(sessions::table.filter(
+                    sessions::user.eq(self.id).and(
+                        sessions::is_elevated.eq(false))))
+                .set(sessions::permissions.eq(
+                    (sessions_perms & PermissionBits::normal()).bits()))
+                .execute(dbcon)?;
+            diesel::update(sessions::table.filter(
+                    sessions::user.eq(self.id).and(
+                        sessions::is_elevated.eq(false))))
+                .set(sessions::permissions.eq(sessions_perms.bits()))
+                .execute(dbcon)?;
+
+            diesel::update(&self.data)
+                .set(users::role.eq(role_id))
+                .get_result::<db::User>(dbcon)
+        })?;
 
         self.data = data;
         self.role = role.map(Clone::clone);
