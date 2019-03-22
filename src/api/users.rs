@@ -13,6 +13,7 @@ use serde::de::{Deserialize, Deserializer};
 use crate::{
     models::{
         Invite,
+        Role,
         user::{User, PublicData, UserAuthenticateError},
     },
     permissions::{EditUserPermissions, InviteUser, PermissionBits},
@@ -33,8 +34,9 @@ pub fn routes(app: App<State>) -> App<State> {
         .api_route("/invite", Method::POST, create_invitation)
         .resource("/{id}", |r| {
             r.get().api_with(get_user);
-            r.put().f(modify_user);
+            r.put().api_with(modify_user);
         })
+        .route("/me", Method::PUT, modify_user_self)
         .api_route("/me/password", Method::PUT, modify_password)
         .resource("/{id}/permissions", |r| {
             r.get().api_with(get_permissions);
@@ -132,10 +134,55 @@ pub fn get_user(
 /// ## Method
 ///
 /// ```
+/// PUT /users/me
+/// ```
+pub fn modify_user_self(_req: HttpRequest<State>) -> HttpResponse {
+    unimplemented!()
+}
+
+#[derive(Deserialize)]
+pub struct UserUpdate {
+    #[serde(default, deserialize_with = "de_optional_null")]
+    role: Option<Option<i32>>,
+}
+
+/// Update user information.
+///
+/// ## Method
+///
+/// ```
 /// PUT /users/:id
 /// ```
-pub fn modify_user(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn modify_user(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<i32>,
+    form: Either<Form<UserUpdate>, Json<UserUpdate>>,
+) -> Result<Json<PublicData>, Error> {
+    let db = state.db.get()?;
+    let permissions = session.permissions();
+    let mut user = User::by_id(&*db, id.into_inner())?;
+
+    let form = match form {
+        Either::A(form) => form.into_inner(),
+        Either::B(json) => json.into_inner(),
+    };
+
+    let dbcon = &*db;
+    use diesel::Connection;
+    dbcon.transaction::<_, Error, _>(|| {
+        if let Some(role) = form.role {
+            permissions.require(PermissionBits::ASSIGN_ROLE)?;
+            let role = role.map(|id| Role::by_id(dbcon, id))
+                .transpose()?;
+
+            user.set_role(dbcon, role.as_ref())?;
+        }
+
+        Ok(())
+    })?;
+
+    Ok(Json(user.get_public()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -296,3 +343,11 @@ impl<'de> Deserialize<'de> for UserId {
 #[api(status = "FORBIDDEN")]
 #[fail(display = "Forbidden")]
 struct Forbidden;
+
+fn de_optional_null<'de, T, D>(de: D) -> std::result::Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    T::deserialize(de).map(Some)
+}

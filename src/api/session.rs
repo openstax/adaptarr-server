@@ -290,6 +290,10 @@ impl<P> Session<P> {
     pub fn user_id(&self) -> i32 {
         self.data.user
     }
+
+    pub fn permissions(&self) -> PermissionBits {
+        PermissionBits::from_bits_truncate(self.data.permissions)
+    }
 }
 
 impl<P> std::ops::Deref for Session<P> {

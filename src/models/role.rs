@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// Role a user can take.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Role {
     data: db::Role,
 }

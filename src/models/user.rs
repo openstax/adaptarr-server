@@ -240,6 +240,24 @@ impl User {
 
         Ok(())
     }
+
+    /// Change user's role.
+    pub fn set_role(
+        &mut self,
+        dbcon: &Connection,
+        role: Option<&Role>,
+    ) -> Result<(), DbError> {
+        let role_id = role.map(|role| role.id);
+
+        let data = diesel::update(&self.data)
+            .set(users::role.eq(role_id))
+            .get_result::<db::User>(dbcon)?;
+
+        self.data = data;
+        self.role = role.map(Clone::clone);
+
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for User {
