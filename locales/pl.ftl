@@ -1,0 +1,1 @@
+locale-name = Polski
