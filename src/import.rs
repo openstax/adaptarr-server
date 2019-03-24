@@ -22,6 +22,14 @@ use crate::{
     processing::{TargetProcessor, ProcessDocument},
 };
 
+/// CNX includes in its ZIP exports a number of artefacts which we have no use
+/// for, and which may cause problems when importing back into CNX. This array
+/// contains names of such artefacts.
+const SKIP_FILES: &[&str] = &[
+    "index.cnxml.html",
+    "index_auto_generated.cnxml",
+];
+
 /// Request a new module to be created from contents of a ZIP file
 pub struct ImportModule {
     pub title: String,
@@ -165,6 +173,10 @@ impl Importer {
                 .unwrap()
                 .to_owned();
 
+            if SKIP_FILES.contains(&name.as_str()) {
+                continue;
+            }
+
             let file = File::from_read(&*db, &self.config, file)?;
 
             files.push((name, file));
@@ -302,6 +314,10 @@ impl Importer {
 
             // Don't import index.cnxml twice.
             if name == "index.cnxml" {
+                continue;
+            }
+
+            if SKIP_FILES.contains(&name.as_str()) {
                 continue;
             }
 
