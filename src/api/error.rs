@@ -106,12 +106,13 @@ impl<R: Responder> Responder for ApiResult<R> {
                             raw: err.to_string(),
                         })
                 } else {
+                    error!("{}", err);
                     HttpResponse::new(err.status())
                 }
             })),
             Error::Payload(e) => Err(e.into()),
             _ => Ok(AsyncResult::ok({
-                // TODO: log error
+                error!("{}", err);
                 HttpResponse::InternalServerError()
                     .finish()
             })),
