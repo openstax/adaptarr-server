@@ -2,15 +2,15 @@
 {% block body %}
     <form method="post">
         {% if error %}
-            <div class="error">{{ error }}</div>
+            <div class="error">{{ _(key="register-error", code=error) }}</div>
         {% endif %}
 
-        <input type="text" name="name" placeholder="Name">
+        <input type="text" name="name" placeholder="{{ _(key="register-field-name") }}">
         <input type="email" name="email" value="{{ email }}" readonly>
-        <input type="password" name="password" placeholder="Password">
-        <input type="password" name="password1" placeholder="Password">
+        <input type="password" name="password" placeholder="{{ _(key="register-field-password") }}">
+        <input type="password" name="password1" placeholder="{{ _(key="register-field-repeat-password") }}">
         <input type="hidden" name="invite" value="{{ invite }}">
-        <input type="submit" value="Register">
+        <input type="submit" value="{{ _(key="register-submit") }}">
     </form>
 {% endblock body %}
 

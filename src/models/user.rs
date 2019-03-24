@@ -242,15 +242,6 @@ pub enum UserAuthenticateError {
     BadPassword,
 }
 
-impl UserAuthenticateError {
-    pub fn is_internal(&self) -> bool {
-        match *self {
-            UserAuthenticateError::Internal(_) => true,
-            _ => false,
-        }
-    }
-}
-
 impl_from! { for UserAuthenticateError ;
     DbError => |e| UserAuthenticateError::Internal(e),
     FindUserError => |e| match e {

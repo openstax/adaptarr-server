@@ -8,17 +8,22 @@ use actix_web::{
     middleware::Logger,
     pred,
 };
+use std::collections::HashMap;
 
-use crate::models::{
-    Invite,
-    PasswordResetToken,
-    user::{User, PublicData as UserData},
+use crate::{
+    i18n::Locale,
+    models::{
+        Invite,
+        PasswordResetToken,
+        user::{User, PublicData as UserData},
+    },
 };
 use super::{
     Error,
     RouteExt,
     RouterExt,
     State,
+    error::ApiError,
     session::{SessionManager, Session, Normal},
 };
 
@@ -77,8 +82,8 @@ pub struct LoginQuery {
 }
 
 #[derive(Debug, Serialize)]
-struct LoginTemplate {
-    error: Option<String>,
+struct LoginTemplate<'error> {
+    error: Option<&'error str>,
     next: Option<String>,
     action: LoginAction,
 }
@@ -92,6 +97,7 @@ struct LoginTemplate {
 /// ```
 pub fn login(
     session: Option<Session>,
+    locale: &'static Locale<'static>,
     query: Query<LoginQuery>,
 ) -> RenderedTemplate {
     if let Some(_) = session {
@@ -102,7 +108,7 @@ pub fn login(
 
     let LoginQuery { next, action } = query.into_inner();
 
-    render("login.html", &LoginTemplate {
+    render(locale, "login.html", &LoginTemplate {
         error: None,
         next,
         action,
@@ -125,6 +131,7 @@ pub struct LoginCredentials {
 /// ```
 pub fn do_login(
     req: HttpRequest<State>,
+    locale: &'static Locale<'static>,
     params: Form<LoginCredentials>,
 ) -> RenderedTemplate {
     let db = &*req.state().db.get()?;
@@ -132,19 +139,21 @@ pub fn do_login(
     let user = match User::authenticate(db, &params.email, &params.password) {
         Ok(user) => user,
         Err(err) => {
-            if err.is_internal() {
-                return Err(err.into());
+            if let Some(code) = err.code() {
+                return render_code(
+                    locale,
+                    StatusCode::BAD_REQUEST,
+                    "login.html",
+                    &LoginTemplate {
+                        error: Some(code),
+                        next: params.into_inner().next,
+                        action: LoginAction::default(),
+                    },
+                );
             }
-            return render_code(
-                StatusCode::BAD_REQUEST,
-                "login.html",
-                &LoginTemplate {
-                    error: Some(err.to_string()),
-                    next: params.into_inner().next,
-                    action: LoginAction::default(),
-                },
-            );
-        }
+
+            return Err(err.into());
+        },
     };
 
     // NOTE: This will automatically remove any session that may still exist,
@@ -166,6 +175,7 @@ pub fn do_login(
 pub fn elevate(
     state: actix_web::State<State>,
     session: Session,
+    locale: &'static Locale<'static>,
     query: Query<LoginQuery>,
 ) -> RenderedTemplate {
     let db = state.db.get()?;
@@ -176,7 +186,7 @@ pub fn elevate(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    render("elevate.html", &LoginTemplate {
+    render(locale, "elevate.html", &LoginTemplate {
         error: None,
         next,
         action,
@@ -203,6 +213,7 @@ pub fn do_elevate(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
     session: Session,
+    locale: &'static Locale<'static>,
     form: Form<ElevateCredentials>,
 ) -> RenderedTemplate {
     let db = state.db.get()?;
@@ -215,10 +226,11 @@ pub fn do_elevate(
 
     if !user.check_password(&password) {
         return render_code(
+            locale,
             StatusCode::BAD_REQUEST,
             "elevate.html",
             &LoginTemplate {
-                error: Some("Bad password".to_string()),
+                error: Some("user:authenticate:bad-password"),
                 next,
                 action,
             },
@@ -253,6 +265,7 @@ pub fn do_elevate_json(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
     session: Session,
+    locale: &'static Locale<'static>,
     form: Form<ElevateCredentials>,
 ) -> RenderedTemplate {
     let db = state.db.get()?;
@@ -264,10 +277,20 @@ pub fn do_elevate_json(
     }
 
     if !user.check_password(&password) {
+        let mut args = HashMap::new();
+        args.insert("code", "user:authenticate:bad-password".into());
+
+        let message = match locale.format("elevate-error", &args) {
+            Some(message) => message,
+            None => {
+                warn!("Message elevate-error missing from locale {}",
+                    locale.code);
+                "".to_string()
+            }
+        };
+
         return Ok(HttpResponse::BadRequest()
-            .json(ElevationResult::Error {
-                message: "Bad password".to_string(),
-            }));
+            .json(ElevationResult::Error { message }));
     }
 
     Session::<Normal>::create(&req, user.id, true);
@@ -282,9 +305,13 @@ pub fn do_elevate_json(
 /// ```
 /// GET /logout
 /// ```
-pub fn logout((req, sess): (HttpRequest<State>, Session)) -> RenderedTemplate {
+pub fn logout(
+    req: HttpRequest<State>,
+    sess: Session,
+    locale: &'static Locale<'static>
+) -> RenderedTemplate {
     Session::destroy(&req, sess);
-    render("logout.html", &Empty {})
+    render(locale, "logout.html", &Empty {})
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -305,8 +332,11 @@ struct ResetTemplate<'s> {
 /// ```
 /// GET /reset
 /// ```
-pub fn reset(query: Query<ResetQuery>) -> RenderedTemplate {
-    render("reset.html", &*query)
+pub fn reset(
+    query: Query<ResetQuery>,
+    locale: &'static Locale<'static>,
+) -> RenderedTemplate {
+    render(locale, "reset.html", &*query)
 }
 
 #[derive(Debug, Deserialize)]
@@ -338,13 +368,31 @@ struct ResetMail<'s> {
 pub fn do_reset(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
+    locale: &'static Locale<'static>,
     form: Form<ResetForm>,
 ) -> RenderedTemplate {
     let db = state.db.get()?;
 
     match form.into_inner() {
         ResetForm::CreateToken { email } => {
-            let user = User::by_email(&*db, &email)?;
+            let user = match User::by_email(&*db, &email) {
+                Ok(user) => user,
+                Err(error) => {
+                    if let Some(code) = error.code() {
+                        return render_code(
+                            locale,
+                            StatusCode::BAD_REQUEST,
+                            "reset.html",
+                            &ResetTemplate {
+                                error: Some(code),
+                                token: None,
+                            },
+                        );
+                    }
+
+                    return Err(error.into());
+                }
+            };
             let token = PasswordResetToken::create(&*db, &user)?;
 
             let code = token.get_code(&state.config);
@@ -358,17 +406,41 @@ pub fn do_reset(
                     url: &url,
                 });
 
-            render("reset_token_sent.html", &Empty {})
+            render(locale, "reset_token_sent.html", &Empty {})
         }
         ResetForm::FulfilToken { password, password1, token: token_str } => {
-            let token = PasswordResetToken::from_code(
-                &*db, &state.config, &token_str)?;
+
+            let token = match PasswordResetToken::from_code(
+                &*db, &state.config, &token_str)
+            {
+                Ok(token) => token,
+                Err(error) => {
+                    if let Some(code) = error.code() {
+                        return render_code(
+                            locale,
+                            StatusCode::BAD_REQUEST,
+                            "reset.html",
+                            &ResetTemplate {
+                                error: Some(code),
+                                token: None,
+                            },
+                        );
+                    }
+
+                    return Err(error.into());
+                }
+            };
 
             if password != password1 {
-                return render_code(StatusCode::BAD_REQUEST, "reset.html", &ResetTemplate {
-                    error: Some("Passwords don't match"),
-                    token: Some(&token_str),
-                });
+                return render_code(
+                    locale,
+                    StatusCode::BAD_REQUEST,
+                    "reset.html",
+                    &ResetTemplate {
+                        error: Some("password:reset:passwords-dont-match"),
+                        token: Some(&token_str),
+                    },
+                );
             }
 
             let user = token.fulfil(&*db, &password)?;
@@ -402,12 +474,13 @@ struct RegisterTemplate<'s> {
 /// ```
 pub fn register(
     state: actix_web::State<State>,
+    locale: &'static Locale<'static>,
     query: Query<RegisterQuery>,
 ) -> RenderedTemplate {
     let db = state.db.get()?;
     let invite = Invite::from_code(&*db, &state.config, &query.invite)?;
 
-    render("register.html", &RegisterTemplate {
+    render(locale, "register.html", &RegisterTemplate {
         error: None,
         email: &invite.email,
         invite: &query.invite,
@@ -433,25 +506,55 @@ pub struct RegisterForm {
 pub fn do_register(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
+    locale: &'static Locale<'static>,
     form: Form<RegisterForm>,
 ) -> RenderedTemplate {
     let db = state.db.get()?;
-    let invite = Invite::from_code(&*db, &state.config, &form.invite)?;
+
+    let invite = match Invite::from_code(&*db, &state.config, &form.invite) {
+        Ok(invite) => invite,
+        Err(error) => {
+            if let Some(code) = error.code() {
+                return render_code(
+                    locale,
+                    StatusCode::BAD_REQUEST,
+                    "register.html",
+                    &RegisterTemplate {
+                        error: Some(code),
+                        email: &form.email,
+                        invite: &form.invite,
+                    }
+                );
+            }
+
+            return Err(error.into());
+        }
+    };
 
     if form.password != form.password1 {
-        return render_code(StatusCode::BAD_REQUEST, "register.html", &RegisterTemplate {
-            error: Some("Passwords don't match"),
-            email: &invite.email,
-            invite: &form.invite,
-        });
+        return render_code(
+            locale,
+            StatusCode::BAD_REQUEST,
+            "register.html",
+            &RegisterTemplate {
+                error: Some("user:register:passwords-dont-match"),
+                email: &invite.email,
+                invite: &form.invite,
+            },
+        );
     }
 
     if form.email != invite.email {
-        return render_code(StatusCode::BAD_REQUEST, "register.html", &RegisterTemplate {
-            error: Some("You can't change your email during registration"),
-            email: &invite.email,
-            invite: &form.invite,
-        });
+        return render_code(
+            locale,
+            StatusCode::BAD_REQUEST,
+            "register.html",
+            &RegisterTemplate {
+                error: Some("user:register:email-changed"),
+                email: &invite.email,
+                invite: &form.invite,
+            },
+        );
     }
 
     let user = invite.fulfil(&*db, &form.name, &form.password)?;
@@ -474,23 +577,27 @@ type RenderedTemplate = Result<HttpResponse, Error>;
 ///
 /// This is a small wrapper around [`Tera::render`] which also handles errors
 /// and transforms them into a usable response.
-fn render<T>(name: &str, context: &T) -> RenderedTemplate
+fn render<T>(locale: &'static Locale<'static>, name: &str, context: &T)
+-> RenderedTemplate
 where
     T: serde::Serialize,
 {
-    render_code(StatusCode::OK, name, context)
+    render_code(locale, StatusCode::OK, name, context)
 }
 
 /// Render a named template with a given context and given status code.
 ///
 /// This is a small wrapper around [`Tera::render`] which also handles errors
 /// and transforms them into a usable response.
-fn render_code<T>(code: StatusCode, name: &str, context: &T) -> RenderedTemplate
+fn render_code<T>(
+    locale: &'static Locale<'static>, code: StatusCode, name: &str, context: &T
+) -> RenderedTemplate
 where
     T: serde::Serialize,
 {
+    use crate::templates::LocalizedTera;
     crate::templates::PAGES
-        .render(name, context)
+        .render_i18n(name, context, locale)
         .map(|r| HttpResponse::build(code).body(r))
         .map_err(Into::into)
 }

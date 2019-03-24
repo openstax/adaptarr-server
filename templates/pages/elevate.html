@@ -68,23 +68,25 @@
 {% endblock %}
 {% block body %}
     <form method="post">
+        {% filter translate(key = "elevate-entering-superuser-mode") %}
         <p>You're entering superuser mode</p>
         <p>We won't ask for your password again in the next 15 minutes</p>
+        {% endfilter %}
 
         {% if error %}
-            <div class="error">{{ error }}</div>
+            <div class="error">{{ _(key="elevate-error", code=error) }}</div>
         {% elif action == 'message' %}
             <div class="error"></div>
         {% endif %}
 
-        <input type="password" name="password" placeholder="Password">
+        <input type="password" name="password" placeholder="{{ _(key="elevate-field-password") }}">
         <input type="hidden" name="action" value="{{ action }}">
 
         {% if next %}
             <input type="hidden" name="next" value="{{ next }}">
         {% endif %}
 
-        <input type="submit" value="Authorize">
+        <input type="submit" value="{{ _(key="elevate-submit") }}">
 
         {% if action == "message" %}
             <div class="overlay">

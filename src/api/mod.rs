@@ -10,6 +10,7 @@ use super::{
     config::Config,
     db,
     events::{self as event_manager, EventManager},
+    i18n::I18n,
     import::Importer,
     mail::Mailer,
     processing::TargetProcessor,
@@ -28,9 +29,11 @@ mod modules;
 mod pages;
 mod session;
 mod users;
+mod util;
 
 /// Start an API server.
 pub fn start(cfg: Config) -> Result<()> {
+    let i18n = I18n::load()?;
     let system = System::new("adaptarr");
 
     let db = db::pool(&cfg)?;
@@ -41,6 +44,7 @@ pub fn start(cfg: Config) -> Result<()> {
         db: db.clone(),
         mailer: Mailer::from_config(cfg.mail.clone())?,
         events: event_manager::start(db.clone()),
+        i18n,
         importer: Importer::start(
             db.clone(), cfg.storage.clone(), xref_processor.clone()),
         xref_processor,
@@ -76,6 +80,8 @@ pub struct State {
     pub mailer: Mailer,
     /// Event manager.
     pub events: Addr<EventManager>,
+    /// Localization subsystem.
+    pub i18n: I18n<'static>,
     /// ZIP importer.
     pub importer: Addr<Importer>,
     /// Cross-reference processing service.

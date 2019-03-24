@@ -1,7 +1,12 @@
 use fluent::{FluentBundle, FluentResource};
-use fluent_bundle::errors::FluentError;
+use fluent_bundle::{errors::FluentError, types::FluentValue};
 use fluent_syntax::parser::errors::ParserError;
-use std::{fmt::{self, Write as _}, fs, str::FromStr};
+use std::{
+    collections::HashMap,
+    fmt::{self, Write as _},
+    fs,
+    str::FromStr,
+};
 
 use crate::Result;
 
@@ -21,7 +26,7 @@ pub struct LanguageTag(String);
 pub struct LanguageRange(String);
 
 pub struct Locale<'bundle> {
-    code: LanguageTag,
+    pub code: LanguageTag,
     messages: FluentBundle<'bundle>,
 }
 
@@ -108,6 +113,21 @@ impl<'bundle> I18n<'bundle> {
 pub enum I18nError {
     #[fail(display = "Locale name is not valid UTF-8")]
     LocaleNameUtf8,
+}
+
+impl<'bundle> Locale<'bundle> {
+    pub fn format(&self, key: &str, args: &HashMap<&str, FluentValue>)
+    -> Option<String> {
+        let (value, errors) = self.messages.format(key, Some(args))?;
+
+        if errors.is_empty() {
+            Some(value)
+        } else {
+            error!("Could not format message {} in locale {}:{}",
+                key, self.code, format_errors(errors.as_slice()));
+            None
+        }
+    }
 }
 
 impl LanguageTag {
