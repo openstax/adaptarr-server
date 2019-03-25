@@ -1,6 +1,8 @@
+{%- filter translate(key="mail-invite-text", url=url) -%}
 You have been invited to join Adaptarr!, Katalyst Education's service
 for book translators.
 
 To complete you registration please go to following URL
 
     {{ url }}
+{%- endfilter -%}

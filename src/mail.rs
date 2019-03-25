@@ -1,11 +1,12 @@
 use lettre::{EmailTransport, SendmailTransport};
 use lettre_email::{Email, EmailBuilder, IntoMailbox, Mailbox};
 use serde::{Deserializer, Serialize};
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::HashMap};
 
 use crate::{
     Result,
-    templates::MAILS,
+    i18n::Locale,
+    templates::{LocalizedTera, MAILS},
 };
 
 pub struct Mailer {
@@ -52,19 +53,31 @@ impl Mailer {
         template: &str,
         to: M,
         subject: &str,
-        context: &C
+        context: &C,
+        locale: &'static Locale<'static>,
     )
     where
         M: IntoMailbox,
         C: Serialize,
     {
-        let html = MAILS.render(&format!("{}.html", template), context)
+        let subject = match locale.format(subject, &HashMap::new()) {
+            Some(subject) => subject,
+            None => {
+                error!("Message {} is missing from locale {}",
+                    subject, locale.code);
+                subject.to_string()
+            }
+        };
+
+        let html = MAILS.render_i18n(
+                &format!("{}.html", template), context, locale)
             .expect("template to render");
-        let text = MAILS.render(&format!("{}.txt", template), context)
+        let text = MAILS.render_i18n(
+                &format!("{}.txt", template), context, locale)
             .expect("template to render");
 
         self.transport.borrow_mut()
-            .send(&self.config, to.into_mailbox(), subject, html, text);
+            .send(&self.config, to.into_mailbox(), &subject, html, text);
     }
 }
 

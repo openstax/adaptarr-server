@@ -11,6 +11,7 @@ use crate::{
         models as db,
         schema::{invites, users, password_reset_tokens, sessions},
     },
+    i18n::LanguageTag,
 };
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
@@ -143,6 +144,10 @@ impl User {
             is_super,
             language: language.clone(),
         }
+    }
+
+    pub fn language(&self) -> LanguageTag {
+        self.data.language.parse().expect("invalid language tag in database")
     }
 
     /// Change user's password.

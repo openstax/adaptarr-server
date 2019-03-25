@@ -10,9 +10,12 @@ use actix_web::{
 };
 use serde::de::{Deserialize, Deserializer};
 
-use crate::models::{
-    Invite,
-    user::{User, PublicData, UserAuthenticateError},
+use crate::{
+    i18n::LanguageTag,
+    models::{
+        Invite,
+        user::{User, PublicData, UserAuthenticateError},
+    }
 };
 use super::{
     Error,
@@ -38,6 +41,7 @@ pub fn routes(app: App<State>) -> App<State> {
 #[derive(Debug, Deserialize)]
 pub struct InviteParams {
     email: String,
+    language: LanguageTag,
 }
 
 #[derive(Serialize)]
@@ -79,6 +83,9 @@ pub fn create_invitation(
     _session: ElevatedSession,
     params: Json<InviteParams>,
 ) -> Result<HttpResponse, Error> {
+    let locale = state.i18n.find_locale(&params.language)
+        .ok_or(CreateInvitationError::NoSuchLocale)?;
+
     let db = state.db.get()?;
     let invite = Invite::create(&*db, &params.email)?;
 
@@ -98,9 +105,17 @@ pub fn create_invitation(
             url: &url,
             email: params.email.as_str(),
         },
+        locale,
     );
 
     Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(ApiError, Debug, Fail)]
+enum CreateInvitationError {
+    #[api(status = "BAD_REQUEST", code = "locale:not-found")]
+    #[fail(display = "No such locale")]
+    NoSuchLocale,
 }
 
 /// Get user information.

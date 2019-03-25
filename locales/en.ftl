@@ -81,3 +81,72 @@ reset-error = { $code ->
     ["password:reset:passwords-dont-match"] Password don't match
    *[other] Unknown error occurred: { $code }
 }
+
+## Mail template
+
+mail-logo-alt = OpenStax Polska™ logo
+
+mail-footer =
+    You are receiving this email because you are a member of Adaptarr!.
+
+## Invitation email
+
+# Variables:
+# - $url (string): registration URL
+mail-invite-text =
+    You have been invited to join Adaptarr!, Katalyst Education's service
+    for book translators.
+
+    To complete you registration please go to following URL
+
+        { $url }
+
+mail-invite-before-button =
+    You have been invited to join Adaptarr!, Katalyst Education's service
+    for book translators.
+
+    To complete you registration please click the button below
+
+mail-invite-register-button = Register here
+
+# Variables:
+# - $url (string): registration URL
+mail-invite-after-button =
+    Or copy the following URL into your address bar:
+    <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
+
+# Variables:
+# - $email (string): invitee's email address
+mail-invite-footer = You are receiving this message because someone has invited
+    { $email } to join Adaptarr!.
+
+## Password reset email
+
+# Variables:
+# - $username (string): user's name
+# - $url (string): password reset URL
+mail-reset-text =
+    Hello, { $username }.
+
+    To reset your password please go to the following URL
+
+        { $url }
+
+    If you have not requested a password reset you don't have to do anything,
+    your account is still secure.
+
+# Variables:
+# - $username (string): user's name
+mail-reset-before-button =
+    Hello, { $username }
+
+    To reset your password place click the link bellow
+
+# Variables:
+# - $url (string): password reset URL
+mail-reset-after-button =
+    Or enter this URL into your browser's address bar:
+    <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
+
+    If you have not requested a password reset you don't have to
+    do anything, your account is still secure.

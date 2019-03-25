@@ -81,3 +81,67 @@ reset-error = { $code ->
     ["password:reset:passwords-dont-match"] Hasała nie pasują
    *[other] Wystąpił nieznany błąd { $code }
 }
+
+## Mail template
+
+mail-logo-alt = Logo OpenStax Polska™
+
+mail-footer = Otrzymujesz tą wiadomość ponieważ jesteś członkiem Adaptarr!.
+
+## Invitation email
+
+# Variables:
+# - $url (string): registration URL
+mail-invite-text =
+    Zostałeś/aś zaproszony/a do dołączenia do Adaptarr!, stworzonego przez
+    Katalyst Education systemu do tłumaczenia książek.
+
+    Aby zarejestrować się przejdź pod poniższy adres URL
+
+        { $url }
+
+mail-invite-before-button =
+    Zostałeś/aś zaproszony/a do dołączenia do Adaptarr!, stworzonego przez
+    Katalyst Education systemu do tłumaczenia książek.
+
+    Aby zarejestrować się przejdź pod poniższy adres URL
+
+mail-invite-register-button = Zarejestruj się
+
+mail-invite-after-button =
+    Albo skopiuj poniższy URL do paska przeglądarki:
+    <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
+
+mail-invite-footer = Otrzymujesz tą wiadomość, ponieważ ktoś zaprosił { $email }
+    do dołączenia do Adaptarr!.
+
+## Password reset email
+
+# Variables:
+# - $username (string): user's name
+# - $url (string): password reset URL
+mail-reset-text =
+    Cześć, { $username }.
+
+    Aby zresetować hasło przejdź pod poniższy URL
+
+        { $url }
+
+    Jeżeli nie prosiłeś/aś o zresetowania hasła nie masz się czym martwić,
+    twoje konto jest bezpieczne.
+
+# Variables:
+# - $username (string): user's name
+mail-reset-before-button =
+    Cześć, { $username }
+
+    Aby zresetować swoje hasło kliknij poniższy guzik
+
+# Variables:
+# - $url (string): password reset URL
+mail-reset-after-button =
+    Albo skopiuj poniższy URL do paska przeglądarki
+    <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
+
+    Jeżeli nie prosiłeś/aś o zresetowania hasła nie masz się czym martwić,
+    twoje konto jest bezpieczne.
