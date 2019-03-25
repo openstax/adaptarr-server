@@ -17,6 +17,8 @@ pub struct User {
     pub salt: Vec<u8>,
     /// Is this user an administrator?
     pub is_super: bool,
+    /// User's preferred language
+    pub language: String,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -27,6 +29,7 @@ pub struct NewUser<'a> {
     pub password: &'a [u8],
     pub salt: &'a [u8],
     pub is_super: bool,
+    pub language: &'a str,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug)]

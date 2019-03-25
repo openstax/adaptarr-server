@@ -6,6 +6,7 @@ use crate::{
     Config,
     Result,
     db,
+    i18n::{I18n, LanguageTag},
     mail::Mailer,
     models::{Invite, User},
 };
@@ -46,12 +47,21 @@ pub struct AddOpts {
     /// This user is an administrator
     #[structopt(long = "administrator")]
     is_super: bool,
+    /// User's preferred language.
+    #[structopt(long = "language", default_value = "en")]
+    language: LanguageTag,
 }
 
 pub fn add_user(cfg: Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let user = User::create(
-        &db, &opts.email, &opts.name, &opts.password, opts.is_super)?;
+        &db,
+        &opts.email,
+        &opts.name,
+        &opts.password,
+        opts.is_super,
+        opts.language.as_str(),
+    )?;
 
     println!("Created user {}", user.id);
 

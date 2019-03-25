@@ -37,6 +37,7 @@ pub struct PublicData {
     id: i32,
     name: String,
     is_super: bool,
+    language: String,
 }
 
 impl User {
@@ -74,6 +75,7 @@ impl User {
         name: &str,
         password: &str,
         is_super: bool,
+        language: &str,
     ) -> Result<User, CreateUserError> {
         // Generate salt and hash password.
         let mut salt = [0; 16];
@@ -99,6 +101,7 @@ impl User {
                     password: &hash,
                     salt: &salt,
                     is_super,
+                    language,
                 })
                 .get_result::<db::User>(dbcon)
                 .map(|data| User { data })
@@ -132,12 +135,13 @@ impl User {
 
     /// Get the public portion of this user's data.
     pub fn get_public(&self) -> PublicData {
-        let db::User { id, ref name, is_super, .. } = self.data;
+        let db::User { id, ref name, is_super, ref language, .. } = self.data;
 
         PublicData {
             id,
             name: name.clone(),
             is_super,
+            language: language.clone(),
         }
     }
 

@@ -113,6 +113,7 @@ table! {
         password -> Bytea,
         salt -> Bytea,
         is_super -> Bool,
+        language -> Varchar,
     }
 }
 

@@ -11,7 +11,7 @@ use actix_web::{
 use std::collections::HashMap;
 
 use crate::{
-    i18n::Locale,
+    i18n::{LanguageTag, Locale},
     models::{
         Invite,
         PasswordResetToken,
@@ -463,6 +463,11 @@ struct RegisterTemplate<'s> {
     error: Option<&'s str>,
     email: &'s str,
     invite: &'s str,
+    /// List of all available locales.
+    locales: &'s [Locale<'s>],
+    /// Locale in which the request was sent. Used as default value for locale
+    /// selector.
+    locale: &'s Locale<'s>,
 }
 
 /// Render registration form.
@@ -484,6 +489,8 @@ pub fn register(
         error: None,
         email: &invite.email,
         invite: &query.invite,
+        locales: &state.i18n.locales,
+        locale,
     })
 }
 
@@ -494,6 +501,7 @@ pub struct RegisterForm {
     password: String,
     password1: String,
     invite: String,
+    language: LanguageTag,
 }
 
 /// Perform registration.
@@ -511,6 +519,9 @@ pub fn do_register(
 ) -> RenderedTemplate {
     let db = state.db.get()?;
 
+    let requested_locale = state.i18n.find_locale(&form.language)
+        .unwrap_or(locale);
+
     let invite = match Invite::from_code(&*db, &state.config, &form.invite) {
         Ok(invite) => invite,
         Err(error) => {
@@ -523,6 +534,8 @@ pub fn do_register(
                         error: Some(code),
                         email: &form.email,
                         invite: &form.invite,
+                        locales: &state.i18n.locales,
+                        locale: requested_locale,
                     }
                 );
             }
@@ -540,6 +553,8 @@ pub fn do_register(
                 error: Some("user:register:passwords-dont-match"),
                 email: &invite.email,
                 invite: &form.invite,
+                locales: &state.i18n.locales,
+                locale: requested_locale,
             },
         );
     }
@@ -553,11 +568,18 @@ pub fn do_register(
                 error: Some("user:register:email-changed"),
                 email: &invite.email,
                 invite: &form.invite,
+                locales: &state.i18n.locales,
+                locale: requested_locale,
             },
         );
     }
 
-    let user = invite.fulfil(&*db, &form.name, &form.password)?;
+    let user = invite.fulfil(
+        &*db,
+        &form.name,
+        &form.password,
+        &requested_locale.code.to_string(),
+    )?;
 
     Session::<Normal>::create(&req, user.id, false);
 

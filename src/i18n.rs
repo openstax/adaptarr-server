@@ -1,10 +1,12 @@
 use fluent::{FluentBundle, FluentResource};
 use fluent_bundle::{errors::FluentError, types::FluentValue};
 use fluent_syntax::parser::errors::ParserError;
+use serde::{de, ser};
 use std::{
     collections::HashMap,
     fmt::{self, Write as _},
     fs,
+    marker::PhantomData,
     str::FromStr,
 };
 
@@ -14,7 +16,7 @@ use crate::Result;
 #[derive(Clone)]
 pub struct I18n<'bundle> {
     resources: &'bundle [FluentResource],
-    locales: &'bundle [Locale<'bundle>],
+    pub locales: &'bundle [Locale<'bundle>],
 }
 
 #[derive(Clone, Debug)]
@@ -25,8 +27,11 @@ pub struct LanguageTag(String);
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct LanguageRange(String);
 
+#[derive(Serialize)]
 pub struct Locale<'bundle> {
     pub code: LanguageTag,
+    pub name: String,
+    #[serde(skip_serializing)]
     messages: FluentBundle<'bundle>,
 }
 
@@ -78,10 +83,7 @@ impl I18n<'static> {
                     code, format_errors(&errors));
             }
 
-            locales.push(Locale {
-                code,
-                messages: bundle,
-            });
+            locales.push(Locale::new(code, bundle)?);
         }
 
         Ok(I18n {
@@ -92,6 +94,12 @@ impl I18n<'static> {
 }
 
 impl<'bundle> I18n<'bundle> {
+    /// Find locale by it's code.
+    pub fn find_locale(&self, code: &LanguageTag)
+    -> Option<&'bundle Locale<'bundle>> {
+        self.locales.iter().find(|locale| locale.code.0 == code.0)
+    }
+
     pub fn match_locale(&self, ranges: &[LanguageRange])
     -> &'bundle Locale<'bundle> {
         for range in ranges {
@@ -113,9 +121,27 @@ impl<'bundle> I18n<'bundle> {
 pub enum I18nError {
     #[fail(display = "Locale name is not valid UTF-8")]
     LocaleNameUtf8,
+    #[fail(display = "Locale name missing from {}", _0)]
+    MissingLocaleName(LanguageTag),
+    #[fail(display = "Locale name for {} is not valid", _0)]
+    InvalidLocaleName(LanguageTag),
 }
 
 impl<'bundle> Locale<'bundle> {
+    fn new(code: LanguageTag, messages: FluentBundle<'bundle>) -> Result<Self> {
+        let (name, errors) = match messages.format("locale-name", None) {
+            Some(v) => v,
+            None => return Err(I18nError::MissingLocaleName(code).into()),
+        };
+
+        if errors.is_empty() {
+            Ok(Locale { code, name, messages })
+        } else {
+            error!("Could not format message locale-name in locale {}", code);
+            Err(I18nError::InvalidLocaleName(code).into())
+        }
+    }
+
     pub fn format(&self, key: &str, args: &HashMap<&str, FluentValue>)
     -> Option<String> {
         let (value, errors) = self.messages.format(key, Some(args))?;
@@ -264,6 +290,54 @@ pub enum ParseLanguageTagError {
     ExpectedAlphanum(usize),
     #[fail(display = "{}: expected subtag separator", _0)]
     ExpectedSeparator(usize),
+}
+
+impl<'de> de::Deserialize<'de> for LanguageTag {
+    fn deserialize<D>(de: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        de.deserialize_str(FromStrVisitor("a language range", PhantomData))
+    }
+}
+
+impl<'de> de::Deserialize<'de> for LanguageRange {
+    fn deserialize<D>(de: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        de.deserialize_str(FromStrVisitor("a language range", PhantomData))
+    }
+}
+
+struct FromStrVisitor<'a, T>(&'a str, PhantomData<T>);
+
+impl<'a, 'de, T> de::Visitor<'de> for FromStrVisitor<'a, T>
+where
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    type Value = T;
+
+    fn expecting(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.write_str(self.0)
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<T, E>
+    where
+        E: serde::de::Error,
+    {
+        v.parse().map_err(|err| E::custom(err))
+    }
+}
+
+impl ser::Serialize for LanguageTag {
+    fn serialize<S>(&self, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        ser.serialize_str(&self.0)
+    }
 }
 
 fn format_parse_errors(errors: &[ParserError]) -> String {

@@ -76,9 +76,14 @@ impl Invite {
     }
 
     /// Fulfil an invitation by creating a user.
-    pub fn fulfil(self, dbconn: &Connection, name: &str, password: &str)
-    -> Result<User, CreateUserError> {
-        User::create(dbconn, &self.email, name, password, false)
+    pub fn fulfil(
+        self,
+        dbconn: &Connection,
+        name: &str,
+        password: &str,
+        language: &str,
+    ) -> Result<User, CreateUserError> {
+        User::create(dbconn, &self.email, name, password, false, language)
     }
 }
 

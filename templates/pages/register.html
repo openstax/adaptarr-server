@@ -9,6 +9,13 @@
         <input type="email" name="email" value="{{ email }}" readonly>
         <input type="password" name="password" placeholder="{{ _(key="register-field-password") }}">
         <input type="password" name="password1" placeholder="{{ _(key="register-field-repeat-password") }}">
+
+        <select name="language">
+        {%- for loc in locales %}
+            <option value="{{ loc.code }}" {% if loc.code == locale.code %}selected{% endif %}>{{ loc.name }}</option>
+        {%- endfor %}
+        </select>
+
         <input type="hidden" name="invite" value="{{ invite }}">
         <input type="submit" value="{{ _(key="register-submit") }}">
     </form>
