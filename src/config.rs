@@ -1,5 +1,6 @@
+use log::LevelFilter;
 use rand::RngCore;
-use std::{fs, net::{SocketAddr, Ipv4Addr}};
+use std::{collections::HashMap, fs, net::{SocketAddr, Ipv4Addr}};
 use toml;
 use serde::de::{Deserializer, Error, Visitor, Unexpected};
 
@@ -14,6 +15,8 @@ pub struct Config {
     pub database: Option<Database>,
     pub mail: crate::mail::Config,
     pub storage: Storage,
+    #[serde(default)]
+    pub logging: Logging,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -39,6 +42,18 @@ pub struct Database {
 pub struct Storage {
     /// Path to a directory in which user-uploaded files will be kept.
     pub path: std::path::PathBuf,
+}
+
+/// Logging configuration.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Logging {
+    /// Default logging level.
+    #[serde(default = "default_level_filter")]
+    pub level: LevelFilter,
+    /// Actix-web logging level.
+    pub network: Option<LevelFilter>,
+    /// Custom filters.
+    pub filters: HashMap<String, LevelFilter>,
 }
 
 #[derive(Debug, Fail)]
@@ -89,5 +104,19 @@ impl<'de> Visitor<'de> for BinaryBase64Visitor {
 
     fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Vec<u8>, E> {
         Ok(v)
+    }
+}
+
+fn default_level_filter() -> LevelFilter {
+    LevelFilter::Info
+}
+
+impl Default for Logging {
+    fn default() -> Self {
+        Logging {
+            level: default_level_filter(),
+            network: None,
+            filters: HashMap::new(),
+        }
     }
 }

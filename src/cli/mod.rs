@@ -25,9 +25,26 @@ pub fn main() -> Result<()> {
     let opts = Opts::from_args();
     let config = crate::config::load()?;
 
+    setup_logging(&config.logging)?;
+
     match opts.command {
         Command::Start => server::start(config),
         Command::User(opts) => user::main(config, opts),
     }
 }
 
+fn setup_logging(config: &crate::config::Logging) -> Result<()> {
+    let mut builder = env_logger::Builder::from_default_env();
+    builder.filter_level(config.level);
+
+    if let Some(level) = config.network {
+        builder.filter_module("actix_web", level);
+    }
+
+    for (module, level) in &config.filters {
+        builder.filter_module(&module, *level);
+    }
+
+    builder.try_init()?;
+    Ok(())
+}

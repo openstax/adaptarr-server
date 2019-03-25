@@ -37,3 +37,29 @@ transport = "log"
 [storage]
 # :required: Path to a directory in which user-uploaded files will be kept.
 path = "/var/uploads"
+
+# :optional: Logging configuration
+#
+# There are six possible logging levels: "off" disables logging altogether,
+# "error" logs only critical errors, "warn"logs non-critical errors
+# and warnings, "info" logs informational messages, "debug" logs verbose
+# debugging messages, and "trace" log extremely verbose debugging messages. Each
+# log level also includes messages from all previous (more specific) log levels.
+[logging]
+# :optional: Default logging level. This applies to all logs for which there
+# isn't a more specific setting, or for which a more specific setting exists
+# but is not set.
+#
+# Default value if "info"
+level = "info"
+# :optional: Logging level for the networking layer. Set to "info" to display
+# incoming requests. Unset by default.
+network = "info"
+
+# :optional: Custom filters.
+#
+# This can also be set through the RUST_LOG environmental variable.
+[logging.filters]
+# Example: only show incoming requests, silence all other networking logs.
+"actix_net" = "off"
+"actix_web::middleware::logger" = "info"
