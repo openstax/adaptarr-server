@@ -103,8 +103,13 @@ pub fn invite(cfg: Config, opts: InviteOpts) -> Result<()> {
         code,
     );
 
-    Mailer::from_config(cfg.mail)?
-        .send("invite", opts.email, "Invitation", &InviteTemplate { url }, locale);
+    Mailer::from_config(cfg.mail)?.send(
+        "invite",
+        opts.email,
+        "mail-invite-subject",
+        &InviteTemplate { url },
+        locale,
+    );
 
     Ok(())
 }

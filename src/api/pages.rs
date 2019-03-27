@@ -403,7 +403,7 @@ pub fn do_reset(
             let user_locale = state.i18n.find_locale(&user.language())
                 .unwrap_or(locale);
             state.mailer.send(
-                "reset", email.as_str(), "Password reset", &ResetMail {
+                "reset", email.as_str(), "mail-reset-subject", &ResetMail {
                     user: user.get_public(),
                     url: &url,
                 }, user_locale);

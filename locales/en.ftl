@@ -91,6 +91,8 @@ mail-footer =
 
 ## Invitation email
 
+mail-invite-subject = Invitation
+
 # Variables:
 # - $url (string): registration URL
 mail-invite-text =
@@ -121,6 +123,8 @@ mail-invite-footer = You are receiving this message because someone has invited
     { $email } to join Adaptarr!.
 
 ## Password reset email
+
+mail-reset-subject = Password reset
 
 # Variables:
 # - $username (string): user's name

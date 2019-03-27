@@ -100,7 +100,7 @@ pub fn create_invitation(
     state.mailer.send(
         "invite",
         params.email.as_str(),
-        "Invitation",
+        "mail-invite-subject",
         &InviteTemplate {
             url: &url,
             email: params.email.as_str(),
