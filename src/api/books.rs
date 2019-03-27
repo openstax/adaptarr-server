@@ -27,7 +27,7 @@ use crate::{
         },
     },
     multipart::Multipart,
-    import::{ImportBook, ReplaceBook}
+    import::{ImportBook, ReplaceBook},
     permissions::EditBook,
 };
 use super::{
