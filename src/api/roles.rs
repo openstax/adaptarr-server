@@ -32,12 +32,14 @@ type Result<T, E=Error> = std::result::Result<T, E>;
 /// ```
 pub fn list_roles(
     state: actix_web::State<State>,
-    _session: Session,
+    session: Session,
 ) -> Result<Json<Vec<RoleData>>> {
     let db = state.db.get()?;
+    let show_permissions = session.permissions()
+        .contains(PermissionBits::EDIT_ROLE);
 
     Role::all(&*db)
-        .map(|v| v.into_iter().map(|r| r.get_public()).collect())
+        .map(|v| v.into_iter().map(|r| r.get_public(show_permissions)).collect())
         .map(Json)
         .map_err(Into::into)
 }
@@ -64,7 +66,7 @@ pub fn create_role(
     let db = state.db.get()?;
     let role = Role::create(&*db, &data.name, data.permissions)?;
 
-    Ok(Json(role.get_public()))
+    Ok(Json(role.get_public(true)))
 }
 
 /// Get a role by ID.
@@ -76,13 +78,15 @@ pub fn create_role(
 /// ```
 pub fn get_role(
     state: actix_web::State<State>,
-    _session: Session,
+    session: Session,
     id: Path<i32>,
 ) -> Result<Json<RoleData>> {
     let db = state.db.get()?;
     let role = Role::by_id(&*db, id.into_inner())?;
+    let show_permissions = session.permissions()
+        .contains(PermissionBits::EDIT_ROLE);
 
-    Ok(Json(role.get_public()))
+    Ok(Json(role.get_public(show_permissions)))
 }
 
 #[derive(Deserialize)]
@@ -120,7 +124,7 @@ pub fn update_role(
         Ok(())
     })?;
 
-    Ok(Json(role.get_public()))
+    Ok(Json(role.get_public(true)))
 }
 
 /// Delete a role.

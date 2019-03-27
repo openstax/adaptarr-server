@@ -20,6 +20,8 @@ pub struct Role {
 pub struct PublicData {
     id: i32,
     name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    permissions: Option<PermissionBits>,
 }
 
 impl Role {
@@ -68,12 +70,13 @@ impl Role {
     }
 
     /// Get public portion of this role's data.
-    pub fn get_public(&self) -> PublicData {
+    pub fn get_public(&self, sensitive: bool) -> PublicData {
         let db::Role { id, ref name, .. } = self.data;
 
         PublicData {
             id,
             name: name.clone(),
+            permissions: if sensitive { Some(self.permissions()) } else { None },
         }
     }
 

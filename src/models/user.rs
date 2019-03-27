@@ -164,7 +164,7 @@ impl User {
             id,
             name: name.clone(),
             is_super,
-            role: self.role.as_ref().map(Role::get_public),
+            role: self.role.as_ref().map(|r| r.get_public(false)),
         }
     }
 
