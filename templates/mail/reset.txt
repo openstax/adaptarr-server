@@ -1,3 +1,4 @@
+{%- filter translate(key="mail-reset-text", username=user.name, url=url) -%}
 Hello, {{ user.name }}.
 
 To reset your password please go to the following URL
@@ -6,3 +7,4 @@ To reset your password please go to the following URL
 
 If you have not requested a password reset you don't have to do anything,
 your account is still secure.
+{%- endfilter -%}

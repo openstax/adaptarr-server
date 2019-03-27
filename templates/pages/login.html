@@ -2,17 +2,21 @@
 {% block body %}
     <form method="post">
         {% if error %}
-            <div class="error">{{ error }}</div>
+            <div class="error">{{ _(key="login-error", code=error) }}</div>
         {% endif %}
 
-        <input type="email" name="email" placeholder="E-Mail address">
-        <input type="password" name="password" placeholder="Password">
+        <input type="email" name="email" placeholder="{{ _(key="login-field-email") }}">
+        <input type="password" name="password" placeholder="{{ _(key="login-field-password") }}">
 
         {% if next %}
             <input type="hidden" name="next" value="{{ next }}">
         {% endif %}
 
         <input type="submit" value="Login">
-        <a href="/reset">Reset password</a>
+        <a href="/reset">
+            {% filter translate(key="login-reset-password") %}
+                Reset password
+            {% endfilter %}
+        </a>
     </form>
 {% endblock body %}

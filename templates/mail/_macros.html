@@ -62,3 +62,25 @@
         </td>
     </tr>
 {% endmacro %}
+
+{# Expand a string containing multiple paragraphs separated with double newlines
+ # into HTML/email paragraphs.
+ #
+ # Arguments:
+ # - paras (string): paragraphs to expand
+ # - first_top (string): value of `para`'s `top` argument for the first
+ #   paragraph
+ # - top (string): value of `para`'s `top` argument for subsequent paragraphs
+ #}
+{% macro expand_paras(paras, first_top="0", top="0") %}
+    {% set nelnel = "
+
+" %}
+    {% set current_top = first_top %}
+    {% for para in paras | split(pat=nelnel) %}
+        {{ m::para(top=current_top) }}
+        {{ para | safe }}
+        {{ m::endpara() }}
+        {% set current_top = top %}
+    {% endfor %}
+{% endmacro %}

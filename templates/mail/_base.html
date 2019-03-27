@@ -23,7 +23,7 @@
                             <img
                                 border="0"
                                 src="https://adaptarr.naukosfera.com/static/media/os-logo.png"
-                                alt="OpenStax Polska™ logo"
+                                alt="{{ _(key="mail-logo-alt") }}"
                                 style="display: block;"
                                 />
                         </td>
@@ -43,8 +43,10 @@
                     {% block footer %}
                         <tr>
                             <td style="color: #666666; font-size: 13px; line-height: 14px; padding: 12px 14px 12px 14px; border-top: 1px solid #bbbbbb;">
+                                {% filter translate(key="mail-footer") %}
                                 You are receiving this email because you are
                                 a member of Adaptarr!.
+                                {% endfilter %}
                             </td>
                         </tr>
                     {% endblock %}

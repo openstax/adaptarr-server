@@ -2,26 +2,18 @@
 {% import "_macros.html" as m %}
 
 {% block content %}
-    {{ m::para(top="10px") }}
-        You have been invited to join Adaptarr!, Katalyst Education's
-        service for book translators.
-    {{ m::endpara() }}
+    {{ m::expand_paras(paras=_(key="mail-invite-before-button"), first_top="10px") }}
 
-    {{ m::para() }}
-        To complete you registration please click the button below
-    {{ m::endpara() }}
+    {{ m::button(url=url, text=_(key="mail-invite-register-button")) }}
 
-    {{ m::button(url=url, text="Register here") }}
-
-    {{ m::para() }}
-        Or copy the following URL into your address bar:
-        <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
-    {{ m::endpara() }}
+    {{ m::expand_paras(paras=_(key="mail-invite-after-button", url=url)) }}
 {% endblock %}
 
 {% block footer %}
     {{ m::footer(top="6px") }}
+    {% filter translate(key="mail-invite-footer", email=email) %}
         You are receiving this message because someone has invited {{ email }}
         to join Adaptarr!.
+    {% endfilter %}
     {{ m::endpara() }}
 {% endblock %}

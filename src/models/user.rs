@@ -11,6 +11,7 @@ use crate::{
         models as db,
         schema::{invites, users, password_reset_tokens, sessions},
     },
+    i18n::LanguageTag,
 };
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
@@ -37,6 +38,7 @@ pub struct PublicData {
     id: i32,
     name: String,
     is_super: bool,
+    language: String,
 }
 
 impl User {
@@ -74,6 +76,7 @@ impl User {
         name: &str,
         password: &str,
         is_super: bool,
+        language: &str,
     ) -> Result<User, CreateUserError> {
         // Generate salt and hash password.
         let mut salt = [0; 16];
@@ -99,6 +102,7 @@ impl User {
                     password: &hash,
                     salt: &salt,
                     is_super,
+                    language,
                 })
                 .get_result::<db::User>(dbcon)
                 .map(|data| User { data })
@@ -132,13 +136,18 @@ impl User {
 
     /// Get the public portion of this user's data.
     pub fn get_public(&self) -> PublicData {
-        let db::User { id, ref name, is_super, .. } = self.data;
+        let db::User { id, ref name, is_super, ref language, .. } = self.data;
 
         PublicData {
             id,
             name: name.clone(),
             is_super,
+            language: language.clone(),
         }
+    }
+
+    pub fn language(&self) -> LanguageTag {
+        self.data.language.parse().expect("invalid language tag in database")
     }
 
     /// Change user's password.
@@ -240,15 +249,6 @@ pub enum UserAuthenticateError {
     #[fail(display = "Bad password")]
     #[api(code = "user:authenticate:bad-password", status = "BAD_REQUEST")]
     BadPassword,
-}
-
-impl UserAuthenticateError {
-    pub fn is_internal(&self) -> bool {
-        match *self {
-            UserAuthenticateError::Internal(_) => true,
-            _ => false,
-        }
-    }
 }
 
 impl_from! { for UserAuthenticateError ;
