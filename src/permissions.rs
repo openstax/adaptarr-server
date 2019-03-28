@@ -22,6 +22,8 @@ bitflags! {
         const EDIT_BOOK = 0x00000010;
         /// Permission holder can create, edit, and delete modules.
         const EDIT_MODULE = 0x00000020;
+        /// Permission holder can assign users to modules.
+        const ASSIGN_MODULE = 0x00000040;
         /// All bits allocated for role management permissions.
         const MANAGE_ROLES_BITS = 0x00000f00;
         /// Create, edit, and delete roles.
@@ -83,6 +85,7 @@ permission!(EditUserPermissions = PermissionBits::EDIT_USER_PERMISSIONS);
 permission!(AssignRole = PermissionBits::ASSIGN_ROLE);
 permission!(EditBook = PermissionBits::EDIT_BOOK);
 permission!(EditModule = PermissionBits::EDIT_MODULE);
+permission!(AssignModule = PermissionBits::ASSIGN_MODULE);
 permission!(EditRole = PermissionBits::EDIT_ROLE);
 
 #[derive(ApiError, Debug, Fail)]
@@ -136,6 +139,9 @@ impl ser::Serialize for PermissionBits {
         }
         if self.contains(PermissionBits::EDIT_MODULE) {
             seq.serialize_element("module:edit")?;
+        }
+        if self.contains(PermissionBits::ASSIGN_MODULE) {
+            seq.serialize_element("module:assign")?;
         }
         if self.contains(PermissionBits::EDIT_ROLE) {
             seq.serialize_element("role:edit")?;
@@ -194,6 +200,7 @@ impl<'de> de::Visitor<'de> for BitsVisitor {
             "user:assign-role" => PermissionBits::ASSIGN_ROLE,
             "book:edit" => PermissionBits::EDIT_BOOK,
             "module:edit" => PermissionBits::EDIT_MODULE,
+            "module:assign" => PermissionBits::ASSIGN_MODULE,
             "role:edit" => PermissionBits::EDIT_ROLE,
             _ => return Err(E::invalid_value(
                 de::Unexpected::Str(v), &"a permission name")),

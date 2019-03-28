@@ -26,7 +26,7 @@ use crate::{
     },
     import::{ImportModule, ReplaceModule},
     multipart::Multipart,
-    permissions::EditModule,
+    permissions::{AssignModule, EditModule},
 };
 use super::{
     Error,
@@ -234,7 +234,7 @@ pub struct ModuleUpdate {
 /// ```
 pub fn update_module(
     state: actix_web::State<State>,
-    session: Session<EditModule>,
+    session: Session<AssignModule>,
     id: Path<Uuid>,
     update: Json<ModuleUpdate>,
 ) -> Result<HttpResponse> {
