@@ -10,16 +10,17 @@ use actix_web::{
     http::Cookie,
 };
 use chrono::{Duration, Utc};
-use diesel::prelude::*;
+use diesel::{prelude::*, result::{Error as DbError}};
 use std::marker::PhantomData;
 
 use crate::{
     db::{
+        Connection,
         Pool,
         models::{Session as DbSession, NewSession},
         schema::sessions,
     },
-    models::User,
+    models::user::{User, FindUserError},
     permissions::{Permission, PermissionBits},
     utils,
 };
@@ -289,6 +290,16 @@ impl<P> Session<P> {
 
     pub fn user_id(&self) -> i32 {
         self.data.user
+    }
+
+    pub fn user(&self, dbcon: &Connection) -> Result<User, DbError> {
+        match User::by_id(dbcon, self.data.user) {
+            Ok(user) => Ok(user),
+            Err(FindUserError::Internal(err)) => Err(err),
+            Err(err) => {
+                panic!("Inconsistency: session's user doesn't exist: {}", err);
+            }
+        }
     }
 
     pub fn permissions(&self) -> PermissionBits {

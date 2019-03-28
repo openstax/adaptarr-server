@@ -35,7 +35,8 @@ pub fn list_roles(
     session: Session,
 ) -> Result<Json<Vec<RoleData>>> {
     let db = state.db.get()?;
-    let show_permissions = session.permissions()
+    let show_permissions = session.user(&*db)?
+        .permissions(true)
         .contains(PermissionBits::EDIT_ROLE);
 
     Role::all(&*db)
@@ -83,7 +84,8 @@ pub fn get_role(
 ) -> Result<Json<RoleData>> {
     let db = state.db.get()?;
     let role = Role::by_id(&*db, id.into_inner())?;
-    let show_permissions = session.permissions()
+    let show_permissions = session.user(&*db)?
+        .permissions(true)
         .contains(PermissionBits::EDIT_ROLE);
 
     Ok(Json(role.get_public(show_permissions)))
