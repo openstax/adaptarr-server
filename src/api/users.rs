@@ -8,6 +8,7 @@ use actix_web::{
     Path,
     http::Method,
 };
+use chrono::NaiveDateTime;
 use serde::de::{Deserialize, Deserializer};
 
 use crate::{
@@ -38,6 +39,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .route("/me", Method::PUT, modify_user_self)
         .api_route("/me/password", Method::PUT, modify_password)
+        .route("/me/session", Method::GET, get_session)
         .resource("/{id}/permissions", |r| {
             r.get().api_with(get_permissions);
             r.put().api_with(modify_permissions);
@@ -227,6 +229,21 @@ pub fn modify_password(
     Session::<Normal>::create(&req, &user, false);
 
     Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionData {
+    expires: NaiveDateTime,
+    is_elevated: bool,
+    permissions: PermissionBits,
+}
+
+pub fn get_session(session: Session) -> Json<SessionData> {
+    Json(SessionData {
+        expires: session.expires,
+        is_elevated: session.is_elevated,
+        permissions: session.permissions(),
+    })
 }
 
 /// Get user's permissions
