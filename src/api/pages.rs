@@ -158,7 +158,7 @@ pub fn do_login(
 
     // NOTE: This will automatically remove any session that may still exist,
     // we don't have to do it manually here.
-    Session::<Normal>::create(&req, user.id, false);
+    Session::<Normal>::create(&req, &user, false);
 
     Ok(HttpResponse::SeeOther()
         .header("Location", params.next.as_ref().map_or("/", String::as_str))
@@ -173,18 +173,10 @@ pub fn do_login(
 /// GET /elevate
 /// ```
 pub fn elevate(
-    state: actix_web::State<State>,
-    session: Session,
-    locale: &'static Locale<'static>,
+    locale: &'static Locale<'static>, 
     query: Query<LoginQuery>,
 ) -> RenderedTemplate {
-    let db = state.db.get()?;
-    let user = User::by_id(&*db, session.user)?;
     let LoginQuery { next, action } = query.into_inner();
-
-    if !user.is_super {
-        return Ok(HttpResponse::Forbidden().finish());
-    }
 
     render(locale, "elevate.html", &LoginTemplate {
         error: None,
@@ -220,10 +212,6 @@ pub fn do_elevate(
     let user = User::by_id(&*db, session.user)?;
     let ElevateCredentials { next, action, password } = form.into_inner();
 
-    if !user.is_super {
-        return Ok(HttpResponse::Forbidden().finish());
-    }
-
     if !user.check_password(&password) {
         return render_code(
             locale,
@@ -237,7 +225,7 @@ pub fn do_elevate(
         );
     }
 
-    Session::<Normal>::create(&req, user.id, true);
+    Session::<Normal>::create(&req, &user, true);
 
     Ok(HttpResponse::SeeOther()
         .header("Location", next.as_ref().map_or("/", String::as_str))
@@ -272,10 +260,6 @@ pub fn do_elevate_json(
     let user = User::by_id(&*db, session.user)?;
     let ElevateCredentials { password, .. } = form.into_inner();
 
-    if !user.is_super {
-        return Ok(HttpResponse::Forbidden().finish());
-    }
-
     if !user.check_password(&password) {
         let mut args = HashMap::new();
         args.insert("code", "user:authenticate:bad-password".into());
@@ -293,7 +277,7 @@ pub fn do_elevate_json(
             .json(ElevationResult::Error { message }));
     }
 
-    Session::<Normal>::create(&req, user.id, true);
+    Session::<Normal>::create(&req, &user, true);
 
     Ok(HttpResponse::Ok().json(ElevationResult::Success))
 }
@@ -446,7 +430,7 @@ pub fn do_reset(
             }
 
             let user = token.fulfil(&*db, &password)?;
-            Session::<Normal>::create(&req, user.id, false);
+            Session::<Normal>::create(&req, &user, false);
 
             Ok(HttpResponse::SeeOther()
                 .header("Location", "/")
@@ -583,7 +567,7 @@ pub fn do_register(
         &requested_locale.code.to_string(),
     )?;
 
-    Session::<Normal>::create(&req, user.id, false);
+    Session::<Normal>::create(&req, &user, false);
 
     Ok(HttpResponse::SeeOther()
         .header("Location", "/")

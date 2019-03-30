@@ -10,15 +10,18 @@ use actix_web::{
     http::Cookie,
 };
 use chrono::{Duration, Utc};
-use diesel::prelude::*;
+use diesel::{prelude::*, result::{Error as DbError}};
 use std::marker::PhantomData;
 
 use crate::{
     db::{
+        Connection,
         Pool,
         models::{Session as DbSession, NewSession},
         schema::sessions,
     },
+    models::user::{User, FindUserError},
+    permissions::{Permission, PermissionBits},
     utils,
 };
 use super::State;
@@ -57,7 +60,7 @@ pub struct Session<Policy = Normal> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SessionSetting {
-    pub is_super: bool,
+    pub is_elevated: bool,
 }
 
 /// Policies govern what sessions can do. For example a [`Normal`] session can
@@ -97,13 +100,6 @@ pub enum Validation {
 /// This is the default policy.
 pub struct Normal;
 
-/// Elevated policy.
-///
-/// This policy only allows administrative sessions.
-pub struct Elevated;
-
-pub type ElevatedSession = Session<Elevated>;
-
 /// Data internal to the session manager.
 struct SessionData {
     /// Existing session, if any.
@@ -135,11 +131,11 @@ impl SessionManager {
             return Validation::Reject;
         }
 
-        // Downgrade administrative session back to a normal session after some
+        // Downgrade elevated session back to a normal session after some
         // time.
-        if ses.is_super && diff > Duration::minutes(SUPER_EXPIRATION) {
+        if ses.is_elevated && diff > Duration::minutes(SUPER_EXPIRATION) {
             return Validation::Update(SessionSetting {
-                is_super: false,
+                is_elevated: false,
             }, false);
         }
 
@@ -181,7 +177,7 @@ impl<S> Middleware<S> for SessionManager {
             Validation::Pass => true,
             Validation::Update(settings, pass) => {
                 diesel::update(&session)
-                    .set(sessions::is_super.eq(settings.is_super))
+                    .set(sessions::is_elevated.eq(settings.is_elevated))
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
                 pass
@@ -249,17 +245,28 @@ impl<S> Middleware<S> for SessionManager {
 }
 
 impl<P> Session<P> {
-    pub fn create<S>(req: &HttpRequest<S>, user: i32, is_super: bool) {
+    pub fn create<S>(req: &HttpRequest<S>, user: &User, is_elevated: bool) {
+        let mask = if is_elevated {
+            PermissionBits::elevated()
+        } else {
+            PermissionBits::normal()
+        };
+        let permissions = if user.is_super {
+            PermissionBits::all()
+        } else {
+            user.permissions(true)
+        };
+
         let now = Utc::now().naive_utc();
         let new = NewSession {
-            user,
-            is_super,
+            user: user.id,
+            is_elevated,
             expires: now + Duration::days(MAX_DURATION),
             last_used: now,
+            permissions: (permissions & mask).bits(),
         };
 
         let mut extensions = req.extensions_mut();
-
 
         if let Some(session) = extensions.get_mut::<SessionData>() {
             session.new = Some(new);
@@ -279,6 +286,24 @@ impl<P> Session<P> {
             new: None,
             destroy: true,
         })
+    }
+
+    pub fn user_id(&self) -> i32 {
+        self.data.user
+    }
+
+    pub fn user(&self, dbcon: &Connection) -> Result<User, DbError> {
+        match User::by_id(dbcon, self.data.user) {
+            Ok(user) => Ok(user),
+            Err(FindUserError::Internal(err)) => Err(err),
+            Err(err) => {
+                panic!("Inconsistency: session's user doesn't exist: {}", err);
+            }
+        }
+    }
+
+    pub fn permissions(&self) -> PermissionBits {
+        PermissionBits::from_bits_truncate(self.data.permissions)
     }
 }
 
@@ -307,7 +332,7 @@ where
                 Validation::Update(settings, pass) => {
                     let db = req.state().db.get()?;
                     diesel::update(&session)
-                        .set(sessions::is_super.eq(settings.is_super))
+                        .set(sessions::is_elevated.eq(settings.is_elevated))
                         .execute(&*db)?;
 
                     if !pass {
@@ -333,9 +358,11 @@ impl Policy for Normal {
     }
 }
 
-impl Policy for Elevated {
+impl<P: Permission> Policy for P {
     fn validate(session: &DbSession) -> Validation {
-        if session.is_super {
+        let bits = PermissionBits::from_bits_truncate(session.permissions);
+
+        if bits.contains(P::bits()) {
             Validation::Pass
         } else {
             Validation::Reject

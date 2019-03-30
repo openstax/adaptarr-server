@@ -9,10 +9,12 @@ use crate::{
     db::{
         Connection,
         models as db,
-        schema::{invites, users, password_reset_tokens, sessions},
+        schema::{invites, users, password_reset_tokens, roles, sessions},
     },
     i18n::LanguageTag,
+    permissions::PermissionBits,
 };
+use super::role::{Role, PublicData as RoleData};
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
     ad: &[],
@@ -30,6 +32,7 @@ static ARGON2_CONFIG: argon2::Config = argon2::Config {
 #[derive(Debug)]
 pub struct User {
     data: db::User,
+    role: Option<Role>,
 }
 
 /// A subset of user's data that can safely be publicly exposed.
@@ -39,34 +42,51 @@ pub struct PublicData {
     name: String,
     is_super: bool,
     language: String,
+    role: Option<RoleData>,
 }
 
 impl User {
     /// Get all users.
     pub fn all(dbcon: &Connection) -> Result<Vec<User>, DbError> {
         users::table
-            .get_results::<db::User>(dbcon)
-            .map(|v| v.into_iter().map(|data| User { data }).collect())
+            .left_join(roles::table)
+            .get_results::<(db::User, Option<db::Role>)>(dbcon)
+            .map(|v| {
+                v.into_iter()
+                    .map(|(data, role)| User {
+                        data,
+                        role: role.map(Role::from_db),
+                    })
+                    .collect()
+            })
     }
 
     /// Find an user by ID.
     pub fn by_id(dbcon: &Connection, id: i32) -> Result<User, FindUserError> {
         users::table
             .filter(users::id.eq(id))
-            .get_result::<db::User>(dbcon)
+            .left_join(roles::table)
+            .get_result::<(db::User, Option<db::Role>)>(dbcon)
             .optional()?
             .ok_or(FindUserError::NotFound)
-            .map(|data| User { data })
+            .map(|(data, role)| User {
+                data,
+                role: role.map(Role::from_db),
+            })
     }
 
     /// Find an user by email address.
     pub fn by_email(dbcon: &Connection, email: &str) -> Result<User, FindUserError> {
         users::table
             .filter(users::email.eq(email))
-            .get_result::<db::User>(dbcon)
+            .left_join(roles::table)
+            .get_result::<(db::User, Option<db::Role>)>(dbcon)
             .optional()?
             .ok_or(FindUserError::NotFound)
-            .map(|data| User { data })
+            .map(|(data, role)| User {
+                data,
+                role: role.map(Role::from_db),
+            })
     }
 
     /// Create a new user.
@@ -77,6 +97,7 @@ impl User {
         password: &str,
         is_super: bool,
         language: &str,
+        permissions: PermissionBits,
     ) -> Result<User, CreateUserError> {
         // Generate salt and hash password.
         let mut salt = [0; 16];
@@ -103,9 +124,14 @@ impl User {
                     salt: &salt,
                     is_super,
                     language,
+                    permissions: if is_super {
+                        std::i32::MAX
+                    } else {
+                        permissions.bits()
+                    },
                 })
                 .get_result::<db::User>(dbcon)
-                .map(|data| User { data })
+                .map(|data| User { data, role: None })
                 .map_err(Into::into)
         })
     }
@@ -143,11 +169,25 @@ impl User {
             name: name.clone(),
             is_super,
             language: language.clone(),
+            role: self.role.as_ref().map(|r| r.get_public(false)),
         }
     }
 
     pub fn language(&self) -> LanguageTag {
         self.data.language.parse().expect("invalid language tag in database")
+    }
+
+    /// Get all permissions this user has.
+    ///
+    /// The `role` argument controls whether role permissions are included in
+    /// the returned permission set.
+    pub fn permissions(&self, role: bool) -> PermissionBits {
+        let role = if role {
+            self.role.as_ref().map(Role::permissions).unwrap_or_default()
+        } else {
+            PermissionBits::empty()
+        };
+        PermissionBits::from_bits_truncate(self.data.permissions) | role
     }
 
     /// Change user's password.
@@ -186,6 +226,85 @@ impl User {
         })?;
 
         self.data = data;
+
+        Ok(())
+    }
+
+    /// Change user's permissions.
+    pub fn set_permissions(
+        &mut self,
+        dbcon: &Connection,
+        permissions: PermissionBits,
+    ) -> Result<(), DbError> {
+        // Superusers have all permissions.
+        if self.data.is_super {
+            return Ok(());
+        }
+
+        let sessions_perms = permissions
+            | self.role.as_ref().map_or(PermissionBits::empty(), Role::permissions);
+
+        let data = dbcon.transaction(|| {
+            // Since we might be removing a permission we also need to update
+            // user's sessions.
+            diesel::update(sessions::table.filter(
+                    sessions::user.eq(self.id).and(
+                        sessions::is_elevated.eq(false))))
+                .set(sessions::permissions.eq(
+                    (sessions_perms & PermissionBits::normal()).bits()))
+                .execute(dbcon)?;
+            diesel::update(sessions::table.filter(
+                    sessions::user.eq(self.id).and(
+                        sessions::is_elevated.eq(false))))
+                .set(sessions::permissions.eq(sessions_perms.bits()))
+                .execute(dbcon)?;
+
+            diesel::update(&self.data)
+                .set(users::permissions.eq(permissions.bits()))
+                .get_result::<db::User>(dbcon)
+        })?;
+
+        self.data = data;
+
+        Ok(())
+    }
+
+    /// Change user's role.
+    pub fn set_role(
+        &mut self,
+        dbcon: &Connection,
+        role: Option<&Role>,
+    ) -> Result<(), DbError> {
+        let (role_id, sessions_perms) = match role {
+            Some(role) => (
+                Some(role.id),
+                self.permissions(false) | role.permissions(),
+            ),
+            None => (None, self.permissions(false)),
+        };
+
+        let data = dbcon.transaction(|| {
+            // Since user's previous role might have had more permissions
+            // we also need to update user's sessions.
+            diesel::update(sessions::table.filter(
+                    sessions::user.eq(self.id).and(
+                        sessions::is_elevated.eq(false))))
+                .set(sessions::permissions.eq(
+                    (sessions_perms & PermissionBits::normal()).bits()))
+                .execute(dbcon)?;
+            diesel::update(sessions::table.filter(
+                    sessions::user.eq(self.id).and(
+                        sessions::is_elevated.eq(false))))
+                .set(sessions::permissions.eq(sessions_perms.bits()))
+                .execute(dbcon)?;
+
+            diesel::update(&self.data)
+                .set(users::role.eq(role_id))
+                .get_result::<db::User>(dbcon)
+        })?;
+
+        self.data = data;
+        self.role = role.map(Clone::clone);
 
         Ok(())
     }

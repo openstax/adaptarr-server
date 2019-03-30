@@ -27,13 +27,14 @@ use crate::{
         },
     },
     multipart::Multipart,
-    import::{ImportBook, ReplaceBook}
+    import::{ImportBook, ReplaceBook},
+    permissions::EditBook,
 };
 use super::{
     Error,
     RouteExt,
     State,
-    session::{ElevatedSession, Session},
+    session::Session,
 };
 
 /// Configure routes.
@@ -100,7 +101,7 @@ pub struct NewBook {
 /// ```
 pub fn create_book(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditBook>,
     form: Json<NewBook>,
 ) -> Result<Json<BookData>> {
     let db = state.db.get()?;
@@ -130,7 +131,7 @@ from_multipart! {
 /// ```
 pub fn create_book_from_zip(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditBook>,
     data: Multipart<NewBookZip>,
 ) -> impl Future<Item = Json<BookData>, Error = Error> {
     let NewBookZip { title, file } = data.into_inner();
@@ -172,7 +173,7 @@ pub struct BookChange {
 /// ```
 pub fn update_book(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditBook>,
     id: Path<Uuid>,
     change: Json<BookChange>,
 ) -> Result<Json<BookData>> {
@@ -187,7 +188,7 @@ pub fn update_book(
 pub fn replace_book(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditBook>,
     id: Path<Uuid>,
 ) -> impl Future<Item = Json<BookData>, Error = Error> {
     future::result(
@@ -227,7 +228,7 @@ pub fn replace_book(
 /// ```
 pub fn delete_book(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditBook>,
     id: Path<Uuid>,
 ) -> Result<HttpResponse> {
     let db = state.db.get()?;
@@ -296,7 +297,7 @@ pub struct NewPartData {
 /// ```
 pub fn create_part(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditBook>,
     book: Path<Uuid>,
     part: Json<NewPartRoot>,
 ) -> Result<Json<NewPartData>> {
@@ -402,7 +403,7 @@ pub fn get_part(
 /// ```
 pub fn delete_part(
     state: actix_web::State<State>,
-    _session: Session,
+    _session: Session<EditBook>,
     path: Path<(Uuid, i32)>,
 ) -> Result<HttpResponse> {
     let db = state.db.get()?;
@@ -436,7 +437,7 @@ pub struct PartLocation {
 /// ```
 pub fn update_part(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<EditBook>,
     path: Path<(Uuid, i32)>,
     update: Json<PartUpdate>,
 ) -> Result<HttpResponse> {

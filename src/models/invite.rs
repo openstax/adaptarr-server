@@ -13,6 +13,7 @@ use crate::{
         schema::{invites, users},
     },
     models::user::{User, CreateUserError},
+    permissions::PermissionBits,
     utils,
 };
 
@@ -83,7 +84,15 @@ impl Invite {
         password: &str,
         language: &str,
     ) -> Result<User, CreateUserError> {
-        User::create(dbconn, &self.email, name, password, false, language)
+        User::create(
+            dbconn, 
+            &self.email, 
+            name, 
+            password, 
+            false, 
+            language,
+            PermissionBits::normal(),
+        )
     }
 }
 

@@ -9,6 +9,7 @@ use crate::{
     i18n::{I18n, LanguageTag},
     mail::Mailer,
     models::{Invite, User},
+    permissions::PermissionBits,
 };
 
 #[derive(StructOpt)]
@@ -61,6 +62,7 @@ pub fn add_user(cfg: Config, opts: AddOpts) -> Result<()> {
         &opts.password,
         opts.is_super,
         opts.language.as_str(),
+        PermissionBits::normal(),
     )?;
 
     println!("Created user {}", user.id);

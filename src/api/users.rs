@@ -8,21 +8,24 @@ use actix_web::{
     Path,
     http::Method,
 };
+use chrono::NaiveDateTime;
 use serde::de::{Deserialize, Deserializer};
 
 use crate::{
     i18n::LanguageTag,
     models::{
         Invite,
+        Role,
         user::{User, PublicData, UserAuthenticateError},
-    }
+    },
+    permissions::{EditUserPermissions, InviteUser, PermissionBits},
 };
 use super::{
     Error,
     RouteExt,
     RouterExt,
     State,
-    session::{Session, Normal, ElevatedSession},
+    session::{Session, Normal},
 };
 
 /// Configure routes.
@@ -33,9 +36,15 @@ pub fn routes(app: App<State>) -> App<State> {
         .api_route("/invite", Method::POST, create_invitation)
         .resource("/{id}", |r| {
             r.get().api_with(get_user);
-            r.put().f(modify_user);
+            r.put().api_with(modify_user);
         })
-        .api_route("/me/password", Method::PUT, modify_password))
+        .route("/me", Method::PUT, modify_user_self)
+        .api_route("/me/password", Method::PUT, modify_password)
+        .route("/me/session", Method::GET, get_session)
+        .resource("/{id}/permissions", |r| {
+            r.get().api_with(get_permissions);
+            r.put().api_with(modify_permissions);
+        }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,7 +89,7 @@ pub fn list_users(
 /// ```
 pub fn create_invitation(
     state: actix_web::State<State>,
-    _session: ElevatedSession,
+    _session: Session<InviteUser>,
     params: Json<InviteParams>,
 ) -> Result<HttpResponse, Error> {
     let locale = state.i18n.find_locale(&params.language)
@@ -140,10 +149,55 @@ pub fn get_user(
 /// ## Method
 ///
 /// ```
+/// PUT /users/me
+/// ```
+pub fn modify_user_self(_req: HttpRequest<State>) -> HttpResponse {
+    unimplemented!()
+}
+
+#[derive(Deserialize)]
+pub struct UserUpdate {
+    #[serde(default, deserialize_with = "de_optional_null")]
+    role: Option<Option<i32>>,
+}
+
+/// Update user information.
+///
+/// ## Method
+///
+/// ```
 /// PUT /users/:id
 /// ```
-pub fn modify_user(_req: &HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn modify_user(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<i32>,
+    form: Either<Form<UserUpdate>, Json<UserUpdate>>,
+) -> Result<Json<PublicData>, Error> {
+    let db = state.db.get()?;
+    let permissions = session.permissions();
+    let mut user = User::by_id(&*db, id.into_inner())?;
+
+    let form = match form {
+        Either::A(form) => form.into_inner(),
+        Either::B(json) => json.into_inner(),
+    };
+
+    let dbcon = &*db;
+    use diesel::Connection;
+    dbcon.transaction::<_, Error, _>(|| {
+        if let Some(role) = form.role {
+            permissions.require(PermissionBits::ASSIGN_ROLE)?;
+            let role = role.map(|id| Role::by_id(dbcon, id))
+                .transpose()?;
+
+            user.set_role(dbcon, role.as_ref())?;
+        }
+
+        Ok(())
+    })?;
+
+    Ok(Json(user.get_public()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -185,7 +239,76 @@ pub fn modify_password(
     user.change_password(&*db, &form.new)?;
 
     // Changing password invalidates all sessions.
-    Session::<Normal>::create(&req, user.id, false);
+    Session::<Normal>::create(&req, &user, false);
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionData {
+    expires: NaiveDateTime,
+    is_elevated: bool,
+    permissions: PermissionBits,
+}
+
+pub fn get_session(session: Session) -> Json<SessionData> {
+    Json(SessionData {
+        expires: session.expires,
+        is_elevated: session.is_elevated,
+        permissions: session.permissions(),
+    })
+}
+
+/// Get user's permissions
+///
+/// ## Method
+///
+/// ```
+/// GET /users/:id/permissions
+/// ```
+pub fn get_permissions(
+    state: actix_web::State<State>,
+    session: Session,
+    path: Path<UserId>,
+) -> Result<Json<PermissionBits>, Error> {
+    let db = state.db.get()?;
+    let user = path.get_user(&*state, &session)?;
+    let current = User::by_id(&*db, session.user_id())
+        .expect("active session for a deleted user")
+        .permissions(false);
+
+    if path.is_current() {
+        Ok(Json(user.permissions(true)))
+    } else if !current.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
+        Err(Forbidden.into())
+    } else {
+        Ok(Json(user.permissions(false)))
+    }
+}
+
+/// Change user's permissions
+///
+/// ## Method
+///
+/// ```
+/// PUT /users/:id/permissions
+/// ```
+pub fn modify_permissions(
+    _req: HttpRequest<State>,
+    state: actix_web::State<State>,
+    session: Session<EditUserPermissions>,
+    path: Path<UserId>,
+    form: Either<Form<PermissionBits>, Json<PermissionBits>>,
+) -> Result<HttpResponse, Error> {
+    let db = state.db.get()?;
+    let mut user = path.get_user(&*state, &session)?;
+
+    let form = match form {
+        Either::A(form) => form.into_inner(),
+        Either::B(json) => json.into_inner(),
+    };
+
+    user.set_permissions(&*db, form)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -209,10 +332,17 @@ impl UserId {
         }
     }
 
-    pub fn get_user(&self, state: &State, session: &Session) -> Result<User, super::Error> {
+    pub fn get_user<P>(&self, state: &State, session: &Session<P>) -> Result<User, super::Error> {
         let db = state.db.get()?;
         User::by_id(&*db, self.as_id(&session))
             .map_err(Into::into)
+    }
+
+    pub fn is_current(&self) -> bool {
+        match *self {
+            UserId::Current => true,
+            _ => false,
+        }
     }
 }
 
@@ -237,4 +367,17 @@ impl<'de> Deserialize<'de> for UserId {
             .map_err(|_| serde::de::Error::custom(
                 "data was neither a number nor a valid string"))
     }
+}
+
+#[derive(ApiError, Debug, Fail)]
+#[api(status = "FORBIDDEN")]
+#[fail(display = "Forbidden")]
+struct Forbidden;
+
+fn de_optional_null<'de, T, D>(de: D) -> std::result::Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    T::deserialize(de).map(Some)
 }

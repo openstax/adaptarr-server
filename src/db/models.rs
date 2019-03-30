@@ -19,6 +19,10 @@ pub struct User {
     pub is_super: bool,
     /// User's preferred language
     pub language: String,
+    /// Permissions this user has.
+    pub permissions: i32,
+    /// ID of this user's role.
+    pub role: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -30,6 +34,7 @@ pub struct NewUser<'a> {
     pub salt: &'a [u8],
     pub is_super: bool,
     pub language: &'a str,
+    pub permissions: i32,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug)]
@@ -51,10 +56,12 @@ pub struct Session {
     /// Date of the last use of a session. Sessions which were not used for some
     /// time should expire, even if they are still valid according to `expires`.
     pub last_used: NaiveDateTime,
-    /// If this an administrative session? To limit attack surface
-    /// administrative sessions are granted for a short time, after which they
-    /// become normal sessions again.
-    pub is_super: bool,
+    /// If this an elevated session? To limit attack surface elevated sessions
+    /// are granted for a short time, after which they become normal sessions
+    /// again.
+    pub is_elevated: bool,
+    /// Permissions this session has.
+    pub permissions: i32,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -63,7 +70,8 @@ pub struct NewSession {
     pub user: i32,
     pub expires: NaiveDateTime,
     pub last_used: NaiveDateTime,
-    pub is_super: bool,
+    pub is_elevated: bool,
+    pub permissions: i32,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]
@@ -311,4 +319,21 @@ pub struct NewXrefTarget<'s> {
     pub description: Option<&'s str>,
     pub context: Option<&'s str>,
     pub counter: i32,
+}
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct Role {
+    /// ID of this role.
+    pub id: i32,
+    /// Name of this role.
+    pub name: String,
+    /// Additional permissions a user has when they are a member of this role.
+    pub permissions: i32,
+}
+
+#[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
+#[table_name = "roles"]
+pub struct NewRole<'s> {
+    pub name: &'s str,
+    pub permissions: i32,
 }
