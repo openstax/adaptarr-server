@@ -38,7 +38,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.get().api_with(get_user);
             r.put().api_with(modify_user);
         })
-        .route("/me", Method::PUT, modify_user_self)
+        .api_route("/me", Method::PUT, modify_user_self)
         .api_route("/me/password", Method::PUT, modify_password)
         .route("/me/session", Method::GET, get_session)
         .resource("/{id}/permissions", |r| {
@@ -93,7 +93,7 @@ pub fn create_invitation(
     params: Json<InviteParams>,
 ) -> Result<HttpResponse, Error> {
     let locale = state.i18n.find_locale(&params.language)
-        .ok_or(CreateInvitationError::NoSuchLocale)?;
+        .ok_or(NoSuchLocaleError)?;
 
     let db = state.db.get()?;
     let invite = Invite::create(&*db, &params.email)?;
@@ -121,11 +121,9 @@ pub fn create_invitation(
 }
 
 #[derive(ApiError, Debug, Fail)]
-enum CreateInvitationError {
-    #[api(status = "BAD_REQUEST", code = "locale:not-found")]
-    #[fail(display = "No such locale")]
-    NoSuchLocale,
-}
+#[api(status = "BAD_REQUEST", code = "locale:not-found")]
+#[fail(display = "No such locale")]
+struct NoSuchLocaleError;
 
 /// Get user information.
 ///
@@ -144,6 +142,11 @@ pub fn get_user(
     Ok(Json(user.get_public()))
 }
 
+#[derive(Deserialize)]
+pub struct UserSelfUpdate {
+    language: Option<LanguageTag>,
+}
+
 /// Update user information.
 ///
 /// ## Method
@@ -151,8 +154,32 @@ pub fn get_user(
 /// ```
 /// PUT /users/me
 /// ```
-pub fn modify_user_self(_req: HttpRequest<State>) -> HttpResponse {
-    unimplemented!()
+pub fn modify_user_self(
+    state: actix_web::State<State>,
+    session: Session,
+    form: Either<Form<UserSelfUpdate>, Json<UserSelfUpdate>>,
+) -> Result<Json<PublicData>, Error> {
+    let db = state.db.get()?;
+    let mut user = session.user(&*db)?;
+
+    let form = match form {
+        Either::A(form) => form.into_inner(),
+        Either::B(json) => json.into_inner(),
+    };
+
+    let dbcon = &*db;
+    use diesel::Connection;
+    dbcon.transaction::<_, Error, _>(|| {
+        if let Some(language) = form.language {
+            let locale = state.i18n.find_locale(&language)
+                .ok_or(NoSuchLocaleError)?;
+            user.set_language(dbcon, &locale.code)?;
+        }
+
+        Ok(())
+    })?;
+
+    Ok(Json(user.get_public()))
 }
 
 #[derive(Deserialize)]

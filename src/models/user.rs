@@ -230,6 +230,21 @@ impl User {
         Ok(())
     }
 
+    /// Change user's preferred language.
+    pub fn set_language(
+        &mut self,
+        dbcon: &Connection,
+        language: &LanguageTag,
+    ) -> Result<(), DbError> {
+        let data = diesel::update(&self.data)
+            .set(users::language.eq(language.as_str()))
+            .get_result::<db::User>(dbcon)?;
+
+        self.data = data;
+
+        Ok(())
+    }
+
     /// Change user's permissions.
     pub fn set_permissions(
         &mut self,
