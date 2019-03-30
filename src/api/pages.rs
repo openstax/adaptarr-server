@@ -92,7 +92,7 @@ struct LoginTemplate<'error> {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /login
 /// ```
 pub fn login(
@@ -126,7 +126,7 @@ pub struct LoginCredentials {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /login
 /// ```
 pub fn do_login(
@@ -169,11 +169,11 @@ pub fn do_login(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /elevate
 /// ```
 pub fn elevate(
-    locale: &'static Locale<'static>, 
+    locale: &'static Locale<'static>,
     query: Query<LoginQuery>,
 ) -> RenderedTemplate {
     let LoginQuery { next, action } = query.into_inner();
@@ -198,7 +198,7 @@ pub struct ElevateCredentials {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /elevate
 /// ```
 pub fn do_elevate(
@@ -245,7 +245,7 @@ enum ElevationResult {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /elevate
 /// Accept: application/json
 /// ```
@@ -286,7 +286,7 @@ pub fn do_elevate_json(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /logout
 /// ```
 pub fn logout(
@@ -313,7 +313,7 @@ struct ResetTemplate<'s> {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /reset
 /// ```
 pub fn reset(
@@ -346,7 +346,7 @@ struct ResetMail<'s> {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /reset
 /// ```
 pub fn do_reset(
@@ -460,7 +460,7 @@ struct RegisterTemplate<'s> {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /register
 /// ```
 pub fn register(
@@ -494,7 +494,7 @@ pub struct RegisterForm {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /register
 /// ```
 pub fn do_register(

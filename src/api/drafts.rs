@@ -55,7 +55,7 @@ type Result<T, E=Error> = std::result::Result<T, E>;
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /drafts
 /// ```
 pub fn list_drafts(
@@ -71,7 +71,7 @@ pub fn list_drafts(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /drafts/:id
 /// ```
 pub fn get_draft(
@@ -94,7 +94,7 @@ pub struct DraftUpdate {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /drafts/:id
 /// ```
 pub fn update_draft(
@@ -115,7 +115,7 @@ pub fn update_draft(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// DELTE /drafts/:id
 /// ```
 pub fn delete_draft(
@@ -135,7 +135,7 @@ pub fn delete_draft(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /drafts/:id/save
 /// ```
 pub fn save_draft(
@@ -161,7 +161,7 @@ pub fn save_draft(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /drafts/:id/comments
 /// ```
 pub fn list_comments(_req: &HttpRequest<State>) -> HttpResponse {
@@ -172,7 +172,7 @@ pub fn list_comments(_req: &HttpRequest<State>) -> HttpResponse {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /drafts/:id/comments
 /// ```
 pub fn add_comment(_req: &HttpRequest<State>) -> HttpResponse {
@@ -189,7 +189,7 @@ pub struct FileInfo {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /drafts/:id/files
 /// ```
 pub fn list_files(
@@ -215,7 +215,7 @@ pub fn list_files(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /drafts/:id/files/:name
 /// ```
 pub fn get_file(
@@ -235,7 +235,7 @@ pub fn get_file(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /drafts/:id/files/:name
 /// ```
 pub fn update_file(
@@ -273,7 +273,7 @@ pub fn update_file(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// DELETE /drafts/:id/files/:name
 /// ```
 pub fn delete_file(
@@ -294,7 +294,7 @@ pub fn delete_file(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /modules/:id/books
 /// ```
 pub fn list_containing_books(

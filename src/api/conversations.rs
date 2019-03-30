@@ -13,7 +13,7 @@ pub fn routes(app: App<State>) -> App<State> {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /conversations/:id
 /// ```
 pub fn get_conversation(_req: HttpRequest<State>) -> HttpResponse {
@@ -25,7 +25,7 @@ pub fn get_conversation(_req: HttpRequest<State>) -> HttpResponse {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /conversations/:id/socket
 /// ```
 pub fn get_socket(_req: HttpRequest<State>) -> HttpResponse {

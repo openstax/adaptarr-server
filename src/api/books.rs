@@ -72,7 +72,7 @@ type Result<T, E=Error> = std::result::Result<T, E>;
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /books
 /// ```
 pub fn list_books(
@@ -95,7 +95,7 @@ pub struct NewBook {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /books
 /// Content-Type: application/json
 /// ```
@@ -125,7 +125,7 @@ from_multipart! {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /books
 /// Content-Type: multipart/form-data
 /// ```
@@ -145,7 +145,7 @@ pub fn create_book_from_zip(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /books/:id
 /// ```
 pub fn get_book(
@@ -168,7 +168,7 @@ pub struct BookChange {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /books/:id
 /// ```
 pub fn update_book(
@@ -223,7 +223,7 @@ pub fn replace_book(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// DELETE /books/:id
 /// ```
 pub fn delete_book(
@@ -243,7 +243,7 @@ pub fn delete_book(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /books/:id/parts
 /// ```
 pub fn book_contents(
@@ -292,7 +292,7 @@ pub struct NewPartData {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /books/:id/parts
 /// ```
 pub fn create_part(
@@ -377,7 +377,7 @@ impl_from! { for RealizeTemplateError ;
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /book/:id/parts/:number
 /// ```
 pub fn get_part(
@@ -398,7 +398,7 @@ pub fn get_part(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// DELETE /book/:id/parts/:number
 /// ```
 pub fn delete_part(
@@ -432,7 +432,7 @@ pub struct PartLocation {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /book/:id/parts/:number
 /// ```
 pub fn update_part(

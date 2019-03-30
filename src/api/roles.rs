@@ -27,7 +27,7 @@ type Result<T, E=Error> = std::result::Result<T, E>;
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /roles
 /// ```
 pub fn list_roles(
@@ -56,7 +56,7 @@ pub struct NewRole {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /roles
 /// ```
 pub fn create_role(
@@ -74,7 +74,7 @@ pub fn create_role(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /roles/:id
 /// ```
 pub fn get_role(
@@ -101,7 +101,7 @@ pub struct RoleUpdate {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /roles/:id
 /// ```
 pub fn update_role(
@@ -133,7 +133,7 @@ pub fn update_role(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// DELETE /roles/:id
 /// ```
 pub fn delete_role(

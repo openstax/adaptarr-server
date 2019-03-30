@@ -55,7 +55,7 @@ pub struct EventData {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /notifications
 /// ```
 pub fn list_notifications(
@@ -89,7 +89,7 @@ pub struct EventUpdate {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /notifications/:id
 /// ```
 pub fn update_notifiation(
@@ -113,7 +113,7 @@ pub fn update_notifiation(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /events
 /// ```
 pub fn event_stream(

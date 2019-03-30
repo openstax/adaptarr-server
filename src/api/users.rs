@@ -63,7 +63,7 @@ struct InviteTemplate<'s> {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /users
 /// ```
 pub fn list_users(
@@ -84,7 +84,7 @@ pub fn list_users(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /users/invite
 /// ```
 pub fn create_invitation(
@@ -129,7 +129,7 @@ struct NoSuchLocaleError;
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /users/:id
 /// ```
 pub fn get_user(
@@ -151,7 +151,7 @@ pub struct UserSelfUpdate {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /users/me
 /// ```
 pub fn modify_user_self(
@@ -192,7 +192,7 @@ pub struct UserUpdate {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /users/:id
 /// ```
 pub fn modify_user(
@@ -238,7 +238,7 @@ pub struct PasswordChangeRequest {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /users/me/password
 /// ```
 pub fn modify_password(
@@ -290,7 +290,7 @@ pub fn get_session(session: Session) -> Json<SessionData> {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /users/:id/permissions
 /// ```
 pub fn get_permissions(
@@ -317,7 +317,7 @@ pub fn get_permissions(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /users/:id/permissions
 /// ```
 pub fn modify_permissions(

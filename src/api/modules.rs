@@ -80,7 +80,7 @@ pub struct NewModule {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// Get /modules
 /// ```
 pub fn list_modules(
@@ -98,7 +98,7 @@ pub fn list_modules(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /modules/assigned/to/:user
 /// ```
 pub fn list_assigned(
@@ -118,7 +118,7 @@ pub fn list_assigned(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /modules
 /// Content-Type: application/json
 /// ```
@@ -165,7 +165,7 @@ from_multipart! {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /modules
 /// Content-Type: multipart/form-data
 /// ```
@@ -185,7 +185,7 @@ pub fn create_module_from_zip(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /modules/:id
 /// ```
 pub fn get_module(
@@ -203,7 +203,7 @@ pub fn get_module(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /modules/:id
 /// ```
 pub fn crete_draft(
@@ -228,7 +228,7 @@ pub struct ModuleUpdate {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /modules/:id
 /// Content-Type: application/json
 /// ```
@@ -266,7 +266,7 @@ pub fn update_module(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// PUT /modules/:id
 /// ```
 pub fn replace_module(
@@ -307,7 +307,7 @@ pub fn replace_module(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// DELTE /modules/:id
 /// ```
 pub fn delete_module(_req: &HttpRequest<State>) -> HttpResponse {
@@ -318,7 +318,7 @@ pub fn delete_module(_req: &HttpRequest<State>) -> HttpResponse {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /modules/:id/comments
 /// ```
 pub fn list_comments(_req: &HttpRequest<State>) -> HttpResponse {
@@ -329,7 +329,7 @@ pub fn list_comments(_req: &HttpRequest<State>) -> HttpResponse {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// POST /modules/:id/comments
 /// ```
 pub fn add_comment(_req: &HttpRequest<State>) -> HttpResponse {
@@ -346,7 +346,7 @@ pub struct FileInfo {
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /modules/:id/files
 /// ```
 pub fn list_files(
@@ -372,7 +372,7 @@ pub fn list_files(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /modules/:id/files/:name
 /// ```
 pub fn get_file(
@@ -392,7 +392,7 @@ pub fn get_file(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /modules/:id/xref-targets
 /// ```
 pub fn list_xref_targets(
@@ -415,7 +415,7 @@ pub fn list_xref_targets(
 ///
 /// ## Method
 ///
-/// ```
+/// ```text
 /// GET /modules/:id/books
 /// ```
 pub fn list_containing_books(

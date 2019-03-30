@@ -39,7 +39,7 @@ pub enum Error {
     /// Note that this variant also includes errors related to missing record,
     /// you may want to turn them into [`ApiError`]s instead:
     ///
-    /// ```
+    /// ```ignore
     /// database_operation
     ///     .optional()?
     ///     .ok_or_else(|| MyApiError::NotFound)?
