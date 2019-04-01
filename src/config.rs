@@ -5,7 +5,7 @@ use toml;
 use serde::de::{Deserializer, Error, Visitor, Unexpected};
 
 pub fn load() -> crate::Result<Config> {
-    let data = fs::read("config.toml")?;
+    let data = fs::read("config.toml").map_err(ReadConfigurationError)?;
     toml::from_slice(&data).map_err(|e| ConfigurationError(e).into())
 }
 
@@ -55,6 +55,10 @@ pub struct Logging {
     /// Custom filters.
     pub filters: HashMap<String, LevelFilter>,
 }
+
+#[derive(Debug, Fail)]
+#[fail(display = "Cannot read configuration file")]
+pub struct ReadConfigurationError(#[fail(cause)] std::io::Error);
 
 #[derive(Debug, Fail)]
 #[fail(display = "Invalid configuration: {}", _0)]

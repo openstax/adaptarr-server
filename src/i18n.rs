@@ -43,21 +43,22 @@ impl I18n<'static> {
         let mut locale_codes = Vec::new();
         let mut resources = Vec::new();
 
-        for entry in fs::read_dir("./locales")? {
-            let entry = entry?;
+        for entry in fs::read_dir("./locales").map_err(I18nError::FolderRead)? {
+            let entry = entry.map_err(I18nError::FolderRead)?;
 
-            if !entry.file_type()?.is_file() {
+            if !entry.file_type().map_err(I18nError::FolderRead)?.is_file() {
                 continue;
             }
 
             let path = entry.path();
-            let locale = path.file_stem()
+            let locale: LanguageTag = path.file_stem()
                 .expect("file on disk has no name")
                 .to_str()
                 .ok_or(I18nError::LocaleNameUtf8)?
                 .parse()?;
 
-            let source = fs::read_to_string(&path)?;
+            let source = fs::read_to_string(&path)
+                .map_err(|err| I18nError::LocaleRead(locale.clone(), err))?;
             let resource = match FluentResource::try_new(source) {
                 Ok(res) => res,
                 Err((res, errors)) => {
@@ -119,6 +120,10 @@ impl<'bundle> I18n<'bundle> {
 
 #[derive(Debug, Fail)]
 pub enum I18nError {
+    #[fail(display = "Cannot read locale directory")]
+    FolderRead(#[cause] std::io::Error),
+    #[fail(display = "Cannot read file for locale {}", _0)]
+    LocaleRead(LanguageTag, #[cause] std::io::Error),
     #[fail(display = "Locale name is not valid UTF-8")]
     LocaleNameUtf8,
     #[fail(display = "Locale name missing from {}", _0)]
