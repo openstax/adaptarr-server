@@ -110,6 +110,11 @@ impl Module {
         })
     }
 
+    /// Get underlying database models.
+    pub fn into_db(self) -> (db::Module, db::Document) {
+        (self.data, self.document.into_db())
+    }
+
     /// Get ID of this module.
     ///
     /// Since `Module` derefs to [`Document`], `module.id` will return ID of the

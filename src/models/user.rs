@@ -136,6 +136,11 @@ impl User {
         })
     }
 
+    /// Get underlying database models.
+    pub fn into_db(self) -> (db::User, Option<db::Role>) {
+        (self.data, self.role.map(Role::into_db))
+    }
+
     /// Find an user for given email and try to authenticate as them.
     pub fn authenticate(dbcon: &Connection, email: &str, password: &str)
     -> Result<User, UserAuthenticateError> {
