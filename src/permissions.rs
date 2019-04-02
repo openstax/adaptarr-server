@@ -6,8 +6,10 @@ bitflags! {
     /// user can take.
     #[derive(Default)]
     pub struct PermissionBits: i32 {
+        /// All currently allocated bits.
+        const ALL_BITS = 0x0000ffff;
         /// All bits allocated for user management permissions.
-        const MANAGE_USERS_BITS = 0x0000000f;
+        const MANAGE_USERS_BITS = 0x0000f00f;
         /// Permission holder can invite new users into the platform.
         const INVITE_USER = 0x00000001;
         /// Permission holder can remove existing users from the platform.
@@ -16,6 +18,8 @@ bitflags! {
         const EDIT_USER_PERMISSIONS = 0x00000004;
         /// Permission holder can change other user's roles.
         const ASSIGN_ROLE = 0x00000008;
+        /// Permission holder can edit data for other users.
+        const EDIT_USER = 0x00001000;
         /// All bits allocated for content management permissions.
         const MANAGE_CONTENT_BITS = 0x000000f0;
         /// Permission holder can create, edit, and delete books.
@@ -134,6 +138,9 @@ impl ser::Serialize for PermissionBits {
         if self.contains(PermissionBits::ASSIGN_ROLE) {
             seq.serialize_element("user:assign-role")?;
         }
+        if self.contains(PermissionBits::EDIT_USER) {
+            seq.serialize_element("user:edit")?;
+        }
         if self.contains(PermissionBits::EDIT_BOOK) {
             seq.serialize_element("book:edit")?;
         }
@@ -198,6 +205,7 @@ impl<'de> de::Visitor<'de> for BitsVisitor {
             "user:delete" => PermissionBits::DELETE_USER,
             "user:edit-permissions" => PermissionBits::EDIT_USER_PERMISSIONS,
             "user:assign-role" => PermissionBits::ASSIGN_ROLE,
+            "user:edit" => PermissionBits::EDIT_USER,
             "book:edit" => PermissionBits::EDIT_BOOK,
             "module:edit" => PermissionBits::EDIT_MODULE,
             "module:assign" => PermissionBits::ASSIGN_MODULE,

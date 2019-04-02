@@ -35,7 +35,6 @@ pub fn routes(app: App<State>) -> App<State> {
         .api_route("/users", Method::GET, list_users)
         .scope("/users", |scope| scope
         .api_route("/invite", Method::POST, create_invitation)
-        .api_route("/me", Method::PUT, modify_user_self)
         .resource("/{id}", |r| {
             r.get().api_with(get_user);
             r.put().api_with(modify_user);
@@ -138,47 +137,8 @@ pub fn get_user(
 }
 
 #[derive(Deserialize)]
-pub struct UserSelfUpdate {
-    language: Option<LanguageTag>,
-}
-
-/// Update user information.
-///
-/// ## Method
-///
-/// ```text
-/// PUT /users/me
-/// ```
-pub fn modify_user_self(
-    state: actix_web::State<State>,
-    session: Session,
-    form: Either<Form<UserSelfUpdate>, Json<UserSelfUpdate>>,
-) -> Result<Json<PublicData>, Error> {
-    let db = state.db.get()?;
-    let mut user = session.user(&*db)?;
-
-    let form = match form {
-        Either::A(form) => form.into_inner(),
-        Either::B(json) => json.into_inner(),
-    };
-
-    let dbcon = &*db;
-    use diesel::Connection;
-    dbcon.transaction::<_, Error, _>(|| {
-        if let Some(language) = form.language {
-            let locale = state.i18n.find_locale(&language)
-                .ok_or(NoSuchLocaleError)?;
-            user.set_language(dbcon, &locale.code)?;
-        }
-
-        Ok(())
-    })?;
-
-    Ok(Json(user.get_public()))
-}
-
-#[derive(Deserialize)]
 pub struct UserUpdate {
+    language: Option<LanguageTag>,
     #[serde(default, deserialize_with = "de_optional_null")]
     role: Option<Option<i32>>,
 }
@@ -193,12 +153,12 @@ pub struct UserUpdate {
 pub fn modify_user(
     state: actix_web::State<State>,
     session: Session,
-    id: Path<i32>,
+    id: Path<UserId>,
     form: Either<Form<UserUpdate>, Json<UserUpdate>>,
 ) -> Result<Json<PublicData>, Error> {
     let db = state.db.get()?;
     let permissions = session.permissions();
-    let mut user = User::by_id(&*db, id.into_inner())?;
+    let mut user = id.get_user(&state, &session)?;
 
     let form = match form {
         Either::A(form) => form.into_inner(),
@@ -208,6 +168,16 @@ pub fn modify_user(
     let dbcon = &*db;
     use diesel::Connection;
     dbcon.transaction::<_, Error, _>(|| {
+        if let Some(language) = form.language {
+            if !id.is_current() {
+                permissions.require(PermissionBits::EDIT_USER)?;
+            }
+
+            let locale = state.i18n.find_locale(&language)
+                .ok_or(NoSuchLocaleError)?;
+            user.set_language(dbcon, &locale.code)?;
+        }
+
         if let Some(role) = form.role {
             permissions.require(PermissionBits::ASSIGN_ROLE)?;
             let role = role.map(|id| Role::by_id(dbcon, id))
