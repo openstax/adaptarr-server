@@ -35,11 +35,11 @@ pub fn routes(app: App<State>) -> App<State> {
         .api_route("/users", Method::GET, list_users)
         .scope("/users", |scope| scope
         .api_route("/invite", Method::POST, create_invitation)
+        .api_route("/me", Method::PUT, modify_user_self)
         .resource("/{id}", |r| {
             r.get().api_with(get_user);
             r.put().api_with(modify_user);
         })
-        .api_route("/me", Method::PUT, modify_user_self)
         .api_route("/me/password", Method::PUT, modify_password)
         .route("/me/session", Method::GET, get_session)
         .resource("/{id}/permissions", |r| {
