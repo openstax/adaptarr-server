@@ -19,6 +19,7 @@ use crate::{
         user::{User, PublicData, UserAuthenticateError},
     },
     permissions::{EditUserPermissions, InviteUser, PermissionBits},
+    templates,
 };
 use super::{
     Error,
@@ -51,12 +52,6 @@ pub fn routes(app: App<State>) -> App<State> {
 pub struct InviteParams {
     email: String,
     language: LanguageTag,
-}
-
-#[derive(Serialize)]
-struct InviteTemplate<'s> {
-    url: &'s str,
-    email: &'s str,
 }
 
 /// Get list of all users.
@@ -110,7 +105,7 @@ pub fn create_invitation(
         "invite",
         params.email.as_str(),
         "mail-invite-subject",
-        &InviteTemplate {
+        &templates::InviteMailArgs {
             url: &url,
             email: params.email.as_str(),
         },

@@ -15,8 +15,9 @@ use crate::{
     models::{
         Invite,
         PasswordResetToken,
-        user::{User, PublicData as UserData},
+        User,
     },
+    templates,
 };
 use super::{
     Error,
@@ -336,12 +337,6 @@ pub enum ResetForm {
     },
 }
 
-#[derive(Serialize)]
-struct ResetMail<'s> {
-    user: UserData,
-    url: &'s str,
-}
-
 /// Send reset token in an e-mail or perform password reset (with a token).
 ///
 /// ## Method
@@ -387,10 +382,15 @@ pub fn do_reset(
             let user_locale = state.i18n.find_locale(&user.language())
                 .unwrap_or(locale);
             state.mailer.send(
-                "reset", email.as_str(), "mail-reset-subject", &ResetMail {
+                "reset",
+                email.as_str(),
+                "mail-reset-subject",
+                &templates::ResetMailArgs {
                     user: user.get_public(),
                     url: &url,
-                }, user_locale);
+                },
+                user_locale,
+            );
 
             render(locale, "reset_token_sent.html", &Empty {})
         }

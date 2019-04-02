@@ -3,7 +3,10 @@ use tera::{Tera, Value};
 use std::{cell::Cell, collections::HashMap};
 use serde::Serialize;
 
-use crate::i18n::Locale;
+use crate::{
+    i18n::Locale,
+    models::user::{PublicData as UserData},
+};
 
 thread_local!(static LOCALE: Cell<Option<&'static Locale<'static>>> = Cell::new(None));
 
@@ -89,4 +92,22 @@ fn translate(mut args: HashMap<String, Value>) -> tera::Result<Option<Value>> {
         warn!("Message {} missing from locale {}", key, locale.code);
         Ok(None)
     }
+}
+
+/// Arguments for `mail/invite`.
+#[derive(Serialize)]
+pub struct InviteMailArgs<'a> {
+    /// Registration URL.
+    pub url: &'a str,
+    /// Email address which was invited.
+    pub email: &'a str,
+}
+
+/// Arguments for `mail/reset`.
+#[derive(Serialize)]
+pub struct ResetMailArgs<'a> {
+    /// User to whom the email is sent.
+    pub user: UserData,
+    /// Password reset URL.
+    pub url: &'a str,
 }

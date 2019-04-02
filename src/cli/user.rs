@@ -10,6 +10,7 @@ use crate::{
     mail::Mailer,
     models::{Invite, User},
     permissions::PermissionBits,
+    templates,
 };
 
 #[derive(StructOpt)]
@@ -79,11 +80,6 @@ pub struct InviteOpts {
     language: LanguageTag,
 }
 
-#[derive(Serialize)]
-struct InviteTemplate {
-    url: String,
-}
-
 pub fn invite(cfg: Config, opts: InviteOpts) -> Result<()> {
     let i18n = I18n::load()?;
     let locale = match i18n.find_locale(&opts.language) {
@@ -107,9 +103,12 @@ pub fn invite(cfg: Config, opts: InviteOpts) -> Result<()> {
 
     Mailer::from_config(cfg.mail)?.send(
         "invite",
-        opts.email,
+        opts.email.as_str(),
         "mail-invite-subject",
-        &InviteTemplate { url },
+        &templates::InviteMailArgs {
+            url: &url,
+            email: &opts.email,
+        },
         locale,
     );
 
