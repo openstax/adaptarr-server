@@ -3,6 +3,7 @@ use diesel::{
     prelude::*,
     result::{DatabaseErrorKind, Error as DbError},
 };
+use lettre_email::Mailbox;
 use rand::RngCore;
 
 use crate::{
@@ -193,6 +194,10 @@ impl User {
             PermissionBits::empty()
         };
         PermissionBits::from_bits_truncate(self.data.permissions) | role
+    }
+
+    pub fn mailbox(&self) -> Mailbox {
+        Mailbox::new(self.data.email.clone())
     }
 
     /// Change user's password.

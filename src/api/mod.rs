@@ -39,12 +39,15 @@ pub fn start(cfg: Config) -> Result<()> {
 
     let db = db::pool(&cfg)?;
     let xref_processor = TargetProcessor::start(db.clone());
+    let mailer = Mailer::from_config(cfg.mail.clone())?;
+    let events = event_manager::start(
+        cfg.clone(), db.clone(), i18n.clone(), mailer.clone());
 
     let state = State {
         config: cfg.clone(),
         db: db.clone(),
-        mailer: Mailer::from_config(cfg.mail.clone())?,
-        events: event_manager::start(db.clone()),
+        mailer,
+        events,
         i18n,
         importer: Importer::start(
             db.clone(), cfg.storage.clone(), xref_processor.clone()),

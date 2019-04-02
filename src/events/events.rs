@@ -25,3 +25,33 @@ impl Event {
 impl_from! { for Event ;
     Assigned => |e| Event::Assigned(e),
 }
+
+/// A version of [`Event`] expanded to include additional information.
+///
+/// This enum is intended to be used where obtaining additional information
+/// about an event would be difficult, for example inside an email template.
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind")]
+pub enum ExpandedEvent {
+    #[serde(rename = "assigned")]
+    Assigned {
+        who: ExpandedUser,
+        module: ExpandedModule,
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExpandedUser {
+    /// User's name.
+    pub name: String,
+    /// User's profile URL.
+    pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExpandedModule {
+    /// Module's title.
+    pub title: String,
+    /// Module's URL.
+    pub url: String,
+}

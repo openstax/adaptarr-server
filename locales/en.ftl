@@ -154,3 +154,28 @@ mail-reset-after-button =
 
     If you have not requested a password reset you don't have to
     do anything, your account is still secure.
+
+## Notification email
+
+# Variables:
+# - $count (number): number of notifications
+mail-notify-subject = { $count ->
+    [one] One new notification
+   *[other] { $count } new notifications
+}
+
+mail-notify-before-events =
+    While you were gone:
+
+# Variables:
+# - $actorname (string): name of user who caused this event
+# - $actorurl (string): URL of profile of the user who caused this event
+# - $moduletitle (string): name of the module user was assigned to
+# - $moduleurl (string): URL of the module user was assigned to
+mail-notify-event-assigned-text =
+    { $actorname } assigned you to module “{ $moduletitle }”.
+    ({ $moduleurl })
+mail-notify-event-assigned =
+    <a href="{ $actorurl }" target="_blank" rel="noopener">{ $actorname }</a>
+    assigned you to module
+    <a href="{ $moduleurl }" target="_blank" rel="noopener">{ $moduletitle }</a>.

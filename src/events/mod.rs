@@ -2,7 +2,7 @@
 
 use actix::{Addr, Arbiter};
 
-use crate::db;
+use crate::{config::Config, db, i18n::I18n, mail::Mailer};
 
 mod events;
 mod service;
@@ -20,6 +20,8 @@ pub use self::{
 };
 
 /// Start an event manager instance.
-pub fn start(pool: db::Pool) -> Addr<EventManager> {
-    Arbiter::start(move |_| EventManager::new(pool.clone()))
+pub fn start(cfg: Config, pool: db::Pool, i18n: I18n<'static>, mail: Mailer)
+-> Addr<EventManager> {
+    Arbiter::start(move |_| EventManager::new(
+        cfg.clone(), pool.clone(), i18n, mail.clone()))
 }

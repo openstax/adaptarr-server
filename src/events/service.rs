@@ -1,23 +1,42 @@
 //! Actix actor handling creation and delivery of events.
 
-use actix::{Actor, Addr, Context, Handler, Message, Recipient};
-use chrono::NaiveDateTime;
+use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, Recipient};
+use chrono::{NaiveDateTime, Utc};
 use diesel::{
+    Connection as _,
     prelude::*,
     result::Error as DbError,
 };
 use serde::Serialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use crate::{
+    config::Config,
     db::{
+        Connection,
         Pool,
         models as db,
         schema::events,
     },
-    models::User,
+    i18n::I18n,
+    mail::Mailer,
+    models::{
+        module::{Module, FindModuleError},
+        user::{User, FindUserError},
+    },
+    templates,
+    utils::IteratorGroupExt,
 };
-use super::events::Event;
+use super::events::{Event, ExpandedEvent, ExpandedUser, ExpandedModule};
+
+/// Interval between two notification emails.
+///
+/// It's set to 30 minutes in production and one minute in development.
+#[cfg(any(not(debug_assertions), doc))]
+const NOTIFY_INTERVAL: Duration = Duration::from_secs(1800);
+
+#[cfg(all(debug_assertions, not(doc)))]
+const NOTIFY_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Notify a user of an event.
 ///
@@ -68,15 +87,24 @@ impl Message for UnregisterListener {
 
 /// Actix actor which manages persisting events and notifying users of them.
 pub struct EventManager {
+    config: Config,
     pool: Pool,
+    i18n: I18n<'static>,
+    mail: Mailer,
     streams: HashMap<i32, Recipient<NewEvent>>,
+    last_notify: NaiveDateTime,
 }
 
 impl EventManager {
-    pub fn new(pool: Pool) -> EventManager {
+    pub fn new(config: Config, pool: Pool, i18n: I18n<'static>, mail: Mailer)
+    -> EventManager {
         EventManager {
+            config,
             pool,
+            i18n,
+            mail,
             streams: HashMap::new(),
+            last_notify: Utc::now().naive_utc(),
         }
     }
 
@@ -111,10 +139,123 @@ impl EventManager {
 
         Ok(())
     }
+
+    fn on_interval(&mut self, _: &mut Context<Self>) {
+        match self.send_emails() {
+            Ok(()) => {}
+            Err(err) => error!("Error sending email notifications: {}", err),
+        }
+    }
+
+    /// Send email notifications for unread events.
+    fn send_emails(&mut self) -> Result<(), Error> {
+        let now = Utc::now().naive_utc();
+        let db = self.pool.get()?;
+        let dbcon = &*db;
+
+        dbcon.transaction::<_, Error, _>(|| {
+            let events = events::table
+                .filter(events::timestamp.ge(self.last_notify)
+                    .and(events::is_unread.eq(true)))
+                .order((events::user, events::timestamp.asc()))
+                .get_results::<db::Event>(&*db)?
+                .into_iter()
+                .group_by_key::<Vec<_>, _, _>(|event| event.user);
+
+            for events in events {
+                let user = match User::by_id(dbcon, events[0].user) {
+                    Ok(user) => user,
+                    Err(FindUserError::Internal(err)) => return Err(err.into()),
+                    Err(FindUserError::NotFound) => panic!(
+                        "Inconsistent database: user doesn't exist but owns \
+                        an event",
+                    ),
+                };
+                self.notify_user_by_email(&user, dbcon, events)?;
+            }
+
+            Ok(())
+        })?;
+
+        self.last_notify = now;
+
+        Ok(())
+    }
+
+    /// Send email notifications to a particular user.
+    fn notify_user_by_email(
+        &mut self,
+        user: &User,
+        dbcon: &Connection,
+        events: Vec<db::Event>,
+    ) -> Result<(), Error> {
+        let events = events.into_iter()
+            .map(|event| -> Result<ExpandedEvent, Error> {
+                let data = rmps::from_slice(&event.data)?;
+
+                Ok(match data {
+                    Event::Assigned(ev) => {
+                        let who = match User::by_id(dbcon, ev.who) {
+                            Ok(user) => user,
+                            Err(FindUserError::Internal(err)) =>
+                                return Err(err.into()),
+                            Err(FindUserError::NotFound) => panic!(
+                                "Inconsistent database: user doesn't exist \
+                                but is referenced by an event",
+                            ),
+                        }.into_db();
+                        let module = match Module::by_id(dbcon, ev.module) {
+                            Ok(module) => module,
+                            Err(FindModuleError::Database(err)) =>
+                                return Err(err.into()),
+                            Err(FindModuleError::NotFound) => panic!(
+                                "Inconsistent database: module doesn't exist \
+                                but is referenced by an event",
+                            ),
+                        }.into_db();
+
+                        ExpandedEvent::Assigned {
+                            who: ExpandedUser {
+                                name: who.0.name,
+                                url: format!("https://{}/users/{}",
+                                    self.config.server.domain, who.0.id),
+                            },
+                            module: ExpandedModule {
+                                title: module.1.title,
+                                url: format!("https://{}/modules/{}",
+                                    self.config.server.domain, module.0.id),
+                            },
+                        }
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let locale = self.i18n.find_locale(&user.language())
+            .expect("user's preferred language to exist");
+
+        let args = std::iter::once(
+            ("count", fluent::FluentValue::from(events.len() as isize))
+        ).collect();
+
+        self.mail.send(
+            "notify",
+            user.mailbox(),
+            ("mail-notify-subject", &args),
+            &templates::NotifyMailArgs { events: &events },
+            locale,
+        );
+
+        Ok(())
+    }
 }
 
 impl Actor for EventManager {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        ctx.run_interval(NOTIFY_INTERVAL, Self::on_interval);
+    }
 }
 
 impl Handler<Notify> for EventManager {
@@ -156,12 +297,15 @@ pub enum Error {
     DatabasePool(#[cause] r2d2::Error),
     #[fail(display = "Error serializing event data: {}", _0)]
     Serialize(#[cause] rmps::encode::Error),
+    #[fail(display = "Error deserializing event data: {}", _0)]
+    Deserialize(#[cause] rmps::decode::Error),
 }
 
 impl_from! { for Error ;
     DbError => |e| Error::Database(e),
     r2d2::Error => |e| Error::DatabasePool(e),
     rmps::encode::Error => |e| Error::Serialize(e),
+    rmps::decode::Error => |e| Error::Deserialize(e),
 }
 
 pub trait EventManagerAddrExt {

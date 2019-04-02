@@ -111,3 +111,10 @@ pub struct ResetMailArgs<'a> {
     /// Password reset URL.
     pub url: &'a str,
 }
+
+/// Arguments for `mail/notify`.
+#[derive(Serialize)]
+pub struct NotifyMailArgs<'a> {
+    /// List of new events to include in the email.
+    pub events: &'a [crate::events::ExpandedEvent],
+}

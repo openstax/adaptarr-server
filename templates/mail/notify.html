@@ -1,0 +1,20 @@
+{% extends "_base.html" %}
+{% import "_macros.html" as m %}
+
+{% block content %}
+    {{ m::expand_paras(paras=_(key="mail-notify-before-events"), first_top="10px") }}
+
+    {% for event in events %}
+        {{ m::para() }}
+            {% if event.kind == "assigned" %}
+                {{ _(
+                    key="mail-notify-event-assigned",
+                    actorname=event.who.name,
+                    actorurl=event.who.url,
+                    moduletitle=event.module.title,
+                    moduleurl=event.module.url
+                ) | safe }}
+            {% endif %}
+        {{ m::endpara() }}
+    {% endfor %}
+{% endblock %}

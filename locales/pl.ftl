@@ -149,3 +149,28 @@ mail-reset-after-button =
 
     Jeżeli nie prosiłeś/aś o zresetowania hasła nie masz się czym martwić,
     twoje konto jest bezpieczne.
+
+## Notification email
+
+# Variables:
+# - $count (number): number of notifications
+mail-notify-subject = { $count ->
+    [one] Nowe powiadomienie
+    [few] { $count } nowe powiadomienia
+   *[many] { $count } nowych powiadomień
+}
+
+mail-notify-before-events =
+    Gdy cie nie było:
+
+# Variables:
+# - $actorname (string): name of user who caused this event
+# - $moduletitle (string): name of the module user was assigned to
+# - $moduleurl (string): URL of the module user was assigned to
+mail-notify-event-assigned-text =
+    { $actorname } przypisał/a Cię do modułu „{ $moduletitle }”.
+    ({ $moduleurl })
+mail-notify-event-assigned =
+    <a href="{ $actorurl }" target="_blank" rel="noopener">{ $actorname }</a>
+    przypisał/a Cię do modułu
+    <a href="{ $moduleurl }" target="_blank" rel="noopener">{ $moduletitle }</a>.
