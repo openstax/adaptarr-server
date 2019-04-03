@@ -42,7 +42,19 @@ pub struct PublicData {
     name: String,
     is_super: bool,
     language: String,
+    #[serde(skip_serializing_if="Option::is_none")]
+    permissions: Option<PermissionBits>,
     role: Option<RoleData>,
+}
+
+bitflags! {
+    /// Flags controlling which fields are included in [`User::get_public()`].
+    pub struct Fields: u32 {
+        /// Include user's permissions ([`PublicData::permissions`]).
+        const PERMISSIONS = 0x00000001;
+        /// Include user's role's permissions.
+        const ROLE_PERMISSIONS = 0x00000002;
+    }
 }
 
 impl User {
@@ -161,15 +173,23 @@ impl User {
     }
 
     /// Get the public portion of this user's data.
-    pub fn get_public(&self) -> PublicData {
+    pub fn get_public(&self, fields: Fields) -> PublicData {
         let db::User { id, ref name, is_super, ref language, .. } = self.data;
+
+        let permissions = if fields.contains(Fields::PERMISSIONS) {
+            Some(PermissionBits::from_bits_truncate(self.data.permissions))
+        } else {
+            None
+        };
 
         PublicData {
             id,
             name: name.clone(),
             is_super,
             language: language.clone(),
-            role: self.role.as_ref().map(|r| r.get_public(false)),
+            permissions,
+            role: self.role.as_ref().map(|r|
+                r.get_public(fields.contains(Fields::ROLE_PERMISSIONS))),
         }
     }
 

@@ -16,9 +16,9 @@ use crate::{
     models::{
         Invite,
         Role,
-        user::{User, PublicData, UserAuthenticateError},
+        user::{Fields, User, PublicData, UserAuthenticateError},
     },
-    permissions::{EditUserPermissions, InviteUser, PermissionBits},
+    permissions::{InviteUser, PermissionBits},
     templates,
 };
 use super::{
@@ -40,11 +40,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.put().api_with(modify_user);
         })
         .api_route("/me/password", Method::PUT, modify_password)
-        .route("/me/session", Method::GET, get_session)
-        .resource("/{id}/permissions", |r| {
-            r.get().api_with(get_permissions);
-            r.put().api_with(modify_permissions);
-        }))
+        .route("/me/session", Method::GET, get_session))
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,12 +58,22 @@ pub struct InviteParams {
 /// ```
 pub fn list_users(
     state: actix_web::State<State>,
-    _session: Session,
+    session: Session,
 ) -> Result<Json<Vec<PublicData>>, Error> {
     let db = state.db.get()?;
+    let permissions = session.user(&*db)?.permissions(true);
+
+    let mut fields = Fields::empty();
+
+    if permissions.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
+        fields.insert(Fields::PERMISSIONS);
+    }
+    if permissions.contains(PermissionBits::EDIT_ROLE) {
+        fields.insert(Fields::ROLE_PERMISSIONS);
+    }
 
     User::all(&*db)
-        .map(|v| v.into_iter().map(|u| u.get_public()).collect())
+        .map(|v| v.into_iter().map(|u| u.get_public(fields)).collect())
         .map(Json)
         .map_err(Into::into)
 }
@@ -131,14 +137,28 @@ pub fn get_user(
     session: Session,
     path: Path<UserId>,
 ) -> Result<Json<PublicData>, Error> {
+    let db = state.db.get()?;
     let user = path.get_user(&*state, &session)?;
+    let permissions = session.user(&*db)?.permissions(true);
 
-    Ok(Json(user.get_public()))
+    let mut fields = Fields::empty();
+
+    if path.is_current() {
+        fields.insert(Fields::PERMISSIONS | Fields::ROLE_PERMISSIONS);
+    } else if permissions.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
+        fields.insert(Fields::PERMISSIONS);
+    }
+    if permissions.contains(PermissionBits::EDIT_ROLE) {
+        fields.insert(Fields::ROLE_PERMISSIONS);
+    }
+
+    Ok(Json(user.get_public(fields)))
 }
 
 #[derive(Deserialize)]
 pub struct UserUpdate {
     language: Option<LanguageTag>,
+    permissions: Option<PermissionBits>,
     #[serde(default, deserialize_with = "de_optional_null")]
     role: Option<Option<i32>>,
 }
@@ -178,6 +198,11 @@ pub fn modify_user(
             user.set_language(dbcon, &locale.code)?;
         }
 
+        if let Some(new_perms) = form.permissions {
+            permissions.require(PermissionBits::EDIT_USER_PERMISSIONS)?;
+            user.set_permissions(dbcon, new_perms)?;
+        }
+
         if let Some(role) = form.role {
             permissions.require(PermissionBits::ASSIGN_ROLE)?;
             let role = role.map(|id| Role::by_id(dbcon, id))
@@ -189,7 +214,18 @@ pub fn modify_user(
         Ok(())
     })?;
 
-    Ok(Json(user.get_public()))
+    let mut fields = Fields::empty();
+
+    if id.is_current()  {
+        fields.insert(Fields::PERMISSIONS | Fields::ROLE_PERMISSIONS);
+    } else if permissions.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
+        fields.insert(Fields::PERMISSIONS);
+    }
+    if permissions.contains(PermissionBits::EDIT_ROLE) {
+        fields.insert(Fields::ROLE_PERMISSIONS);
+    }
+
+    Ok(Json(user.get_public(fields)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,60 +287,6 @@ pub fn get_session(session: Session) -> Json<SessionData> {
     })
 }
 
-/// Get user's permissions
-///
-/// ## Method
-///
-/// ```text
-/// GET /users/:id/permissions
-/// ```
-pub fn get_permissions(
-    state: actix_web::State<State>,
-    session: Session,
-    path: Path<UserId>,
-) -> Result<Json<PermissionBits>, Error> {
-    let db = state.db.get()?;
-    let user = path.get_user(&*state, &session)?;
-    let current = User::by_id(&*db, session.user_id())
-        .expect("active session for a deleted user")
-        .permissions(false);
-
-    if path.is_current() {
-        Ok(Json(user.permissions(true)))
-    } else if !current.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
-        Err(Forbidden.into())
-    } else {
-        Ok(Json(user.permissions(false)))
-    }
-}
-
-/// Change user's permissions
-///
-/// ## Method
-///
-/// ```text
-/// PUT /users/:id/permissions
-/// ```
-pub fn modify_permissions(
-    _req: HttpRequest<State>,
-    state: actix_web::State<State>,
-    session: Session<EditUserPermissions>,
-    path: Path<UserId>,
-    form: Either<Form<PermissionBits>, Json<PermissionBits>>,
-) -> Result<HttpResponse, Error> {
-    let db = state.db.get()?;
-    let mut user = path.get_user(&*state, &session)?;
-
-    let form = match form {
-        Either::A(form) => form.into_inner(),
-        Either::B(json) => json.into_inner(),
-    };
-
-    user.set_permissions(&*db, form)?;
-
-    Ok(HttpResponse::Ok().finish())
-}
-
 /// ID of a user, can be either a number of a string `"me"`.
 #[derive(Debug)]
 pub enum UserId {
@@ -360,11 +342,6 @@ impl<'de> Deserialize<'de> for UserId {
                 "data was neither a number nor a valid string"))
     }
 }
-
-#[derive(ApiError, Debug, Fail)]
-#[api(status = "FORBIDDEN")]
-#[fail(display = "Forbidden")]
-struct Forbidden;
 
 fn de_optional_null<'de, T, D>(de: D) -> std::result::Result<Option<T>, D::Error>
 where

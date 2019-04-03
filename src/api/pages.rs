@@ -15,7 +15,7 @@ use crate::{
     models::{
         Invite,
         PasswordResetToken,
-        User,
+        user::{User, Fields as UserFields},
     },
     templates,
 };
@@ -386,7 +386,7 @@ pub fn do_reset(
                 email.as_str(),
                 "mail-reset-subject",
                 &templates::ResetMailArgs {
-                    user: user.get_public(),
+                    user: user.get_public(UserFields::empty()),
                     url: &url,
                 },
                 user_locale,
