@@ -1,4 +1,7 @@
 {% extends "_base.html" %}
+{% block head %}
+    <meta http-equiv="refresh" content="5;url=/">
+{% endblock %}
 {% block body %}
     {% filter translate(key = "logout-message") %}
         <p>You have been logged out.</p>
