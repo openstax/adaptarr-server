@@ -1,5 +1,5 @@
-use lettre::{EmailTransport, SendmailTransport};
-use lettre_email::{Email, EmailBuilder, IntoMailbox, Mailbox};
+use lettre::{Transport as _, SendableEmail, SendmailTransport};
+use lettre_email::{EmailBuilder, Mailbox};
 use serde::{Deserializer, Serialize};
 use std::{cell::RefCell, collections::HashMap};
 
@@ -57,7 +57,7 @@ impl Mailer {
         locale: &'static Locale<'static>,
     )
     where
-        M: IntoMailbox,
+        M: Into<Mailbox>,
         C: Serialize,
     {
         let subject = match locale.format(subject, &HashMap::new()) {
@@ -77,7 +77,7 @@ impl Mailer {
             .expect("template to render");
 
         self.transport.borrow_mut()
-            .send(&self.config, to.into_mailbox(), &subject, html, text);
+            .send(&self.config, to.into(), &subject, html, text);
     }
 }
 
@@ -105,7 +105,7 @@ impl Transport {
         match *self {
             Transport::Log => log_mail(to, subject, &text),
             Transport::Sendmail(ref mut t) =>
-                t.send(&construct(config, to, subject, &html, &text))
+                t.send(construct(config, to, subject, &html, &text))
                     .expect("mail to be sent"),
         }
     }
@@ -121,7 +121,7 @@ fn construct(
     subject: &str,
     html: &str,
     text: &str,
-) -> Email {
+) -> SendableEmail {
     EmailBuilder::new()
         .to(to)
         .from(config.sender.clone())
@@ -129,6 +129,7 @@ fn construct(
         .alternative(html, text)
         .build()
         .expect("email to build correctly")
+        .into()
 }
 
 fn de_mailbox<'de, D>(d: D) -> std::result::Result<Mailbox, D::Error>
