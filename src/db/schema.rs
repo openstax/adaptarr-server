@@ -44,6 +44,57 @@ table! {
 }
 
 table! {
+    edit_processes (id) {
+        id -> Int4,
+        name -> Varchar,
+    }
+}
+
+table! {
+    edit_process_links (from, to) {
+        from -> Int4,
+        to -> Int4,
+        name -> Varchar,
+        slot -> Int4,
+    }
+}
+
+table! {
+    edit_process_slots (id) {
+        id -> Int4,
+        process -> Int4,
+        name -> Varchar,
+        role -> Nullable<Int4>,
+        autofill -> Bool,
+    }
+}
+
+table! {
+    edit_process_steps (id) {
+        id -> Int4,
+        process -> Int4,
+        name -> Varchar,
+    }
+}
+
+table! {
+    edit_process_step_slots (step, slot, permission) {
+        step -> Int4,
+        slot -> Int4,
+        permission -> crate::db::types::Slot_permission,
+    }
+}
+
+table! {
+    edit_process_versions (id) {
+        id -> Int4,
+        process -> Int4,
+        version -> Timestamp,
+        start -> Int4,
+    }
+}
+
+table! {
     events (id) {
         id -> Int4,
         user -> Int4,
@@ -148,6 +199,12 @@ joinable!(documents -> files (index));
 joinable!(drafts -> documents (document));
 joinable!(drafts -> modules (module));
 joinable!(drafts -> users (user));
+joinable!(edit_process_links -> edit_process_slots (slot));
+joinable!(edit_process_slots -> edit_process_versions (process));
+joinable!(edit_process_slots -> roles (role));
+joinable!(edit_process_step_slots -> edit_process_slots (slot));
+joinable!(edit_process_step_slots -> edit_process_steps (step));
+joinable!(edit_process_versions -> edit_processes (process));
 joinable!(events -> users (user));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
@@ -164,6 +221,12 @@ allow_tables_to_appear_in_same_query!(
     document_files,
     documents,
     drafts,
+    edit_processes,
+    edit_process_links,
+    edit_process_slots,
+    edit_process_steps,
+    edit_process_step_slots,
+    edit_process_versions,
     events,
     files,
     invites,

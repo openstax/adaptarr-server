@@ -33,6 +33,7 @@ extern crate zip;
 #[macro_use] extern crate api_derive;
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate diesel;
+#[macro_use] extern crate diesel_derive_enum;
 #[macro_use] extern crate failure_derive;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;

@@ -8,6 +8,7 @@ use super::Config;
 pub mod functions;
 pub mod models;
 pub mod schema;
+pub mod types;
 
 pub type Connection = PgConnection;
 
