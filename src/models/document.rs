@@ -73,6 +73,11 @@ impl Document {
         Ok(())
     }
 
+    /// Unpack database data.
+    pub fn into_db(self) -> db::Document {
+        self.data
+    }
+
     /// Get the public portion of this document's data.
     pub fn get_public(&self) -> PublicData {
         PublicData {
