@@ -191,6 +191,10 @@ impl File {
     pub fn read_to_string(&self) -> Result<String, io::Error> {
         fs::read_to_string(&self.data.path)
     }
+
+    pub fn open(&self) -> Result<impl Read, io::Error> {
+        std::fs::File::open(&self.data.path)
+    }
 }
 
 impl std::ops::Deref for File {
