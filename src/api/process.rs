@@ -153,7 +153,11 @@ pub fn list_process_versions(
     _session: Session,
     id: Path<i32>,
 ) -> Result<Json<Vec<VersionData>>> {
-    unimplemented!()
+    let db = state.db.get()?;
+    let process = Process::by_id(&*db, id.into_inner())?;
+    let versions = process.get_versions(&*db)?;
+
+    Ok(Json(versions.iter().map(Version::get_public).collect()))
 }
 
 /// Create a new version of an editing process

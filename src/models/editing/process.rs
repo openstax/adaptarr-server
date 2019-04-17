@@ -7,8 +7,12 @@ use std::ops::Deref;
 use crate::db::{
     Connection,
     models as db,
-    schema::edit_processes,
+    schema::{
+        edit_process_versions,
+        edit_processes,
+    },
 };
+use super::Version;
 
 /// An editing process.
 ///
@@ -67,6 +71,18 @@ impl Process {
             id,
             name: name.clone(),
         }
+    }
+
+    /// Get list of all versions of this process.
+    pub fn get_versions(&self, dbcon: &Connection)
+    -> Result<Vec<Version>, DbError> {
+        Ok(edit_process_versions::table
+            .filter(edit_process_versions::process.eq(self.data.id))
+            .order_by(edit_process_versions::version.desc())
+            .get_results::<db::EditProcessVersion>(dbcon)?
+            .into_iter()
+            .map(|version| Version::from_db(version, self.data.clone()))
+            .collect())
     }
 }
 
