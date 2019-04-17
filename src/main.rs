@@ -7,5 +7,7 @@ fn main() {
         for cause in err.iter_causes() {
             eprintln!("Caused by: {}", cause);
         }
+
+        eprintln!("{}", err.backtrace());
     }
 }
