@@ -16,6 +16,7 @@ use super::{
     File,
     XrefTarget,
     document::{Document, PublicData as DocumentData},
+    user::{User, FindUserError},
 };
 
 /// A module is a version of Document that can be part of a Book.
@@ -135,6 +136,22 @@ impl Module {
             .into_iter()
             .map(|part| part.book)
             .collect())
+    }
+
+    /// Get the user assigned to this module.
+    pub fn get_assignee(&self, dbconn: &Connection)
+    -> Result<Option<User>, DbError> {
+        if let Some(id) = self.data.assignee {
+            User::by_id(dbconn, id)
+                .map(Some)
+                .map_err(|err| match err {
+                    FindUserError::Internal(err) => err,
+                    FindUserError::NotFound =>panic!(
+                        "database inconsistency: assigned user doesn't exist"),
+                })
+        } else {
+            Ok(None)
+        }
     }
 
     /// Get list of all possible cross-reference targets within this module.
