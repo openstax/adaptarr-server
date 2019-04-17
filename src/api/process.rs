@@ -185,8 +185,13 @@ pub fn create_version(
     state: actix_web::State<State>,
     _session: Session<EditProcess>,
     id: Path<i32>,
+    data: Json<structure::Process>,
 ) -> Result<Json<VersionData>> {
-    unimplemented!()
+    let db = state.db.get()?;
+    let process = Process::by_id(&*db, id.into_inner())?;
+    let version = Version::create(&*db, process, &*data)?;
+
+    Ok(Json(version.get_public()))
 }
 
 /// Get a version by ID.
