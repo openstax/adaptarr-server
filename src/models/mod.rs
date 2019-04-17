@@ -4,6 +4,7 @@ pub mod book;
 pub mod bookpart;
 pub mod document;
 pub mod draft;
+pub mod editing;
 pub mod event;
 pub mod file;
 pub mod invite;
