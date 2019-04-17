@@ -1,5 +1,6 @@
 use chrono::NaiveDateTime;
 use diesel::{
+    Connection as _,
     prelude::*,
     result::Error as DbError,
 };
@@ -9,11 +10,15 @@ use crate::db::{
     Connection,
     models as db,
     schema::{
+        edit_process_links,
+        edit_process_slots,
+        edit_process_step_slots,
+        edit_process_steps,
         edit_process_versions,
         edit_processes,
     },
 };
-use super::Process;
+use super::{Process, structure};
 
 /// Particular revision of an editing [`Process`][Process]
 ///
@@ -70,6 +75,87 @@ impl Version {
             name: self.process.name.clone(),
             version,
         }
+    }
+
+    /// Get a complete description of this editing process.
+    pub fn get_structure(&self, dbcon: &Connection)
+    -> Result<structure::Process, DbError> {
+        dbcon.transaction(|| {
+            let dbslots = edit_process_slots::table
+                .filter(edit_process_slots::process.eq(self.data.id))
+                .get_results::<db::EditProcessSlot>(dbcon)?;
+
+            let slots = dbslots.iter()
+                .map(|slot| structure::Slot {
+                    id: slot.id,
+                    name: slot.name.clone(),
+                    role: slot.role,
+                    autofill: slot.autofill,
+                })
+                .collect();
+
+            let dbsteps = edit_process_steps::table
+                .filter(edit_process_steps::process.eq(self.data.id))
+                .get_results::<db::EditProcessStep>(dbcon)?;
+
+            let start = dbsteps.iter()
+                .position(|step| step.id == self.data.start)
+                .expect("database inconsistency: no start step");
+
+            let steps = dbsteps.iter()
+                .map(|step| {
+                    let slots = edit_process_step_slots::table
+                        .filter(edit_process_step_slots::step.eq(step.id))
+                        .get_results::<db::EditProcessStepSlot>(dbcon)?
+                        .into_iter()
+                        .map(|slot| structure::StepSlot {
+                            slot: dbslots.iter()
+                                .position(|s2| s2.id == slot.slot)
+                                .expect(
+                                    "database inconsistency: no slot for step"),
+                            permission: slot.permission,
+                        })
+                        .collect();
+
+                    let links = edit_process_links::table
+                        .filter(edit_process_links::from.eq(step.id))
+                        .get_results::<db::EditProcessLink>(dbcon)?
+                        .into_iter()
+                        .map(|link| {
+                            let to = dbsteps.iter()
+                                .position(|l2| l2.id == link.to)
+                                .expect(
+                                    "database inconsistency: no target for link");
+
+                            let slot = dbslots.iter()
+                                .position(|slot| slot.id == link.slot)
+                                .expect(
+                                    "database inconsistency: no slot for link");
+
+                            structure::Link {
+                                name: link.name,
+                                to,
+                                slot,
+                            }
+                        })
+                        .collect();
+
+                    Ok(structure::Step {
+                        id: step.id,
+                        name: step.name.clone(),
+                        slots,
+                        links,
+                    })
+                })
+                .collect::<Result<_, DbError>>()?;
+
+            Ok(structure::Process {
+                name: self.process.name.clone(),
+                start,
+                slots,
+                steps,
+            })
+        })
     }
 }
 

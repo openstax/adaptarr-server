@@ -1,7 +1,7 @@
 use actix_web::{App, HttpResponse, Json, Path};
 
 use crate::{
-    models::editing::{Process, ProcessData, Version, VersionData},
+    models::editing::{Process, ProcessData, Version, VersionData, structure},
     permissions::EditProcess,
 };
 use super::{Error, RouteExt, State, session::Session};
@@ -137,8 +137,12 @@ pub fn get_process_structure(
     state: actix_web::State<State>,
     _session: Session,
     id: Path<i32>,
-) -> Result<HttpResponse> {
-    unimplemented!()
+) -> Result<Json<structure::Process>> {
+    let db = state.db.get()?;
+    let process = Process::by_id(&*db, id.into_inner())?;
+    let structure = process.get_current(&*db)?.get_structure(&*db)?;
+
+    Ok(Json(structure))
 }
 
 /// Get list of all versions of an editing process.
@@ -205,6 +209,11 @@ pub fn get_version_structure(
     state: actix_web::State<State>,
     _session: Session,
     path: Path<(i32, i32)>,
-) -> Result<HttpResponse> {
-    unimplemented!()
+) -> Result<Json<structure::Process>> {
+    let (process_id, version_id) = path.into_inner();
+    let db = state.db.get()?;
+    let version = Version::by_id(&*db, process_id, version_id)?;
+    let structure = version.get_structure(&*db)?;
+
+    Ok(Json(structure))
 }

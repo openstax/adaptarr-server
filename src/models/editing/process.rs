@@ -81,8 +81,18 @@ impl Process {
             .order_by(edit_process_versions::version.desc())
             .get_results::<db::EditProcessVersion>(dbcon)?
             .into_iter()
-            .map(|version| Version::from_db(version, self.data.clone()))
+            .map(|version| Version::from_db(version, self.clone()))
             .collect())
+    }
+
+    /// Get current (latest) version of this process.
+    pub fn get_current(&self, dbcon: &Connection) -> Result<Version, DbError> {
+        edit_process_versions::table
+            .filter(edit_process_versions::process.eq(self.data.id))
+            .order_by(edit_process_versions::version.desc())
+            .limit(1)
+            .get_result::<db::EditProcessVersion>(dbcon)
+            .map(|version| Version::from_db(version, self.clone()))
     }
 }
 

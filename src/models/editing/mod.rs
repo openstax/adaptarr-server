@@ -117,6 +117,7 @@ pub mod link;
 pub mod process;
 pub mod slot;
 pub mod step;
+pub mod structure;
 pub mod version;
 
 pub use self::{
