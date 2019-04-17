@@ -20,6 +20,7 @@ use crate::{
         models as db,
         schema::files,
     },
+    utils::bytes_to_hex,
 };
 
 thread_local! {
@@ -94,7 +95,7 @@ impl File {
             Some(data) => Ok(File { data }),
             // It's a new file; we need to create database entry for it.
             None => {
-                let name = hash_to_hex(hash.as_bytes());
+                let name = bytes_to_hex(hash.as_bytes());
                 let path = config.storage.path.join(name);
 
                 let mut file = std::fs::File::create(&path)?;
@@ -154,7 +155,7 @@ impl File {
             Some(data) => Ok(File { data }),
             // It's a new file; we need to create database entry for it.
             None => {
-                let name = hash_to_hex(hash.as_bytes());
+                let name = bytes_to_hex(hash.as_bytes());
                 let path = storage.as_ref().join(name);
                 let _ = file.persist(&path)?;
 
@@ -181,7 +182,7 @@ impl File {
 
     /// Get an Actix responder streaming contents of this file.
     pub fn stream(&self, cfg: &Config) -> impl Responder {
-        let hash = hash_to_hex(&self.data.hash);
+        let hash = bytes_to_hex(&self.data.hash);
         let path = cfg.storage.path.join(hash);
         NamedFile::open(path)
     }
@@ -265,18 +266,6 @@ where
             digest.finalize(),
             output,
         ))
-}
-
-fn hash_to_hex(hash: &[u8]) -> String {
-    use std::fmt::Write;
-
-    let mut hex = String::with_capacity(hash.len() * 4);
-
-    for byte in hash {
-        write!(hex, "{:02x}", byte).unwrap();
-    }
-
-    hex
 }
 
 struct HashWriter<W> {

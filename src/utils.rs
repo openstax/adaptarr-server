@@ -64,3 +64,16 @@ pub enum UnsealingError {
 impl_from! { for UnsealingError ;
     ring::error::Unspecified => |e| UnsealingError::Crypto(e),
 }
+
+/// Format a byte array as a hexadecimal string.
+pub fn bytes_to_hex(hash: &[u8]) -> String {
+    use std::fmt::Write;
+
+    let mut hex = String::with_capacity(hash.len() * 4);
+
+    for byte in hash {
+        write!(hex, "{:02x}", byte).unwrap();
+    }
+
+    hex
+}
