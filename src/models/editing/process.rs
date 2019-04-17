@@ -1,4 +1,5 @@
 use diesel::{
+    Connection as _,
     prelude::*,
     result::Error as DbError,
 };
@@ -12,7 +13,7 @@ use crate::db::{
         edit_processes,
     },
 };
-use super::Version;
+use super::{structure, version::{Version, CreateVersionError}};
 
 /// An editing process.
 ///
@@ -53,6 +54,24 @@ impl Process {
             .optional()?
             .ok_or(FindProcessError::NotFound)
             .map(Process::from_db)
+    }
+
+    /// Create a new editing process.
+    pub fn create(dbcon: &Connection, structure: &structure::Process)
+    -> Result<Version, CreateVersionError> {
+        dbcon.transaction(|| {
+            let process = diesel::insert_into(edit_processes::table)
+                .values(&db::NewEditProcess {
+                    name: &structure.name,
+                })
+                .get_result::<db::EditProcess>(dbcon)?;
+
+            Version::create(dbcon, Self::from_db(process), structure)
+        })
+    }
+
+    pub fn into_db(self) -> db::EditProcess {
+        self.data
     }
 
     /// Delete this editing process.

@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, Utc};
 use diesel::{
     Connection as _,
     prelude::*,
@@ -60,6 +60,81 @@ impl Version {
             .ok_or(FindVersionError::NotFound)
             .map(|(process, version)| Self::from_db(
                 version, Process::from_db(process)))
+    }
+
+    /// Create a new version of an editing process.
+    pub fn create(
+        dbcon: &Connection,
+        process: Process,
+        structure: &structure::Process,
+    ) -> Result<Version, CreateVersionError> {
+        let validation = structure::validate(structure)?;
+        let process = process.into_db();
+
+        dbcon.transaction(|| {
+            dbcon.execute("set constraints all deferred")?;
+
+            let version = diesel::insert_into(edit_process_versions::table)
+                .values(&db::NewEditProcessVersion {
+                    process: process.id,
+                    version: Utc::now().naive_utc(),
+                    start: 0,
+                })
+                .get_result::<db::EditProcessVersion>(dbcon)?;
+
+            let slots = structure.slots.iter()
+                .map(|slot| {
+                    diesel::insert_into(edit_process_slots::table)
+                        .values(&db::NewEditProcessSlot {
+                            process: version.id,
+                            name: &slot.name,
+                            role: slot.role,
+                            autofill: slot.autofill,
+                        })
+                        .get_result::<db::EditProcessSlot>(dbcon)
+                })
+                .collect::<Result<Vec<db::EditProcessSlot>, _>>()?;
+
+            let steps = structure.steps.iter()
+                .map(|step| {
+                    diesel::insert_into(edit_process_steps::table)
+                        .values(&db::NewEditProcessStep {
+                            name: &step.name,
+                            process: version.id,
+                        })
+                        .get_result::<db::EditProcessStep>(dbcon)
+                })
+                .collect::<Result<Vec<db::EditProcessStep>, _>>()?;
+
+            for (step, dbstep) in structure.steps.iter().zip(steps.iter()) {
+                for slot in &step.slots {
+                    diesel::insert_into(edit_process_step_slots::table)
+                        .values(&db::EditProcessStepSlot {
+                            step: dbstep.id,
+                            slot: slots[slot.slot].id,
+                            permission: slot.permission,
+                        })
+                        .execute(dbcon)?;
+                }
+
+                for link in &step.links {
+                    diesel::insert_into(edit_process_links::table)
+                        .values(&db::NewEditProcessLink {
+                            name: &link.name,
+                            from: dbstep.id,
+                            to: steps[link.to].id,
+                            slot: slots[link.slot].id,
+                        })
+                        .execute(dbcon)?;
+                }
+            }
+
+            let version = diesel::update(&version)
+                .set(edit_process_versions::start.eq(steps[validation.start].id))
+                .get_result(dbcon)?;
+
+            Ok(Version::from_db(version, Process::from_db(process)))
+        })
     }
 
     pub fn process(&self) -> &Process {
@@ -151,7 +226,7 @@ impl Version {
 
             Ok(structure::Process {
                 name: self.process.name.clone(),
-                start,
+                start: Some(start),
                 slots,
                 steps,
             })
@@ -181,4 +256,21 @@ pub enum FindVersionError {
 
 impl_from! { for FindVersionError ;
     DbError => |e| FindVersionError::Database(e),
+}
+
+#[derive(ApiError, Debug, Fail)]
+pub enum CreateVersionError {
+    /// Description of a process is not valid.
+    #[api(code = "edit-process:new:invalid-description", status = "BAD_REQUEST")]
+    #[fail(display = "{}", _0)]
+    InvalidDescription(#[cause] structure::ValidateStructureError),
+    /// Database error
+    #[api(internal)]
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+}
+
+impl_from! { for CreateVersionError ;
+    structure::ValidateStructureError => |e| CreateVersionError::InvalidDescription(e),
+    DbError => |e| CreateVersionError::Database(e),
 }

@@ -64,8 +64,12 @@ pub fn list_processes(
 pub fn create_process(
     state: actix_web::State<State>,
     _session: Session<EditProcess>,
+    data: Json<structure::Process>,
 ) -> Result<Json<ProcessData>> {
-    unimplemented!()
+    let db = state.db.get()?;
+    let process = Process::create(&*db, &*data)?;
+
+    Ok(Json(process.process().get_public()))
 }
 
 /// Get a process by ID.
