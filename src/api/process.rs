@@ -106,8 +106,14 @@ pub fn update_process(
     state: actix_web::State<State>,
     _session: Session<EditProcess>,
     id: Path<i32>,
+    update: Json<ProcessUpdate>,
 ) -> Result<Json<ProcessData>> {
-    unimplemented!()
+    let db = state.db.get()?;
+    let mut process = Process::by_id(&*db, id.into_inner())?;
+
+    process.set_name(&*db, &update.name)?;
+
+    Ok(Json(process.get_public()))
 }
 
 /// Delete an editing process.

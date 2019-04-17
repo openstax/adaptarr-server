@@ -113,6 +113,15 @@ impl Process {
             .get_result::<db::EditProcessVersion>(dbcon)
             .map(|version| Version::from_db(version, self.clone()))
     }
+
+    /// Set process's name.
+    pub fn set_name(&mut self, dbcon: &Connection, name: &str)
+    -> Result<(), DbError> {
+        self.data = diesel::update(&self.data)
+            .set(edit_processes::name.eq(name))
+            .get_result(dbcon)?;
+        Ok(())
+    }
 }
 
 impl Deref for Process {
