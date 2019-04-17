@@ -51,6 +51,14 @@ impl Process {
             .map(Process::from_db)
     }
 
+    /// Delete this editing process.
+    ///
+    /// Note that only processes which have never been used can be deleted.
+    pub fn delete(self, dbcon: &Connection) -> Result<(), DbError> {
+        diesel::delete(&self.data).execute(dbcon)?;
+        Ok(())
+    }
+
     /// Get public portion of this process's data.
     pub fn get_public(&self) -> PublicData {
         let db::EditProcess { id, ref name, .. } = self.data;

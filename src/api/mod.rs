@@ -27,6 +27,7 @@ mod error;
 mod events;
 mod modules;
 mod pages;
+mod process;
 mod roles;
 mod session;
 mod users;
@@ -104,6 +105,7 @@ fn api_app(state: State) -> App<State> {
         .configure(drafts::routes)
         .configure(events::routes)
         .configure(modules::routes)
+        .configure(process::routes)
         .configure(roles::routes)
         .configure(users::routes)
 }
