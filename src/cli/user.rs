@@ -1,5 +1,6 @@
 //! Commands for managing users.
 
+use std::collections::HashMap;
 use structopt::StructOpt;
 
 use crate::{
@@ -8,10 +9,11 @@ use crate::{
     db,
     i18n::{I18n, LanguageTag},
     mail::Mailer,
-    models::{Invite, User},
+    models::{Invite, User, Role},
     permissions::PermissionBits,
     templates,
 };
+use super::util::print_table;
 
 #[derive(StructOpt)]
 pub struct Opts {
@@ -21,6 +23,9 @@ pub struct Opts {
 
 #[derive(StructOpt)]
 pub enum Command {
+    /// List all users
+    #[structopt(name = "list")]
+    List,
     /// Add a new user
     #[structopt(name = "add")]
     Add(AddOpts),
@@ -31,9 +36,39 @@ pub enum Command {
 
 pub fn main(cfg: Config, opts: Opts) -> Result<()> {
     match opts.command {
+        Command::List => list(cfg),
         Command::Add(opts) => add_user(cfg, opts),
         Command::Invite(opts) => invite(cfg, opts),
     }
+}
+
+pub fn list(cfg: Config) -> Result<()> {
+    let db = db::connect(&cfg)?;
+    let users = User::all(&db)?;
+    let roles = Role::all(&db)?
+        .into_iter()
+        .map(|role| (role.id, role))
+        .collect::<HashMap<_, _>>();
+
+    let rows = users.iter()
+        .map(|user| (
+            user.id.to_string(),
+            user.name.as_str(),
+            user.email.as_str(),
+            user.language.as_str(),
+            match user.role {
+                Some(role) => roles.get(&role)
+                    .expect("database inconsistency: no role for user")
+                    .name
+                    .as_str(),
+                None => "",
+            },
+        ))
+        .collect::<Vec<_>>();
+
+    print_table(("ID", "Name", "Email", "Lng", "Role"), &rows);
+
+    Ok(())
 }
 
 #[derive(StructOpt)]
