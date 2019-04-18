@@ -2,6 +2,23 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use termion::style::{Underline, Reset};
 use std::fmt;
 
+use crate::{
+    Result,
+    permissions::PermissionBits,
+};
+
+pub fn parse_permissions(v: &str) -> Result<PermissionBits> {
+    use serde::de::{Deserialize, IntoDeserializer, value::Error};
+
+    v.split(',')
+        .map(str::trim)
+        .map(IntoDeserializer::into_deserializer)
+        .map(PermissionBits::deserialize)
+        .collect::<Result<PermissionBits, Error>>()
+        .map_err(Into::into)
+}
+
+
 pub fn print_table<H, T, R>(header: H, rows: T)
 where
     H: TableRow,

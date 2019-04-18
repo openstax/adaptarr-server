@@ -3,6 +3,7 @@ use structopt::StructOpt;
 use crate::Result;
 
 mod document;
+mod role;
 mod server;
 mod user;
 mod util;
@@ -20,6 +21,9 @@ enum Command {
     Start,
     #[structopt(name = "document")]
     Document(document::Opts),
+    /// Manage roles
+    #[structopt(name = "role")]
+    Role(role::Opts),
     /// Manage users
     #[structopt(name = "user")]
     User(user::Opts),
@@ -34,6 +38,7 @@ pub fn main() -> Result<()> {
     match opts.command {
         Command::Start => server::start(config),
         Command::Document(opts) => document::main(config, opts),
+        Command::Role(opts) => role::main(config, opts),
         Command::User(opts) => user::main(config, opts),
     }
 }
