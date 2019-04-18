@@ -250,6 +250,15 @@ impl User {
         Ok(())
     }
 
+    /// Change user's name.
+    pub fn set_name(&mut self, dbcon: &Connection, name: &str)
+    -> Result<(), DbError> {
+        self.data = diesel::update(&self.data)
+            .set(users::name.eq(name))
+            .get_result::<db::User>(dbcon)?;
+        Ok(())
+    }
+
     /// Change user's preferred language.
     pub fn set_language(
         &mut self,

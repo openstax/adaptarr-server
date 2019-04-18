@@ -1,19 +1,20 @@
 //! Commands for managing users.
 
-use std::collections::HashMap;
+use diesel::Connection as _;
+use std::{collections::HashMap, str::FromStr};
 use structopt::StructOpt;
 
 use crate::{
     Config,
     Result,
-    db,
+    db::{self, Connection},
     i18n::{I18n, LanguageTag},
     mail::Mailer,
-    models::{Invite, User, Role},
+    models::{Invite, User, role::{Role, FindRoleError}},
     permissions::PermissionBits,
     templates,
 };
-use super::util::print_table;
+use super::util::{parse_permissions, print_table};
 
 #[derive(StructOpt)]
 pub struct Opts {
@@ -32,6 +33,9 @@ pub enum Command {
     /// Create an invitation
     #[structopt(name = "invite")]
     Invite(InviteOpts),
+    /// Modify a user
+    #[structopt(name = "modify")]
+    Modify(ModifyOpts),
 }
 
 pub fn main(cfg: Config, opts: Opts) -> Result<()> {
@@ -39,6 +43,7 @@ pub fn main(cfg: Config, opts: Opts) -> Result<()> {
         Command::List => list(cfg),
         Command::Add(opts) => add_user(cfg, opts),
         Command::Invite(opts) => invite(cfg, opts),
+        Command::Modify(opts) => modify(cfg, opts),
     }
 }
 
@@ -155,3 +160,81 @@ enum InviteError {
     #[fail(display = "No such locale: {}", _0)]
     NoSuchLocale(LanguageTag),
 }
+
+#[derive(StructOpt)]
+pub struct ModifyOpts {
+    user: i32,
+    /// Set user's name
+    #[structopt(long = "name")]
+    name: Option<String>,
+    /// Set user's language
+    #[structopt(long = "language", alias = "lang")]
+    language: Option<LanguageTag>,
+    /// Set user's permissions
+    #[structopt(long = "permissions", parse(try_from_str = "parse_permissions"))]
+    permissions: Option<PermissionBits>,
+    /// Set user's role
+    #[structopt(long = "role")]
+    role: Option<RoleArg>,
+}
+
+pub fn modify(cfg: Config, opts: ModifyOpts) -> Result<()> {
+    let db = db::connect(&cfg)?;
+    let mut user = User::by_id(&db, opts.user)?;
+
+    db.transaction::<_, failure::Error, _>(|| {
+        if let Some(name) = opts.name {
+            user.set_name(&db, &name)?;
+        }
+
+        if let Some(lang) = opts.language {
+            user.set_language(&db, &lang)?;
+        }
+
+        if let Some(permissions) = opts.permissions {
+            user.set_permissions(&db, permissions)?;
+        }
+
+        if let Some(role) = opts.role {
+            let role = role.get(&db)?;
+            user.set_role(&db, role.as_ref())?;
+        }
+
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+#[derive(Debug)]
+enum RoleArg {
+    Null,
+    ById(i32),
+}
+
+impl RoleArg {
+    fn get(&self, db: &Connection) -> Result<Option<Role>, FindRoleError> {
+        match self {
+            RoleArg::Null => Ok(None),
+            RoleArg::ById(id) => Role::by_id(db, *id).map(Some),
+        }
+    }
+}
+
+impl FromStr for RoleArg {
+    type Err = ParseRoleArgError;
+
+    fn from_str(v: &str) -> Result<Self, ParseRoleArgError> {
+        if v == "null" || v == "nil" {
+            return Ok(RoleArg::Null);
+        }
+
+        v.parse()
+            .map(RoleArg::ById)
+            .map_err(ParseRoleArgError)
+    }
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "bad role: {}. Expected number or null", _0)]
+struct ParseRoleArgError(std::num::ParseIntError);
