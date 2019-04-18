@@ -4,6 +4,7 @@ use crate::Result;
 
 mod server;
 mod user;
+mod util;
 
 #[derive(StructOpt)]
 struct Opts {
