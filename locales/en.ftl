@@ -146,6 +146,8 @@ mail-reset-before-button =
 
     To reset your password place click the link bellow
 
+mail-reset-button = Reset password
+
 # Variables:
 # - $url (string): password reset URL
 mail-reset-after-button =

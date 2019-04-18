@@ -141,6 +141,8 @@ mail-reset-before-button =
 
     Aby zresetować swoje hasło kliknij poniższy guzik
 
+mail-reset-button = Zresetuj hasło
+
 # Variables:
 # - $url (string): password reset URL
 mail-reset-after-button =

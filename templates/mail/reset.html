@@ -4,7 +4,7 @@
 {% block content %}
     {{ m::expand_paras(paras=_(key="mail-reset-before-button", username=user.name), first_top="10px") }}
 
-    {{ m::button(url=url, text="Reset password") }}
+    {{ m::button(url=url, text=_(key="mail-reset-button")) }}
 
     {{ m::expand_paras(paras=_(key="mail-reset-after-button", url=url)) }}
 {% endblock %}
