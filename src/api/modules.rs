@@ -16,17 +16,15 @@ use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 use crate::{
-    events::{self, EventManagerAddrExt},
     models::{
         File,
-        User,
         draft::PublicData as DraftData,
         module::{Module, PublicData as ModuleData},
         xref_target::PublicData as XrefTargetData,
     },
     import::{ImportModule, ReplaceModule},
     multipart::Multipart,
-    permissions::{AssignModule, EditModule},
+    permissions::EditModule,
 };
 use super::{
     Error,
@@ -34,7 +32,6 @@ use super::{
     RouterExt,
     State,
     session::Session,
-    users::UserId,
 };
 
 /// Configure routes.
@@ -48,13 +45,9 @@ pub fn routes(app: App<State>) -> App<State> {
             r.post()
                 .api_with_async(create_module_from_zip);
         })
-        .api_route("/modules/assigned/to/{user}", Method::GET, list_assigned)
         .resource("/modules/{id}", |r| {
             r.get().api_with(get_module);
             r.post().api_with(crete_draft);
-            r.put()
-                .filter(pred::Header("Content-Type", "application/json"))
-                .api_with(update_module);
             r.put().api_with_async(replace_module);
             r.delete().f(delete_module);
         })
@@ -89,26 +82,6 @@ pub fn list_modules(
 ) -> Result<Json<Vec<ModuleData>>> {
     let db = state.db.get()?;
     let modules = Module::all(&*db)?;
-    Ok(Json(modules.into_iter()
-        .map(|module| module.get_public())
-        .collect()))
-}
-
-/// Get list of all modules assigned to a particular user.
-///
-/// ## Method
-///
-/// ```text
-/// GET /modules/assigned/to/:user
-/// ```
-pub fn list_assigned(
-    state: actix_web::State<State>,
-    session: Session,
-    user: Path<UserId>,
-) -> Result<Json<Vec<ModuleData>>, Error> {
-    let db = state.db.get()?;
-    let user = user.get_user(&*state, &session)?;
-    let modules = Module::assigned_to(&*db, user.id)?;
     Ok(Json(modules.into_iter()
         .map(|module| module.get_public())
         .collect()))
@@ -220,46 +193,6 @@ pub fn crete_draft(
 
 #[derive(Debug, Deserialize)]
 pub struct ModuleUpdate {
-    #[serde(default, deserialize_with = "de_optional_null")]
-    pub assignee: Option<Option<i32>>,
-}
-
-/// Update module
-///
-/// ## Method
-///
-/// ```text
-/// PUT /modules/:id
-/// Content-Type: application/json
-/// ```
-pub fn update_module(
-    state: actix_web::State<State>,
-    session: Session<AssignModule>,
-    id: Path<Uuid>,
-    update: Json<ModuleUpdate>,
-) -> Result<HttpResponse> {
-    let db = state.db.get()?;
-    let module = Module::by_id(&*db, id.into_inner())?;
-
-    use diesel::Connection;
-    let dbconn = &*db;
-    dbconn.transaction::<_, Error, _>(|| {
-        if let Some(user) = update.assignee {
-            module.set_assignee(dbconn, user)?;
-
-            if let Some(id) = user {
-                let user = User::by_id(dbconn, id)?;
-                state.events.notify(user, events::Assigned {
-                    who: session.user,
-                    module: module.id(),
-                });
-            }
-        }
-
-        Ok(())
-    })?;
-
-    Ok(HttpResponse::Ok().finish())
 }
 
 /// Replace module with contents of a ZIP archive.

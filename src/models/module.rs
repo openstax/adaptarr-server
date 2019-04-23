@@ -29,7 +29,6 @@ pub struct Module {
 #[derive(Debug, Serialize)]
 pub struct PublicData {
     pub id: Uuid,
-    pub assignee: Option<i32>,
     #[serde(flatten)]
     pub document: DocumentData,
 }
@@ -41,22 +40,6 @@ impl Module {
     /// out how to do pagination.
     pub fn all(dbconn: &Connection) -> Result<Vec<Module>, DbError> {
         modules::table
-            .inner_join(documents::table)
-            .get_results::<(db::Module, db::Document)>(dbconn)
-            .map(|v| {
-                v.into_iter()
-                    .map(|(data, document)| Module {
-                        data,
-                        document: Document::from_db(document),
-                    })
-                    .collect()
-            })
-    }
-
-    /// Get all modules assigned to a user.
-    pub fn assigned_to(dbconn: &Connection, user: i32) -> Result<Vec<Module>, DbError> {
-        modules::table
-            .filter(modules::assignee.eq(user))
             .inner_join(documents::table)
             .get_results::<(db::Module, db::Document)>(dbconn)
             .map(|v| {
@@ -102,7 +85,6 @@ impl Module {
                 .values(&db::Module {
                     id: Uuid::new_v4(),
                     document: document.id,
-                    assignee: None,
                 })
                 .get_result::<db::Module>(dbconn)?;
 
@@ -122,7 +104,6 @@ impl Module {
     pub fn get_public(&self) -> PublicData {
         PublicData {
             id: self.data.id,
-            assignee: self.data.assignee,
             document: self.document.get_public(),
         }
     }
@@ -154,23 +135,7 @@ impl Module {
     /// Create a new draft of this module for a given user.
     pub fn create_draft(&self, dbconn: &Connection, user: i32)
     -> Result<Draft, CreateDraftError> {
-        if self.data.assignee != Some(user) {
-            return Err(CreateDraftError::UserNotAssigned);
-        }
-
-        let draft = diesel::insert_into(drafts::table)
-            .values((
-                drafts::module.eq(self.data.id),
-                drafts::user.eq(user),
-                drafts::document.eq(duplicate_document(self.document.id)),
-            ))
-            .get_result::<db::Draft>(dbconn)?;
-
-        let document = documents::table
-            .filter(documents::id.eq(draft.document))
-            .get_result::<db::Document>(dbconn)?;
-
-        Ok(Draft::from_db(draft, Document::from_db(document)))
+        unimplemented!()
     }
 
     /// Replace contents of this module.
@@ -204,15 +169,6 @@ impl Module {
 
             Ok(())
         })
-    }
-
-    /// Change user assigned to this module.
-    pub fn set_assignee(&self, dbconn: &Connection, user: Option<i32>)
-    -> Result<(), DbError> {
-        diesel::update(&self.data)
-            .set(modules::assignee.eq(user))
-            .execute(dbconn)?;
-        Ok(())
     }
 }
 

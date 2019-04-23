@@ -179,8 +179,6 @@ pub struct Module {
     pub id: Uuid,
     /// Document which is the current content of this module.
     pub document: i32,
-    /// User assigned to this module.
-    pub assignee: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable, Queryable)]
@@ -247,14 +245,26 @@ pub struct NewBookPartLocation {
 }
 
 #[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
-#[primary_key(module, user)]
+#[primary_key(module)]
 pub struct Draft {
     /// Module of which this is a draft.
     pub module: Uuid,
-    /// User owning this draft.
-    pub user: i32,
     /// Contents of this draft.
     pub document: i32,
+    /// Editing step this draft is currently in.
+    pub step: i32,
+}
+
+/// Describes users assigned to particular slots in a draft.
+#[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(draft, slot)]
+pub struct DraftSlot {
+    /// Draft being described.
+    pub draft: Uuid,
+    /// Slot being described.
+    pub slot: i32,
+    /// User assigned to this slot in this draft.
+    pub user: i32,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]

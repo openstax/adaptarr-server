@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::db::{
     Connection,
     models as db,
-    schema::{book_parts, documents, document_files, drafts, modules},
+    schema::{book_parts, documents, document_files, drafts, draft_slots, modules},
 };
 use super::{
     File,
@@ -37,7 +37,10 @@ impl Draft {
     /// Get all drafts belonging to a user.
     pub fn all_of(dbconn: &Connection, user: i32) -> Result<Vec<Draft>, DbError> {
         drafts::table
-            .filter(drafts::user.eq(user))
+            .filter(drafts::module.eq_any(
+                draft_slots::table
+                    .select(draft_slots::draft)
+                    .filter(draft_slots::user.eq(user))))
             .inner_join(documents::table)
             .get_results::<(db::Draft, db::Document)>(dbconn)
             .map(|v| {
@@ -53,8 +56,11 @@ impl Draft {
     /// Find draft by ID.
     pub fn by_id(dbconn: &Connection, module: Uuid, user: i32) -> Result<Draft, DbError> {
         drafts::table
-            .filter(drafts::module.eq(module)
-                .and(drafts::user.eq(user)))
+            .filter(drafts::module.eq_any(
+                draft_slots::table
+                    .select(draft_slots::draft)
+                    .filter(draft_slots::draft.eq(module)
+                        .and(draft_slots::user.eq(user)))))
             .inner_join(documents::table)
             .get_result::<(db::Draft, db::Document)>(dbconn)
             .map(|(data, document)| Draft {
@@ -68,23 +74,6 @@ impl Draft {
         dbconn.transaction(|| {
             diesel::delete(&self.data).execute(dbconn)?;
             self.document.delete(dbconn)?;
-            Ok(())
-        })
-    }
-
-    /// Save this draft creating new version of the module from which it was
-    /// created.
-    pub fn save(self, dbconn: &Connection) -> Result<(), DbError> {
-        dbconn.transaction(|| {
-            diesel::update(
-                modules::table
-                    .filter(modules::id.eq(self.data.module)))
-                .set(modules::document.eq(self.data.document))
-                .execute(dbconn)?;
-
-            diesel::delete(&self.data)
-                .execute(dbconn)?;
-
             Ok(())
         })
     }

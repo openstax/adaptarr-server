@@ -16,7 +16,6 @@ use crate::{
         File,
         draft::{Draft, PublicData as DraftData},
     },
-    processing::ProcessDocument,
 };
 use super::{
     Error,
@@ -33,9 +32,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/drafts/{id}", |r| {
             r.get().api_with(get_draft);
             r.put().api_with(update_draft);
-            r.delete().api_with(delete_draft);
         })
-        .api_route("/drafts/{id}/save", Method::POST, save_draft)
         .resource("/drafts/{id}/comments", |r| {
             r.get().f(list_comments);
             r.post().f(add_comment);
@@ -109,52 +106,6 @@ pub fn update_draft(
     draft.set_title(&*db, &update.title)?;
 
     Ok(Json(draft.get_public()))
-}
-
-/// Delete a draft
-///
-/// ## Method
-///
-/// ```text
-/// DELTE /drafts/:id
-/// ```
-pub fn delete_draft(
-    state: actix_web::State<State>,
-    session: Session,
-    id: Path<Uuid>,
-) -> Result<HttpResponse> {
-    let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, *id, session.user)?;
-
-    draft.delete(&*db)?;
-
-    Ok(HttpResponse::Ok().finish())
-}
-
-/// Save a draft.
-///
-/// ## Method
-///
-/// ```text
-/// POST /drafts/:id/save
-/// ```
-pub fn save_draft(
-    state: actix_web::State<State>,
-    session: Session,
-    id: Path<Uuid>,
-) -> Result<HttpResponse> {
-    let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, *id, session.user)?;
-
-    if let Err(err) = state.xref_processor.try_send(ProcessDocument {
-        document: (**draft).clone(),
-    }) {
-        error!("Could not send document {} for processing: {}", draft.id, err);
-    }
-
-    draft.save(&*db)?;
-
-    Ok(HttpResponse::Ok().finish())
 }
 
 /// Get comments on a draft.
