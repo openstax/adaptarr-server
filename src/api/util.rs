@@ -1,8 +1,12 @@
 use actix_web::{
+    Either,
+    Form,
     FromRequest,
     HttpRequest,
+    Json,
     http::header::ACCEPT_LANGUAGE,
 };
+use futures::Future;
 use std::str::FromStr;
 
 use crate::i18n::{LanguageRange, Locale};
@@ -44,5 +48,29 @@ impl<'a> FromRequest<State> for &'a Locale<'static> {
         debug!("Accept-Language: {:?}", locales);
 
         req.state().i18n.match_locale(&locales)
+    }
+}
+
+pub struct FormOrJson<T>(Either<Form<T>, Json<T>>);
+
+impl<T> FormOrJson<T> {
+    pub fn into_inner(self) -> T {
+        match self.0 {
+            Either::A(a) => a.into_inner(),
+            Either::B(b) => b.into_inner(),
+        }
+    }
+}
+
+impl<S, T> FromRequest<S> for FormOrJson<T>
+where
+    T: serde::de::DeserializeOwned + 'static,
+    S: 'static,
+{
+    type Config = <Either<Form<T>, Json<T>> as FromRequest<S>>::Config;
+    type Result = Box<dyn Future<Item = Self, Error = actix_web::Error>>;
+
+    fn from_request(req: &HttpRequest<S>, config: &Self::Config) -> Self::Result {
+        Box::new(Either::from_request(req, config).map(FormOrJson))
     }
 }

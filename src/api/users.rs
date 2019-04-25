@@ -1,7 +1,5 @@
 use actix_web::{
     App,
-    Either,
-    Form,
     HttpRequest,
     HttpResponse,
     Json,
@@ -27,6 +25,7 @@ use super::{
     RouterExt,
     State,
     session::{Session, Normal},
+    util::FormOrJson,
 };
 
 /// Configure routes.
@@ -174,16 +173,12 @@ pub fn modify_user(
     state: actix_web::State<State>,
     session: Session,
     id: Path<UserId>,
-    form: Either<Form<UserUpdate>, Json<UserUpdate>>,
+    form: FormOrJson<UserUpdate>,
 ) -> Result<Json<PublicData>, Error> {
     let db = state.db.get()?;
+    let form = form.into_inner();
     let permissions = session.permissions();
     let mut user = id.get_user(&state, &session)?;
-
-    let form = match form {
-        Either::A(form) => form.into_inner(),
-        Either::B(json) => json.into_inner(),
-    };
 
     let dbcon = &*db;
     use diesel::Connection;
@@ -246,15 +241,11 @@ pub fn modify_password(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
     session: Session,
-    form: Either<Form<PasswordChangeRequest>, Json<PasswordChangeRequest>>,
+    form: FormOrJson<PasswordChangeRequest>,
 ) -> Result<HttpResponse, Error> {
     let db = state.db.get()?;
+    let form = form.into_inner();
     let mut user = User::by_id(&*db, session.user)?;
-
-    let form = match form {
-        Either::A(form) => form.into_inner(),
-        Either::B(json) => json.into_inner(),
-    };
 
     if !user.check_password(&form.current) {
         return Err(UserAuthenticateError::BadPassword.into());
