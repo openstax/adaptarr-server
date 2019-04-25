@@ -9,13 +9,15 @@ use crate::db::{
     Connection,
     functions::duplicate_document,
     models as db,
-    schema::{book_parts, documents, drafts, modules, xref_targets},
+    schema::{book_parts, documents, drafts, draft_slots, modules, xref_targets},
 };
 use super::{
     Draft,
     File,
+    User,
     XrefTarget,
     document::{Document, PublicData as DocumentData},
+    editing::{Version, Slot},
 };
 
 /// A module is a version of Document that can be part of a Book.
@@ -132,10 +134,50 @@ impl Module {
             .map(|v| v.into_iter().map(XrefTarget::from_db).collect())
     }
 
-    /// Create a new draft of this module for a given user.
-    pub fn create_draft(&self, dbconn: &Connection, user: i32)
-    -> Result<Draft, CreateDraftError> {
-        unimplemented!()
+    /// Begin a new editing process for this module.
+    pub fn begin_process<S>(
+        &self,
+        dbconn: &Connection,
+        version: &Version,
+        slots: S,
+    ) -> Result<Draft, BeginProcessError>
+    where
+        S: IntoIterator<Item = (Slot, User)>,
+    {
+        dbconn.transaction(|| {
+            let slots = slots.into_iter()
+                .map(|(slot, user)| {
+                    if slot.process != version.id {
+                        Err(BeginProcessError::BadSlot(
+                            slot.id, version.process().id))
+                    } else {
+                        Ok(db::DraftSlot {
+                            draft: self.data.id,
+                            slot: slot.id,
+                            user: user.id
+                        })
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let draft = diesel::insert_into(drafts::table)
+                .values((
+                    drafts::module.eq(self.data.id),
+                    drafts::document.eq(duplicate_document(self.document.id)),
+                    drafts::step.eq(version.start),
+                ))
+                .get_result::<db::Draft>(dbconn)?;
+
+            diesel::insert_into(draft_slots::table)
+                .values(slots)
+                .execute(dbconn)?;
+
+            let document = documents::table
+                .filter(documents::id.eq(draft.document))
+                .get_result::<db::Document>(dbconn)?;
+
+            Ok(Draft::from_db(draft, Document::from_db(document)))
+        })
     }
 
     /// Replace contents of this module.
@@ -197,26 +239,26 @@ impl_from! { for FindModuleError ;
 }
 
 #[derive(ApiError, Debug, Fail)]
-pub enum CreateDraftError {
+pub enum BeginProcessError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
     Database(#[cause] DbError),
-    /// Tried to create draft for an user other than the one assigned.
-    #[fail(display = "Only assigned user can create a draft")]
-    #[api(code = "draft:create:not-assigned", status = "BAD_REQUEST")]
-    UserNotAssigned,
-    /// User already has a draft of this module.
-    #[fail(display = "User already has a draft")]
+    /// There is already a draft of this module.
+    #[fail(display = "There is already a draft of this module")]
     #[api(code = "draft:create:exists", status = "BAD_REQUEST")]
     Exists,
+    /// One of the slots specified was not a part of the process specified.
+    #[fail(display = "Slot {} is not part of process {}", _0, _1)]
+    #[api(code = "draft:create:bad-slot", status = "BAD_REQUEST")]
+    BadSlot(i32, i32),
 }
 
-impl_from! { for CreateDraftError ;
+impl_from! { for BeginProcessError ;
     DbError => |e| match e {
         DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) =>
-            CreateDraftError::Exists,
-        _ => CreateDraftError::Database(e),
+            BeginProcessError::Exists,
+        _ => BeginProcessError::Database(e),
     }
 }
 

@@ -18,7 +18,9 @@ use uuid::Uuid;
 use crate::{
     models::{
         File,
+        User,
         draft::PublicData as DraftData,
+        editing::Process,
         module::{Module, PublicData as ModuleData},
         xref_target::PublicData as XrefTargetData,
     },
@@ -32,6 +34,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
+    util::FormOrJson,
 };
 
 /// Configure routes.
@@ -47,7 +50,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .resource("/modules/{id}", |r| {
             r.get().api_with(get_module);
-            r.post().api_with(crete_draft);
+            r.post().api_with(begin_process);
             r.put().api_with_async(replace_module);
             r.delete().f(delete_module);
         })
@@ -172,21 +175,40 @@ pub fn get_module(
     Ok(Json(module.get_public()))
 }
 
-/// Create a new draft of a module.
+#[derive(Deserialize)]
+pub struct BeginProcess {
+    process: i32,
+    /// Mapping from slot IDs to user IDs.
+    slots: Vec<(i32, i32)>,
+}
+
+/// Begin a new editing process for a module.
 ///
 /// ## Method
 ///
 /// ```text
 /// POST /modules/:id
 /// ```
-pub fn crete_draft(
+pub fn begin_process(
     state: actix_web::State<State>,
     session: Session,
     id: Path<Uuid>,
+    data: FormOrJson<BeginProcess>,
 ) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
+    let data = data.into_inner();
     let module = Module::by_id(&*db, id.into_inner())?;
-    let draft = module.create_draft(&*db, session.user)?;
+    let process = Process::by_id(&*db, data.process)?;
+    let version = process.get_current(&*db)?;
+
+    let slots = data.slots.into_iter()
+        .map(|(slot, user)| Ok((
+            version.get_slot(&*db, slot)?,
+            User::by_id(&*db, user)?,
+        )))
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    let draft = module.begin_process(&*db, &version, slots)?;
 
     Ok(Json(draft.get_public()))
 }

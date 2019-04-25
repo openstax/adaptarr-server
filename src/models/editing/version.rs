@@ -18,7 +18,7 @@ use crate::db::{
         edit_processes,
     },
 };
-use super::{Process, structure};
+use super::{Process, Slot, structure};
 
 /// Particular revision of an editing [`Process`][Process]
 ///
@@ -152,6 +152,18 @@ impl Version {
         }
     }
 
+    /// Find a slot in this process.
+    pub fn get_slot(&self, dbcon: &Connection, id: i32)
+    -> Result<Slot, FindSlotError> {
+        edit_process_slots::table
+            .filter(edit_process_slots::id.eq(id)
+                .and(edit_process_slots::process.eq(self.data.id)))
+            .get_result(dbcon)
+            .optional()?
+            .ok_or(FindSlotError::NotFound)
+            .map(Slot::from_db)
+    }
+
     /// Get a complete description of this editing process.
     pub fn get_structure(&self, dbcon: &Connection)
     -> Result<structure::Process, DbError> {
@@ -273,4 +285,20 @@ pub enum CreateVersionError {
 impl_from! { for CreateVersionError ;
     structure::ValidateStructureError => |e| CreateVersionError::InvalidDescription(e),
     DbError => |e| CreateVersionError::Database(e),
+}
+
+#[derive(ApiError, Debug, Fail)]
+pub enum FindSlotError {
+    /// Database error.
+    #[api(internal)]
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    /// No slot found matching given criteria.
+    #[api(code = "edit-process:slot:not-found", status = "NOT_FOUND")]
+    #[fail(display = "No such slot")]
+    NotFound,
+}
+
+impl_from! { for FindSlotError ;
+    DbError => |e| FindSlotError::Database(e),
 }
