@@ -8,11 +8,20 @@ use uuid::Uuid;
 use crate::db::{
     Connection,
     models as db,
-    schema::{book_parts, documents, document_files, drafts, draft_slots, modules},
+    schema::{
+        book_parts,
+        document_files,
+        documents,
+        draft_slots,
+        drafts,
+        edit_process_step_slots,
+    },
+    types::SlotPermission,
 };
 use super::{
     File,
     document::{Document, PublicData as DocumentData},
+    editing::{Step, StepData},
 };
 
 #[derive(Debug)]
@@ -26,6 +35,8 @@ pub struct PublicData {
     pub module: Uuid,
     #[serde(flatten)]
     pub document: DocumentData,
+    pub permissions: Vec<SlotPermission>,
+    pub step: StepData,
 }
 
 impl Draft {
@@ -78,12 +89,34 @@ impl Draft {
         })
     }
 
+    /// Get list of permissions a user has to a draft.
+    pub fn get_permissions(&self, dbconn: &Connection, user: i32)
+    -> Result<Vec<SlotPermission>, DbError> {
+        draft_slots::table
+            .inner_join(edit_process_step_slots::table
+                .on(draft_slots::slot.eq(edit_process_step_slots::slot)))
+            .filter(draft_slots::draft.eq(self.data.module)
+                .and(draft_slots::user.eq(user))
+                .and(edit_process_step_slots::step.eq(self.data.step)))
+            .select(edit_process_step_slots::permission)
+            .get_results(dbconn)
+    }
+
+    /// Get details about current editing step.
+    pub fn get_step(&self, dbconn: &Connection) -> Result<Step, DbError> {
+        Step::by_id(dbconn, self.data.step)
+    }
+
     /// Get the public portion of this drafts's data.
-    pub fn get_public(&self) -> PublicData {
-        PublicData {
+    pub fn get_public(&self, dbconn: &Connection, user: i32)
+    -> Result<PublicData, DbError> {
+        Ok(PublicData {
             module: self.data.module,
             document: self.document.get_public(),
-        }
+            permissions: self.get_permissions(dbconn, user)?,
+            step: self.get_step(dbconn)?
+                .get_public(dbconn, Some((self.data.module, user)))?,
+        })
     }
 
     /// Query list of books containing module this draft was derived from.

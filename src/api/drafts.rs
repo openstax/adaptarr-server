@@ -61,7 +61,11 @@ pub fn list_drafts(
 ) -> Result<Json<Vec<DraftData>>> {
     let db = state.db.get()?;
     let drafts = Draft::all_of(&*db, session.user)?;
-    Ok(Json(drafts.into_iter().map(|d| d.get_public()).collect()))
+
+    drafts.into_iter().map(|d| d.get_public(&*db, session.user_id()))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Json)
+        .map_err(Into::into)
 }
 
 /// Get a draft by ID.
@@ -79,7 +83,7 @@ pub fn get_draft(
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, *id, session.user)?;
 
-    Ok(Json(draft.get_public()))
+    draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,7 +109,7 @@ pub fn update_draft(
 
     draft.set_title(&*db, &update.title)?;
 
-    Ok(Json(draft.get_public()))
+    draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
 }
 
 /// Get comments on a draft.

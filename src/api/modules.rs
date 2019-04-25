@@ -210,7 +210,7 @@ pub fn begin_process(
 
     let draft = module.begin_process(&*db, &version, slots)?;
 
-    Ok(Json(draft.get_public()))
+    draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
 }
 
 #[derive(Debug, Deserialize)]
