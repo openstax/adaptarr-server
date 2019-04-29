@@ -70,7 +70,8 @@ impl Draft {
     }
 
     /// Find draft by ID.
-    pub fn by_id(dbconn: &Connection, module: Uuid, user: i32) -> Result<Draft, DbError> {
+    pub fn by_id(dbconn: &Connection, module: Uuid, user: i32)
+    -> Result<Draft, FindDraftError> {
         drafts::table
             .filter(drafts::module.eq_any(
                 draft_slots::table
@@ -83,6 +84,8 @@ impl Draft {
                 data,
                 document: Document::from_db(document),
             })
+            .optional()?
+            .ok_or(FindDraftError::NotFound)
     }
 
     /// Delete this draft.
@@ -273,6 +276,22 @@ impl std::ops::Deref for Draft {
     fn deref(&self) -> &Document {
         &self.document
     }
+}
+
+#[derive(ApiError, Debug, Fail)]
+pub enum FindDraftError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
+    Database(#[cause] DbError),
+    /// No draft found matching given criteria.
+    #[fail(display = "No such draft")]
+    #[api(code = "draft:not-found", status = "NOT_FOUND")]
+    NotFound,
+}
+
+impl_from! { for FindDraftError ;
+    DbError => |e| FindDraftError::Database(e),
 }
 
 pub enum AdvanceResult {
