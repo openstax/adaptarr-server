@@ -36,6 +36,11 @@ pub struct PublicData {
 }
 
 impl Module {
+    /// Construct `Module` from its database counterpart.
+    pub(crate) fn from_db(data: db::Module, document: Document) -> Self {
+        Module { data, document }
+    }
+
     /// Get all modules.
     ///
     /// *Warning*: this function is temporary and will be removed once we figure
@@ -46,10 +51,10 @@ impl Module {
             .get_results::<(db::Module, db::Document)>(dbconn)
             .map(|v| {
                 v.into_iter()
-                    .map(|(data, document)| Module {
+                    .map(|(data, document)| Module::from_db(
                         data,
-                        document: Document::from_db(document),
-                    })
+                        Document::from_db(document),
+                    ))
                     .collect()
             })
     }
@@ -62,10 +67,10 @@ impl Module {
             .get_result::<(db::Module, db::Document)>(dbconn)
             .optional()?
             .ok_or(FindModuleError::NotFound)
-            .map(|(data, document)| Module {
+            .map(|(data, document)| Module::from_db(
                 data,
-                document: Document::from_db(document),
-            })
+                Document::from_db(document),
+            ))
     }
 
     /// Create a new module.
@@ -90,7 +95,7 @@ impl Module {
                 })
                 .get_result::<db::Module>(dbconn)?;
 
-            Ok(Module { data, document })
+            Ok(Module::from_db(data, document))
         })
     }
 
