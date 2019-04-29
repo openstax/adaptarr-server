@@ -2,14 +2,22 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use itertools::Itertools;
 use uuid::Uuid;
 
 use crate::db::{
     Connection,
     models as db,
-    schema::{draft_slots, edit_process_links, edit_process_steps},
+    schema::{
+        draft_slots,
+        edit_process_links,
+        edit_process_slots,
+        edit_process_step_slots,
+        edit_process_steps,
+    },
+    types::SlotPermission,
 };
-use super::Link;
+use super::{Link, Slot};
 
 /// A single step in an editing process.
 ///
@@ -55,6 +63,82 @@ impl Step {
             .filter(edit_process_links::from.eq(self.data.id))
             .get_result::<i64>(dbcon)
             .map(|c| c == 0)
+    }
+
+    /// Get list of slots and permissions they have during this step.
+    pub fn get_slots(&self, dbcon: &Connection)
+    -> Result<Vec<(Slot, Vec<SlotPermission>)>, DbError> {
+        let slots = edit_process_step_slots::table
+            .inner_join(edit_process_slots::table)
+            .filter(edit_process_step_slots::step.eq(self.data.id))
+            .order_by(edit_process_step_slots::slot.desc())
+            .get_results::<(db::EditProcessStepSlot, db::EditProcessSlot)>(dbcon)?
+            .into_iter()
+            .group_by(|(_, slot)| slot.id)
+            .into_iter()
+            .map(|(_, items)| {
+                let mut key = None;
+
+                let permissions = items.into_iter()
+                    .map(|(ss, slot)| {
+                        key = Some(slot);
+                        ss.permission
+                    })
+                    .collect();
+
+                // Every group has at least one element, so we know key cannot
+                // be None.
+                (Slot::from_db(key.unwrap()), permissions)
+            })
+            .collect();
+
+        Ok(slots)
+    }
+
+    /// Get list of slots, permissions they have during this step, and IDs
+    /// of users occupying these slots.
+    pub fn get_slot_seating(&self, dbcon: &Connection, draft: Uuid)
+    -> Result<Vec<(Slot, Vec<SlotPermission>, Option<i32>)>, DbError> {
+        let slots = edit_process_step_slots::table
+            .inner_join(edit_process_slots::table
+                .left_join(draft_slots::table))
+            .filter(edit_process_step_slots::step.eq(self.data.id)
+                .and(draft_slots::draft.eq(draft)))
+            .order_by((
+                edit_process_step_slots::slot.desc(),
+                draft_slots::user.desc(),
+            ))
+            .get_results::<(
+                db::EditProcessStepSlot,
+                (db::EditProcessSlot, Option<db::DraftSlot>),
+            )>(dbcon)?
+            .into_iter()
+            .group_by(|(_, (slot, seating))| (slot.id, seating.map(|s| s.user)))
+            .into_iter()
+            .map(|(_, items)| {
+                let mut key = None;
+                let mut seating = None;
+
+                let permissions = items
+                    .into_iter()
+                    .map(|(ss, (slot, seat))| {
+                        key = Some(slot);
+                        seating = seat;
+                        ss.permission
+                    })
+                    .collect();
+
+                // Every group has at least one element, so we know key and
+                // seating cannot be None.
+                (
+                    Slot::from_db(key.unwrap()),
+                    permissions,
+                    seating.map(|s| s.user),
+                )
+            })
+            .collect();
+
+        Ok(slots)
     }
 
     /// Get list of list originating at this step. The list can optionally
