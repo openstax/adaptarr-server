@@ -14,7 +14,8 @@ use uuid::Uuid;
 use crate::{
     models::{
         File,
-        draft::{Draft, PublicData as DraftData},
+        draft::{Draft, PublicData as DraftData, AdvanceResult as DraftAdvanceResult},
+        module::PublicData as ModuleData,
     },
 };
 use super::{
@@ -23,6 +24,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
+    util::FormOrJson,
 };
 
 /// Configure routes.
@@ -33,6 +35,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.get().api_with(get_draft);
             r.put().api_with(update_draft);
         })
+        .api_route("/drafts/{id}/advance", Method::POST, advance_draft)
         .resource("/drafts/{id}/comments", |r| {
             r.get().f(list_comments);
             r.post().f(add_comment);
@@ -110,6 +113,55 @@ pub fn update_draft(
     draft.set_title(&*db, &update.title)?;
 
     draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
+}
+
+#[derive(Deserialize)]
+pub struct AdvanceData {
+    target: i32,
+    slot: i32,
+}
+
+/// Advance a draft to the next editing step.
+///
+/// ## Method
+///
+/// ```text
+/// POST /drafts/:id/advance
+/// ```
+pub fn advance_draft(
+    state: actix_web::State<State>,
+    session: Session,
+    id: Path<Uuid>,
+    form: FormOrJson<AdvanceData>,
+) -> Result<Json<AdvanceResult>> {
+    let db = state.db.get()?;
+    let form = form.into_inner();
+    let draft = Draft::by_id(&*db, *id, session.user)?;
+
+    draft.advance(&*db, session.user_id(), form.slot, form.target)
+        .map(|r| match r {
+            DraftAdvanceResult::Advanced(draft) => AdvanceResult::Advanced {
+                draft: draft.get_public_small(),
+            },
+            DraftAdvanceResult::Finished(module) => AdvanceResult::Finished {
+                module: module.get_public(),
+            },
+        })
+        .map(Json)
+        .map_err(Into::into)
+}
+
+#[derive(Serialize)]
+#[serde(tag = "code")]
+pub enum AdvanceResult {
+    #[serde(rename = "draft:process:advanced")]
+    Advanced {
+        draft: DraftData,
+    },
+    #[serde(rename = "draft:process:finished")]
+    Finished {
+        module: ModuleData,
+    }
 }
 
 /// Get comments on a draft.
