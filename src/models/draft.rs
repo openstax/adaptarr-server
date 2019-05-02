@@ -149,6 +149,24 @@ impl Draft {
             .collect())
     }
 
+    /// Check that a user currently possesses specified slot permissions.
+    pub fn check_permission(
+        &self,
+        dbconn: &Connection,
+        user: i32,
+        permission: SlotPermission,
+    ) -> Result<bool, DbError> {
+        edit_process_step_slots::table
+            .inner_join(draft_slots::table
+                .on(draft_slots::slot.eq(edit_process_step_slots::slot)))
+            .select(diesel::dsl::count(edit_process_step_slots::permission))
+            .filter(edit_process_step_slots::step.eq(self.data.step)
+                .and(edit_process_step_slots::permission.eq(permission))
+                .and(draft_slots::user.eq(user)))
+            .get_result::<i64>(dbconn)
+            .map(|c| c > 0)
+    }
+
     /// Write into a file in this draft.
     ///
     /// If there already is a file with this name it will be updated, otherwise

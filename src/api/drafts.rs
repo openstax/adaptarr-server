@@ -12,6 +12,7 @@ use futures::{Future, future};
 use uuid::Uuid;
 
 use crate::{
+    db::types::SlotPermission,
     models::{
         File,
         draft::{Draft, PublicData as DraftData, AdvanceResult as DraftAdvanceResult},
@@ -109,6 +110,10 @@ pub fn update_draft(
 ) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
     let mut draft = Draft::by_id(&*db, *id, session.user)?;
+
+    if !draft.check_permission(&*db, session.user_id(), SlotPermission::Edit)? {
+        return Err(InsufficientSlotPermission(SlotPermission::Edit).into());
+    }
 
     draft.set_title(&*db, &update.title)?;
 
@@ -264,6 +269,13 @@ pub fn update_file(
         Err(err) => return Box::new(future::err(err.into())),
     };
 
+    match draft.check_permission(&*db, session.user_id(), SlotPermission::Edit) {
+        Ok(true) => (),
+        Ok(false) => return Box::new(future::err(
+            InsufficientSlotPermission(SlotPermission::Edit).into())),
+        Err(err) => return Box::new(future::err(err.into())),
+    }
+
     Box::new(File::from_stream::<_, _, Error>(
             state.db.clone(),
             storage,
@@ -292,6 +304,10 @@ pub fn delete_file(
     let db = state.db.get()?;
     let draft = Draft::by_id(&*db, id, session.user)?;
 
+    if !draft.check_permission(&*db, session.user_id(), SlotPermission::Edit)? {
+        return Err(InsufficientSlotPermission(SlotPermission::Edit).into());
+    }
+
     draft.delete_file(&*db, &name)?;
 
     Ok(HttpResponse::Ok().finish())
@@ -316,3 +332,8 @@ pub fn list_containing_books(
         .map(Json)
         .map_err(Into::into)
 }
+
+#[derive(ApiError, Debug, Fail)]
+#[fail(display = "Missing required slot permission '{}'", _0)]
+#[api(code = "draft:process:insufficient-permission", code = "FORBIDDEN")]
+struct InsufficientSlotPermission(SlotPermission);
