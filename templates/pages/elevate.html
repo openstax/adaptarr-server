@@ -79,7 +79,7 @@
             <div class="error"></div>
         {% endif %}
 
-        <input type="password" name="password" placeholder="{{ _(key="elevate-field-password") }}">
+        <input type="password" name="password" minlength="1" placeholder="{{ _(key="elevate-field-password") }}" required>
         <input type="hidden" name="action" value="{{ action }}">
 
         {% if next %}

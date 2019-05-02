@@ -6,8 +6,8 @@
         {% endif %}
 
         {% if token %}
-            <input type="password" name="password" placeholder="{{ _(key="reset-field-password") }}">
-            <input type="password" name="password1" placeholder="{{ _(key="reset-field-repeat-password") }}">
+            <input type="password" name="password" minlength="1" placeholder="{{ _(key="reset-field-password") }}" required>
+            <input type="password" name="password1" minlength="1" placeholder="{{ _(key="reset-field-repeat-password") }}" required>
             <input type="hidden" name="token" value="{{ token }}">
         {% else %}
             {% filter translate(key="reset-message") %}

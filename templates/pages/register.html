@@ -5,18 +5,18 @@
             <div class="error">{{ _(key="register-error", code=error) }}</div>
         {% endif %}
 
-        <input type="text" name="name" placeholder="{{ _(key="register-field-name") }}">
+        <input type="text" name="name" minlength="1" placeholder="{{ _(key="register-field-name") }}" required>
         <input type="email" name="email" value="{{ email }}" readonly>
-        <input type="password" name="password" placeholder="{{ _(key="register-field-password") }}">
-        <input type="password" name="password1" placeholder="{{ _(key="register-field-repeat-password") }}">
+        <input type="password" name="password" minlength="1" placeholder="{{ _(key="register-field-password") }}" required>
+        <input type="password" name="password1" minlength="1" placeholder="{{ _(key="register-field-repeat-password") }}" required>
 
-        <select name="language">
+        <select name="language" required>
         {%- for loc in locales %}
             <option value="{{ loc.code }}" {% if loc.code == locale.code %}selected{% endif %}>{{ loc.name }}</option>
         {%- endfor %}
         </select>
 
-        <input type="hidden" name="invite" value="{{ invite }}">
+        <input type="hidden" name="invite" value="{{ invite }}" required>
         <input type="submit" value="{{ _(key="register-submit") }}">
     </form>
 {% endblock body %}

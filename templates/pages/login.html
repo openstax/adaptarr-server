@@ -5,8 +5,8 @@
             <div class="error">{{ _(key="login-error", code=error) }}</div>
         {% endif %}
 
-        <input type="email" name="email" placeholder="{{ _(key="login-field-email") }}">
-        <input type="password" name="password" placeholder="{{ _(key="login-field-password") }}">
+        <input type="email" name="email" minlength="1" placeholder="{{ _(key="login-field-email") }}" required>
+        <input type="password" name="password" minlength="1" placeholder="{{ _(key="login-field-password") }}" required>
 
         {% if next %}
             <input type="hidden" name="next" value="{{ next }}">
