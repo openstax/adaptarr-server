@@ -8,6 +8,9 @@ bitflags! {
     pub struct PermissionBits: i32 {
         /// All currently allocated bits.
         const ALL_BITS = 0x000fffff;
+        /// Bits which used to name permissions, but those permissions were
+        /// deprecated.
+        const DEPRECATED_BITS = 0x00000040;
         /// All bits allocated for user management permissions.
         const MANAGE_USERS_BITS = 0x0000f00f;
         /// Permission holder can invite new users into the platform.
@@ -21,14 +24,12 @@ bitflags! {
         /// Permission holder can edit data for other users.
         const EDIT_USER = 0x00001000;
         /// All bits allocated for content management permissions.
-        const MANAGE_CONTENT_BITS = 0x000000f0;
+        const MANAGE_CONTENT_BITS = 0x000000b0;
         /// Permission holder can create, edit, and delete books.
         const EDIT_BOOK = 0x00000010;
         /// Permission holder can create, edit, and delete modules.
         const EDIT_MODULE = 0x00000020;
         /// Permission holder can assign users to modules.
-        const ASSIGN_MODULE = 0x00000040;
-        /// All bits allocated for role management permissions.
         const MANAGE_ROLES_BITS = 0x00000f00;
         /// Create, edit, and delete roles.
         const EDIT_ROLE = 0x00000100;
@@ -93,7 +94,6 @@ permission!(EditUserPermissions = PermissionBits::EDIT_USER_PERMISSIONS);
 permission!(AssignRole = PermissionBits::ASSIGN_ROLE);
 permission!(EditBook = PermissionBits::EDIT_BOOK);
 permission!(EditModule = PermissionBits::EDIT_MODULE);
-permission!(AssignModule = PermissionBits::ASSIGN_MODULE);
 permission!(EditRole = PermissionBits::EDIT_ROLE);
 permission!(EditProcess = PermissionBits::EDIT_PROCESS);
 
@@ -151,9 +151,6 @@ impl ser::Serialize for PermissionBits {
         }
         if self.contains(PermissionBits::EDIT_MODULE) {
             seq.serialize_element("module:edit")?;
-        }
-        if self.contains(PermissionBits::ASSIGN_MODULE) {
-            seq.serialize_element("module:assign")?;
         }
         if self.contains(PermissionBits::EDIT_ROLE) {
             seq.serialize_element("role:edit")?;
@@ -216,7 +213,6 @@ impl<'de> de::Visitor<'de> for BitsVisitor {
             "user:edit" => PermissionBits::EDIT_USER,
             "book:edit" => PermissionBits::EDIT_BOOK,
             "module:edit" => PermissionBits::EDIT_MODULE,
-            "module:assign" => PermissionBits::ASSIGN_MODULE,
             "role:edit" => PermissionBits::EDIT_ROLE,
             "editing-process:edit" => PermissionBits::EDIT_PROCESS,
             _ => return Err(E::invalid_value(
