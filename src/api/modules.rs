@@ -26,7 +26,7 @@ use crate::{
     },
     import::{ImportModule, ReplaceModule},
     multipart::Multipart,
-    permissions::EditModule,
+    permissions::{EditModule, ManageProcess},
 };
 use super::{
     Error,
@@ -191,7 +191,7 @@ pub struct BeginProcess {
 /// ```
 pub fn begin_process(
     state: actix_web::State<State>,
-    session: Session,
+    session: Session<ManageProcess>,
     id: Path<Uuid>,
     data: FormOrJson<BeginProcess>,
 ) -> Result<Json<DraftData>> {

@@ -37,6 +37,9 @@ bitflags! {
         const MANAGE_PROCESS_BITS = 0x000f0000;
         /// Permission holder can create, edit, and delete editing processes.
         const EDIT_PROCESS = 0x00010000;
+        /// Permission holder can begin and manage editing process for specific
+        /// modules.
+        const MANAGE_PROCESS = 0x00020000;
     }
 }
 
@@ -96,6 +99,7 @@ permission!(EditBook = PermissionBits::EDIT_BOOK);
 permission!(EditModule = PermissionBits::EDIT_MODULE);
 permission!(EditRole = PermissionBits::EDIT_ROLE);
 permission!(EditProcess = PermissionBits::EDIT_PROCESS);
+permission!(ManageProcess = PermissionBits::MANAGE_PROCESS);
 
 #[derive(ApiError, Debug, Fail)]
 #[api(status = "FORBIDDEN", code = "user:insufficient-permissions")]
@@ -156,7 +160,10 @@ impl ser::Serialize for PermissionBits {
             seq.serialize_element("role:edit")?;
         }
         if self.contains(PermissionBits::EDIT_PROCESS) {
-            seq.serialize_element("editing-process:edit")?
+            seq.serialize_element("editing-process:edit")?;
+        }
+        if self.contains(PermissionBits::MANAGE_PROCESS) {
+            seq.serialize_element("editing-process:manage")?;
         }
         seq.end()
     }
@@ -215,6 +222,7 @@ impl<'de> de::Visitor<'de> for BitsVisitor {
             "module:edit" => PermissionBits::EDIT_MODULE,
             "role:edit" => PermissionBits::EDIT_ROLE,
             "editing-process:edit" => PermissionBits::EDIT_PROCESS,
+            "editing-process:manage" => PermissionBits::MANAGE_PROCESS,
             _ => return Err(E::invalid_value(
                 de::Unexpected::Str(v), &"a permission name")),
         })
