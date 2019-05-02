@@ -107,11 +107,14 @@ pub enum ResetPasswordError {
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
     Internal(#[cause] DbError),
+    #[fail(display = "{}", _0)]
+    Password(#[cause] ChangePasswordError),
 }
 
 impl_from! { for ResetPasswordError ;
     ChangePasswordError => |e| match e {
         ChangePasswordError::Internal(e) => ResetPasswordError::Internal(e),
+        e => ResetPasswordError::Password(e),
     },
     DbError => |e| ResetPasswordError::Internal(e),
     FindUserError => |e| match e {

@@ -81,6 +81,7 @@ reset-error = { $code ->
     ["user:not-found"] Nieznany adres e-mail
     ["password:reset:invalid"] Niepoprawny kod resetowania hasła
     ["password:reset:passwords-dont-match"] Hasała nie pasują
+    ["user:change-password:empty"] Hasło nie może być puste
    *[other] Wystąpił nieznany błąd { $code }
 }
 

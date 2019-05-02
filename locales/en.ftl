@@ -81,6 +81,7 @@ reset-error = { $code ->
     ["user:not-found"] Unknown email address
     ["password:reset:invalid"] Password reset code is not valid
     ["password:reset:passwords-dont-match"] Password don't match
+    ["user:change-password:empty"] Password cannot be empty
    *[other] Unknown error occurred: { $code }
 }
 

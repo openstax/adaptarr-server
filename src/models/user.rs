@@ -221,6 +221,10 @@ impl User {
     /// Change user's password.
     pub fn change_password(&mut self, dbcon: &Connection, password: &str)
     -> Result<(), ChangePasswordError> {
+        if password.is_empty() {
+            return Err(ChangePasswordError::EmptyPassword);
+        }
+
         // Generate salt and hash password.
         let mut salt = [0; 16];
         rand::thread_rng().fill_bytes(&mut salt);
@@ -442,6 +446,9 @@ pub enum ChangePasswordError {
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
     Internal(#[cause] DbError),
+    #[fail(display = "Password cannot be empty")]
+    #[api(code = "user:change-password:empty", status = "BAD_REQUEST")]
+    EmptyPassword,
 }
 
 impl_from! { for ChangePasswordError ;

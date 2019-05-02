@@ -429,7 +429,25 @@ pub fn do_reset(
                 );
             }
 
-            let user = token.fulfil(&*db, &password)?;
+            let user = match token.fulfil(&*db, &password) {
+                Ok(user) => user,
+                Err(err) => {
+                    if err.code().is_none() {
+                        return Err(err.into());
+                    }
+
+                    return render_code(
+                        locale,
+                        err.status(),
+                        "reset.html",
+                        &ResetTemplate {
+                            error: err.code(),
+                            token: Some(&token_str),
+                        },
+                    );
+                }
+            };
+
             Session::<Normal>::create(&req, &user, false);
 
             Ok(HttpResponse::SeeOther()
