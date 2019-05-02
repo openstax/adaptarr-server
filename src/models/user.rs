@@ -111,6 +111,14 @@ impl User {
         language: &str,
         permissions: PermissionBits,
     ) -> Result<User, CreateUserError> {
+        if name.is_empty() {
+            return Err(CreateUserError::EmptyName);
+        }
+
+        if password.is_empty() {
+            return Err(CreateUserError::EmptyPassword);
+        }
+
         // Generate salt and hash password.
         let mut salt = [0; 16];
         rand::thread_rng().fill_bytes(&mut salt);
@@ -388,6 +396,12 @@ pub enum CreateUserError {
     #[fail(display = "Duplicate user")]
     #[api(code = "user:new:exists", status = "BAD_REQUEST")]
     Duplicate,
+    #[fail(display = "User's name cannot be empty")]
+    #[api(code = "user:new:empty-name", status = "BAD_REQUEST")]
+    EmptyName,
+    #[fail(display = "User's password cannot be empty")]
+    #[api(code = "user:new:empty-password", status = "BAD_REQUEST")]
+    EmptyPassword,
 }
 
 impl_from! { for CreateUserError ;

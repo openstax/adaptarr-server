@@ -54,6 +54,8 @@ register-error = { $code ->
     ["user:register:email-changed"]
         You can't change your email during registration
     ["invitation:invalid"] Invitation code is not valid
+    ["user:new:empty-name"] Name cannot be empty
+    ["user:new:empty-password"] Password cannot be empty
    *[other] Unknown error occurred: { $code }
 }
 

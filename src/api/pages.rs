@@ -560,12 +560,32 @@ pub fn do_register(
         );
     }
 
-    let user = invite.fulfil(
+    let user = match invite.fulfil(
         &*db,
         &form.name,
         &form.password,
         &requested_locale.code.to_string(),
-    )?;
+    ) {
+        Ok(user) => user,
+        Err(err) => {
+            if err.code().is_none(){
+                return Err(err.into());
+            }
+
+            return render_code(
+                locale,
+                err.status(),
+                "register.html",
+                &RegisterTemplate {
+                    error: Some(err.code().unwrap()),
+                    email: &form.email,
+                    invite: &form.invite,
+                    locales: &state.i18n.locales,
+                    locale: requested_locale,
+                },
+            );
+        }
+    };
 
     Session::<Normal>::create(&req, &user, false);
 

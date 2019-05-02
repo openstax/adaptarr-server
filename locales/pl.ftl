@@ -54,6 +54,8 @@ register-error = { $code ->
     ["user:register:email-changed"]
         Nie możesz zmienić adresu e-mail podczas rejestracji
     ["invitation:invalid"] Nieprawidłowy kod zaproszenia
+    ["user:new:empty-name"] Imię nie może być puste
+    ["user:new:empty-password"] Hasło nie może być puste
    *[other] Wystąpił nieznany błąd: { $code }
 }
 
