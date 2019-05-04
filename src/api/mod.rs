@@ -39,7 +39,6 @@ pub fn start(cfg: &Config) -> Result<()> {
     let system = System::new("adaptarr");
 
     let db = db::pool()?;
-    let xref_processor = TargetProcessor::start(db.clone());
 
     let state = State {
         config: cfg.clone(),
@@ -47,9 +46,7 @@ pub fn start(cfg: &Config) -> Result<()> {
         mailer: Mailer::from_config(cfg.mail.clone())?,
         events: event_manager::start(db.clone()),
         i18n,
-        importer: Importer::start(
-            db.clone(), cfg.storage.clone(), xref_processor.clone()),
-        xref_processor,
+        importer: Importer::start(db.clone(), cfg.storage.clone()),
     };
 
     let server = server::new(move || vec![
@@ -86,8 +83,6 @@ pub struct State {
     pub i18n: I18n<'static>,
     /// ZIP importer.
     pub importer: Addr<Importer>,
-    /// Cross-reference processing service.
-    pub xref_processor: Addr<TargetProcessor>,
 }
 
 fn api_app(state: State) -> App<State> {

@@ -1,6 +1,6 @@
 //! File upload and importing ZIPs of modules and collections.
 
-use actix::{Actor, Addr, Handler, SyncArbiter, SyncContext, Message};
+use actix::{Actor, Addr, Handler, SystemService, SyncArbiter, SyncContext, Message};
 use diesel::{
     Connection as _Connection,
     result::Error as DbError,
@@ -83,22 +83,20 @@ impl Importer {
     pub fn new(
         pool: Pool,
         config: Storage,
-        xref_processor: Addr<TargetProcessor>,
     ) -> Importer {
         Importer {
             pool,
             config,
-            xref_processor,
+            xref_processor: TargetProcessor::from_registry(),
         }
     }
 
     pub fn start(
         pool: Pool,
         config: Storage,
-        xref_processor: Addr<TargetProcessor>,
     ) -> Addr<Importer> {
         SyncArbiter::start(1, move || Importer::new(
-            pool.clone(), config.clone(), xref_processor.clone()))
+            pool.clone(), config.clone()))
     }
 
     /// Process a zipped module and extract index.cnxml and other media files
