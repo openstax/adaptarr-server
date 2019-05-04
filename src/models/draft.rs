@@ -1,3 +1,4 @@
+use actix::SystemService;
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -5,20 +6,23 @@ use diesel::{
 };
 use uuid::Uuid;
 
-use crate::db::{
-    Connection,
-    models as db,
-    schema::{
-        book_parts,
-        document_files,
-        documents,
-        draft_slots,
-        drafts,
-        edit_process_links,
-        edit_process_step_slots,
-        modules,
+use crate::{
+    db::{
+        Connection,
+        models as db,
+        schema::{
+            book_parts,
+            document_files,
+            documents,
+            draft_slots,
+            drafts,
+            edit_process_links,
+            edit_process_step_slots,
+            modules,
+        },
+        types::SlotPermission,
     },
-    types::SlotPermission,
+    processing::{ProcessDocument, TargetProcessor},
 };
 use super::{
     File,
@@ -254,7 +258,8 @@ impl Draft {
 
                 diesel::delete(&self.data).execute(dbconn)?;
 
-                // TODO: process x-refs
+                TargetProcessor::from_registry()
+                    .do_send(ProcessDocument { document: self.document.clone() });
 
                 let module = modules::table
                     .filter(modules::id.eq(self.data.module))
