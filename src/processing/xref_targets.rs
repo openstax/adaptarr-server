@@ -268,6 +268,19 @@ impl TargetProcessor {
             }),
         }
     }
+
+    /// Try to send a document for processing
+    ///
+    /// Errors will be logged, but otherwise ignored.
+    pub fn process(document: db::Document) {
+        let processor = TargetProcessor::from_registry();
+        let id = document.id;
+        let message = ProcessDocument { document };
+
+        if let Err(err) = processor.try_send(message) {
+            error!("Could not send document {} for processing: {}", id, err);
+        }
+    }
 }
 
 impl Default for TargetProcessor {

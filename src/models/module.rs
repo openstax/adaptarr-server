@@ -5,11 +5,14 @@ use diesel::{
 };
 use uuid::Uuid;
 
-use crate::db::{
-    Connection,
-    functions::duplicate_document,
-    models as db,
-    schema::{book_parts, documents, drafts, draft_slots, modules, xref_targets},
+use crate::{
+    db::{
+        Connection,
+        functions::duplicate_document,
+        models as db,
+        schema::{book_parts, documents, drafts, draft_slots, modules, xref_targets},
+    },
+    processing::{TargetProcessor, ProcessDocument},
 };
 use super::{
     Draft,
@@ -85,7 +88,7 @@ impl Module {
         I: IntoIterator<Item = (N, File)>,
         N: AsRef<str>,
     {
-        dbconn.transaction(|| {
+        let module = dbconn.transaction::<_, DbError, _>(|| {
             let document = Document::create(dbconn, title, language, index, files)?;
 
             let data = diesel::insert_into(modules::table)
@@ -96,7 +99,11 @@ impl Module {
                 .get_result::<db::Module>(dbconn)?;
 
             Ok(Module::from_db(data, document))
-        })
+        })?;
+
+        TargetProcessor::process(module.document.clone());
+
+        Ok(module)
     }
 
     /// Get ID of this module.
@@ -215,7 +222,11 @@ impl Module {
             self.document = document;
 
             Ok(())
-        })
+        })?;
+
+        TargetProcessor::process(self.document.clone());
+
+        Ok(())
     }
 }
 

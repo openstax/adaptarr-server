@@ -19,7 +19,6 @@ use crate::{
         file::{File, CreateFileError},
         module::{Module, ReplaceModuleError},
     },
-    processing::{TargetProcessor, ProcessDocument},
 };
 
 /// CNX includes in its ZIP exports a number of artefacts which we have no use
@@ -76,7 +75,6 @@ impl Message for ReplaceBook {
 pub struct Importer {
     pool: Pool,
     config: Storage,
-    xref_processor: Addr<TargetProcessor>,
 }
 
 impl Importer {
@@ -87,7 +85,6 @@ impl Importer {
         Importer {
             pool,
             config,
-            xref_processor: TargetProcessor::from_registry(),
         }
     }
 
@@ -198,13 +195,6 @@ impl Importer {
         let db = self.pool.get()?;
         let module = Module::create(&*db, &title, &language, index, files)?;
 
-        if let Err(err) = self.xref_processor.try_send(ProcessDocument {
-            document: (**module).clone()
-        }) {
-            error!("Could not send document {} for processing: {}",
-                module.id, err);
-        }
-
         Ok(module)
     }
 
@@ -215,13 +205,6 @@ impl Importer {
 
         let db = self.pool.get()?;
         module.replace(&*db, index, files)?;
-
-        if let Err(err) = self.xref_processor.try_send(ProcessDocument {
-            document: (**module).clone()
-        }) {
-            error!("Could not send document {} for processing: {}",
-                module.id, err);
-        }
 
         Ok(module)
     }
@@ -359,16 +342,6 @@ impl Importer {
                                 CreatePartError::Database(e) => e,
                                 CreatePartError::IsAModule => unreachable!(),
                             })?;
-
-                        if let Err(err) = self.xref_processor.try_send(
-                            ProcessDocument { document: (**module).clone() })
-                        {
-                            error!(
-                                "Could not send document {} for processing: {}",
-                                module.id,
-                                err,
-                            );
-                        }
                     }
                     Element::Subcollection(Subcollection { title, content }) => {
                         let new = group.create_group(dbconn, inx as i32, &title)
