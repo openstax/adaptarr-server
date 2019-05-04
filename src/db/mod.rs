@@ -56,8 +56,9 @@ static POOL: SingleInit<Pool> = SingleInit::uninit();
 ///
 /// Note that this function will only ever create a single pool. If it has
 /// succeeded once, every call after that will return the same pool.
-pub fn pool(cfg: &Config) -> crate::Result<Pool> {
+pub fn pool() -> crate::Result<Pool> {
     POOL.get_or_try_init(|| {
+        let cfg = crate::config::load()?;
         let url = database_url(cfg)?;
         let manager = ConnectionManager::new(url);
         let pool = Pool::new(manager)?;

@@ -34,11 +34,11 @@ mod users;
 mod util;
 
 /// Start an API server.
-pub fn start(cfg: Config) -> Result<()> {
+pub fn start(cfg: &Config) -> Result<()> {
     let i18n = I18n::load()?;
     let system = System::new("adaptarr");
 
-    let db = db::pool(&cfg)?;
+    let db = db::pool()?;
     let xref_processor = TargetProcessor::start(db.clone());
 
     let state = State {

@@ -29,7 +29,7 @@ pub enum Command {
     Invite(InviteOpts),
 }
 
-pub fn main(cfg: Config, opts: Opts) -> Result<()> {
+pub fn main(cfg: &Config, opts: Opts) -> Result<()> {
     match opts.command {
         Command::Add(opts) => add_user(cfg, opts),
         Command::Invite(opts) => invite(cfg, opts),
@@ -54,7 +54,7 @@ pub struct AddOpts {
     language: LanguageTag,
 }
 
-pub fn add_user(cfg: Config, opts: AddOpts) -> Result<()> {
+pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let user = User::create(
         &db,
@@ -80,7 +80,7 @@ pub struct InviteOpts {
     language: LanguageTag,
 }
 
-pub fn invite(cfg: Config, opts: InviteOpts) -> Result<()> {
+pub fn invite(cfg: &Config, opts: InviteOpts) -> Result<()> {
     let i18n = I18n::load()?;
     let locale = match i18n.find_locale(&opts.language) {
         Some(locale) => locale,
@@ -101,7 +101,7 @@ pub fn invite(cfg: Config, opts: InviteOpts) -> Result<()> {
         code,
     );
 
-    Mailer::from_config(cfg.mail)?.send(
+    Mailer::from_config(cfg.mail.clone())?.send(
         "invite",
         opts.email.as_str(),
         "mail-invite-subject",
