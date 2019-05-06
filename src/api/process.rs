@@ -1,10 +1,20 @@
-use actix_web::{App, HttpResponse, Json, Path};
+use actix_web::{App, HttpResponse, Json, Path, http::Method};
 
 use crate::{
-    models::editing::{Process, ProcessData, Version, VersionData, structure},
+    models::{
+        draft::PublicData as DraftData,
+        editing::{
+            Process,
+            ProcessData,
+            Version,
+            VersionData,
+            slot::{Slot, PublicData as SlotData},
+            structure,
+        },
+    },
     permissions::EditProcess,
 };
-use super::{Error, RouteExt, State, session::Session};
+use super::{Error, RouteExt, RouterExt, State, session::Session};
 
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
@@ -14,6 +24,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.post().api_with(create_process);
         })
         .scope("/processes", |scope| scope
+            .api_route("/slots/free",  Method::GET, list_free_slots)
             .resource("/{id}", |r| {
                 r.get().api_with(get_process);
                 r.put().api_with(update_process);
@@ -70,6 +81,37 @@ pub fn create_process(
     let process = Process::create(&*db, &*data)?;
 
     Ok(Json(process.process().get_public()))
+}
+
+#[derive(Serialize)]
+pub struct FreeSlot {
+    #[serde(flatten)]
+    slot: SlotData,
+    draft: DraftData,
+}
+
+/// Get list of all unoccupied slots a user can take.
+///
+/// ## Method
+///
+/// ```text
+/// GET /processes/free/slots
+/// ```
+pub fn list_free_slots(
+    state: actix_web::State<State>,
+    session: Session,
+) -> Result<Json<Vec<FreeSlot>>> {
+    let db = state.db.get()?;
+    let user = session.user(&*db)?;
+    let slots = Slot::all_free(&*db, user.role)?
+        .into_iter()
+        .map(|(draft, slot)| FreeSlot {
+            slot: slot.get_public(),
+            draft: draft.get_public_small(),
+        })
+        .collect();
+
+    Ok(Json(slots))
 }
 
 /// Get a process by ID.

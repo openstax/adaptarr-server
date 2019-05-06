@@ -5,11 +5,21 @@ use diesel::{
 use std::ops::Deref;
 use uuid::Uuid;
 
-use crate::db::{
-    Connection,
-    models as db,
-    schema::{draft_slots, users},
-    functions::count_distinct,
+use crate::{
+    db::{
+        Connection,
+        models as db,
+        schema::{
+            edit_process_slots,
+            edit_process_step_slots,
+            drafts,
+            documents,
+            draft_slots,
+            users,
+        },
+        functions::count_distinct,
+    },
+    models::{Document, Draft},
 };
 
 /// Abstract representation of roles a user can take during an editing process.
@@ -18,10 +28,75 @@ pub struct Slot {
     data: db::EditProcessSlot,
 }
 
+/// A subset of slot's data that can safely be publicly exposed.
+#[derive(Debug, Serialize)]
+pub struct PublicData {
+    pub id: i32,
+    pub name: String,
+}
+
 impl Slot {
     /// Construct `Slot` from its database counterpart.
     pub(super) fn from_db(data: db::EditProcessSlot) -> Slot {
         Slot { data }
+    }
+
+    /// Get list of all currently unoccupied slots to which a user with given
+    /// role can assign themselves.
+    pub fn all_free(dbcon: &Connection, role: Option<i32>)
+    -> Result<Vec<(Draft, Slot)>, DbError> {
+        let query = drafts::table
+            .inner_join(edit_process_step_slots::table
+                .on(drafts::step.eq(edit_process_step_slots::step)))
+            .left_join(draft_slots::table
+                .on(drafts::module.eq(draft_slots::draft)
+                    .and(edit_process_step_slots::slot.eq(draft_slots::slot))))
+            .inner_join(documents::table)
+            .inner_join(edit_process_slots::table
+                .on(edit_process_step_slots::slot.eq(edit_process_slots::id)));
+
+        let slots = if let Some(role) = role {
+            query
+                .filter(draft_slots::user.is_null()
+                    .and(edit_process_slots::role.is_null()
+                        .or(edit_process_slots::role.eq(role))))
+                .get_results::<(
+                    db::Draft,
+                    db::EditProcessStepSlot,
+                    Option<db::DraftSlot>, // Note: this will always be None.
+                    db::Document,
+                    db::EditProcessSlot,
+                )>(dbcon)?
+        } else {
+            query
+                .filter(draft_slots::user.is_null()
+                    .and(edit_process_slots::role.is_null()))
+                .get_results::<(
+                    db::Draft,
+                    db::EditProcessStepSlot,
+                    Option<db::DraftSlot>, // Note: this will always be None.
+                    db::Document,
+                    db::EditProcessSlot,
+                )>(dbcon)?
+        };
+
+        Ok(slots
+            .into_iter()
+            .map(|(draft, _, _, document, slot)| (
+                Draft::from_db(draft, Document::from_db(document)),
+                Slot::from_db(slot),
+            ))
+            .collect())
+    }
+
+    /// Get the public portion of this slot's data.
+    pub fn get_public(&self) -> PublicData {
+        let db::EditProcessSlot { id, ref name, .. } = self.data;
+
+        PublicData {
+            id,
+            name: name.clone(),
+        }
     }
 
     /// Fill this slot with a user for a particular draft.
