@@ -4,6 +4,7 @@ use actix_web::{
     middleware::Logger,
     server,
 };
+use sentry_actix::SentryMiddleware;
 
 use super::{
     Result,
@@ -96,6 +97,7 @@ fn api_app(state: State) -> App<State> {
     );
 
     App::with_state(state)
+        .middleware(SentryMiddleware::new())
         .middleware(Logger::default())
         .middleware(sessions)
         .prefix("/api/v1")

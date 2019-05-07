@@ -63,3 +63,8 @@ network = "info"
 # Example: only show incoming requests, silence all other networking logs.
 "actix_net" = "off"
 "actix_web::middleware::logger" = "info"
+
+# :optional: Sentry.io configuration
+[sentry]
+# :required: Client key.
+dns = "https://key@instance/project"

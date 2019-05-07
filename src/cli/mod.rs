@@ -1,3 +1,4 @@
+use std::{env, mem};
 use structopt::StructOpt;
 
 use crate::Result;
@@ -33,6 +34,7 @@ pub fn main() -> Result<()> {
     let opts = Opts::from_args();
     let config = crate::config::load()?;
 
+    setup_sentry(&config)?;
     setup_logging(&config.logging)?;
 
     match opts.command {
@@ -41,6 +43,21 @@ pub fn main() -> Result<()> {
         Command::Role(opts) => role::main(config, opts),
         Command::User(opts) => user::main(config, opts),
     }
+}
+
+fn setup_sentry(config: &crate::config::Config) -> Result<()> {
+    if let Some(ref sentry) = config.sentry {
+        env::set_var("RUST_BACKTRACE", "1");
+        mem::forget(sentry::init((sentry.dsn.as_str(), sentry::ClientOptions {
+            trim_backtraces: true,
+            release: Some(env!("CARGO_PKG_VERSION").into()),
+            server_name: Some(config.server.domain.clone().into()),
+            .. Default::default()
+        })));
+        sentry::integrations::panic::register_panic_handler();
+    }
+
+    Ok(())
 }
 
 fn setup_logging(config: &crate::config::Logging) -> Result<()> {

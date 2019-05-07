@@ -21,6 +21,8 @@ extern crate r2d2_diesel;
 extern crate rand;
 extern crate ring;
 extern crate rmp_serde as rmps;
+extern crate sentry;
+extern crate sentry_actix;
 extern crate serde;
 extern crate serde_json;
 extern crate structopt;

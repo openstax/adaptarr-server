@@ -10,6 +10,8 @@ use actix_web::{
 };
 use failure::Fail;
 use futures::{Async, Future, Poll};
+use sentry::{Hub, integrations::failure::event_from_fail};
+use sentry_actix::ActixWebHubExt;
 
 /// An error that occurred while handling an API request.
 pub trait ApiError: Fail {
@@ -96,6 +98,8 @@ impl<R: Responder> Responder for ApiResult<R> {
                 .map_err(Into::into),
             ApiResult::Error(e) => e,
         };
+
+        capture_error(req, &err);
 
         match err {
             Error::Api(err) => Ok(AsyncResult::ok({
@@ -317,4 +321,10 @@ where
             Err(err) => Ok(Async::Ready(ApiResult::Error(err.into()))),
         }
     }
+}
+
+/// Capture an error and report it to Sentry.io.
+fn capture_error<S>(req: &HttpRequest<S>, error: &Error) {
+    Hub::from_request(req)
+        .capture_event(event_from_fail(error));
 }

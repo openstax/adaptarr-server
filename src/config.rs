@@ -17,6 +17,7 @@ pub struct Config {
     pub storage: Storage,
     #[serde(default)]
     pub logging: Logging,
+    pub sentry: Option<Sentry>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -54,6 +55,13 @@ pub struct Logging {
     pub network: Option<LevelFilter>,
     /// Custom filters.
     pub filters: HashMap<String, LevelFilter>,
+}
+
+/// Sentry.io configuration.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Sentry {
+    /// Client key.
+    pub dsn: String,
 }
 
 #[derive(Debug, Fail)]
