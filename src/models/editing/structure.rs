@@ -98,6 +98,14 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
                     total: process.slots.len(),
                 })
             }
+
+            if !step.slots.iter().any(|slot| slot.slot == link.slot) {
+                return Err(UnusableLink {
+                    step: stepid,
+                    link: linkid,
+                    slot: link.slot,
+                });
+            }
         }
     }
 
@@ -290,6 +298,23 @@ pub enum ValidateStructureError {
         slot: usize,
         /// Total number of slots.
         total: usize,
+    },
+    /// Link description references a slot which has no permissions in that step.
+    #[fail(
+        display =
+            "Link {} of step {} references slot {} which is granted \
+            no permissions in that step",
+        link,
+        step,
+        slot,
+    )]
+    UnusableLink {
+        /// Offending step's ID.
+        step: usize,
+        /// Offending link's ID.
+        link: usize,
+        /// Offending slot ID.
+        slot: usize,
     },
     /// A limited permission is granted to many slots in a step.
     #[fail(
