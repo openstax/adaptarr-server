@@ -2,7 +2,7 @@ use chrono::{NaiveDateTime, Utc};
 use diesel::{
     Connection as _,
     prelude::*,
-    result::Error as DbError,
+    result::{Error as DbError, DatabaseErrorKind},
 };
 use std::ops::Deref;
 
@@ -280,11 +280,23 @@ pub enum CreateVersionError {
     #[api(internal)]
     #[fail(display = "Database error: {}", _0)]
     Database(#[cause] DbError),
+    /// Duplicate process
+    #[api(code = "edit-process:new:exists", status = "BAD_REQUEST")]
+    #[fail(display = "A process with this name already exists")]
+    Duplicate,
 }
 
 impl_from! { for CreateVersionError ;
     structure::ValidateStructureError => |e| CreateVersionError::InvalidDescription(e),
-    DbError => |e| CreateVersionError::Database(e),
+    DbError => |e| match e {
+        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, detail) =>
+            match detail.constraint_name() {
+                Some("edit_processes_name_key") => CreateVersionError::Duplicate,
+                _ => CreateVersionError::Database(DbError::DatabaseError(
+                    DatabaseErrorKind::UniqueViolation, detail)),
+            },
+        _ => CreateVersionError::Database(e),
+    }
 }
 
 #[derive(ApiError, Debug, Fail)]
