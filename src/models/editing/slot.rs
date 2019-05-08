@@ -41,6 +41,16 @@ impl Slot {
         Slot { data }
     }
 
+    /// Find a slot by ID.
+    pub fn by_id(dbcon: &Connection, id: i32) -> Result<Slot, FindSlotError> {
+        edit_process_slots::table
+            .filter(edit_process_slots::id.eq(id))
+            .get_result::<db::EditProcessSlot>(dbcon)
+            .optional()?
+            .ok_or(FindSlotError::NotFound)
+            .map(Slot::from_db)
+    }
+
     /// Get list of all currently unoccupied slots to which a user with given
     /// role can assign themselves.
     pub fn all_free(dbcon: &Connection, role: Option<i32>)
@@ -99,7 +109,7 @@ impl Slot {
         }
     }
 
-    /// Fill this slot with a user for a particular draft.
+    /// Fill this slot with an auto-selected user for a particular draft.
     pub fn fill(&self, dbcon: &Connection, draft: Uuid)
     -> Result<Option<i32>, FillSlotError> {
         if !self.data.autofill {
@@ -116,6 +126,22 @@ impl Slot {
             .optional()?
             .ok_or(FillSlotError::NoUser)?;
 
+        self.fill_with(dbcon, draft, &user)?;
+
+        Ok(Some(user.id))
+    }
+
+    /// Fill this slot with a user for a particular draft.
+    pub fn fill_with(&self, dbcon: &Connection, draft: Uuid, user: &db::User)
+    -> Result<(), FillSlotError> {
+        if let Some(role) = self.data.role {
+            if !user.role.map_or(false, |r| r == role) {
+                return Err(FillSlotError::BadRole);
+            }
+        }
+
+        debug!("Assigning {:?} to {:?}", user, self.data);
+
         diesel::insert_into(draft_slots::table)
             .values(db::DraftSlot {
                 draft,
@@ -124,7 +150,7 @@ impl Slot {
             })
             .execute(dbcon)?;
 
-        Ok(Some(user.id))
+        Ok(())
     }
 }
 
@@ -137,6 +163,22 @@ impl Deref for Slot {
 }
 
 #[derive(ApiError, Debug, Fail)]
+pub enum FindSlotError {
+    /// Database error.
+    #[api(internal)]
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] DbError),
+    /// No slot found matching given criteria.
+    #[api(code = "edit-process:slot:not-found", status = "NOT_FOUND")]
+    #[fail(display = "No such slot")]
+    NotFound,
+}
+
+impl_from! { for FindSlotError ;
+    DbError => |e| FindSlotError::Database(e),
+}
+
+#[derive(ApiError, Debug, Fail)]
 pub enum FillSlotError {
     /// Database error
     #[fail(display = "Database error: {}", _0)]
@@ -146,6 +188,10 @@ pub enum FillSlotError {
     #[fail(display = "There is no user available to fill this slot")]
     #[api(code = "edit-process:slot:fill")]
     NoUser,
+    /// User doesn't have required role.
+    #[api(code = "edit-process:slot:fill:bad-role", status = "BAD_REQUEST")]
+    #[fail(display = "User doesn't have required role")]
+    BadRole,
 }
 
 impl_from! { for FillSlotError ;

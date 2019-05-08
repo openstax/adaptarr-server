@@ -1,4 +1,5 @@
 use actix_web::{App, HttpResponse, Json, Path, http::Method};
+use uuid::Uuid;
 
 use crate::{
     models::{
@@ -14,7 +15,14 @@ use crate::{
     },
     permissions::EditProcess,
 };
-use super::{Error, RouteExt, RouterExt, State, session::Session};
+use super::{
+    Error,
+    RouteExt,
+    RouterExt,
+    State,
+    session::Session,
+    util::FormOrJson,
+};
 
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
@@ -24,6 +32,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.post().api_with(create_process);
         })
         .scope("/processes", |scope| scope
+            .api_route("/slots", Method::POST, assign_to_slot)
             .api_route("/slots/free",  Method::GET, list_free_slots)
             .resource("/{id}", |r| {
                 r.get().api_with(get_process);
@@ -83,6 +92,34 @@ pub fn create_process(
     Ok(Json(process.process().get_public()))
 }
 
+#[derive(Deserialize)]
+pub struct AssignToSlot {
+    draft: Uuid,
+    slot: i32,
+}
+
+/// Self-assign to a free slot.
+///
+/// ## Method
+///
+/// ```text
+/// POST /processes/slots
+/// ```
+pub fn assign_to_slot(
+    state: actix_web::State<State>,
+    session: Session,
+    data: FormOrJson<AssignToSlot>,
+) -> Result<HttpResponse> {
+    let db = state.db.get()?;
+    let data = data.into_inner();
+    let user = session.user(&*db)?;
+
+    Slot::by_id(&*db, data.slot)?
+        .fill_with(&*db, data.draft, &user)?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 #[derive(Serialize)]
 pub struct FreeSlot {
     #[serde(flatten)]
@@ -95,7 +132,7 @@ pub struct FreeSlot {
 /// ## Method
 ///
 /// ```text
-/// GET /processes/free/slots
+/// GET /processes/slots/free
 /// ```
 pub fn list_free_slots(
     state: actix_web::State<State>,
