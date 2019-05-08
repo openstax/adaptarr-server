@@ -130,7 +130,7 @@ impl Version {
             }
 
             let version = diesel::update(&version)
-                .set(edit_process_versions::start.eq(steps[validation.start].id))
+                .set(edit_process_versions::start.eq(steps[structure.start].id))
                 .get_result(dbcon)?;
 
             Ok(Version::from_db(version, Process::from_db(process)))
@@ -238,7 +238,7 @@ impl Version {
 
             Ok(structure::Process {
                 name: self.process.name.clone(),
-                start: Some(start),
+                start,
                 slots,
                 steps,
             })

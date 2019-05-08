@@ -6,9 +6,8 @@ use self::ValidateStructureError::*;
 pub struct Process {
     /// Process's name.
     pub name: String,
-    /// ID of the initial step.
-    #[serde(skip_deserializing)]
-    pub start: Option<usize>,
+    /// Index of the initial step.
+    pub start: usize,
     /// Slots defined for this process.
     pub slots: Vec<Slot>,
     /// Steps in this process.
@@ -55,8 +54,6 @@ pub struct Link {
 /// Result of validation.
 #[derive(Debug)]
 pub struct Validation {
-    /// ID of the initial step.
-    pub start: usize,
 }
 
 pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError> {
@@ -65,6 +62,11 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
     }
 
     // Verify all IDs are correct.
+
+    if process.start >= process.steps.len() {
+        return Err(ValidateStructureError::InvalidStartStep(
+            process.start, process.steps.len()));
+    }
 
     for (stepid, step) in process.steps.iter().enumerate() {
         for slot in &step.slots {
@@ -156,24 +158,10 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
         }
     }
 
-    // Find starting step.
-
-    let mut numlinks = vec![0; process.steps.len()];
-
-    for node in &process.steps {
-        for link in &node.links {
-            numlinks[link.to] += 1;
-        }
-    }
-
-    let start = numlinks.iter()
-        .position(|&c| c == 0)
-        .ok_or(ValidateStructureError::MissingStart)?;
-
     // Verify all steps are reachable from the initial step.
 
     let mut reachable = vec![false; process.steps.len()];
-    let mut stack = vec![start];
+    let mut stack = vec![process.start];
 
     while let Some(node) = stack.pop() {
         if reachable[node] {
@@ -221,9 +209,7 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
         return Err(IsolatedStep(node));
     }
 
-    Ok(Validation {
-        start,
-    })
+    Ok(Validation {})
 }
 
 #[derive(Debug, Fail)]
@@ -232,7 +218,7 @@ pub enum ValidateStructureError {
     #[fail(display = "Process's name cannot be empty")]
     EmptyProcessName,
     /// Description names start step with ID greater than total number of steps.
-    #[fail(display = "Start steps ID {} exceeds total number of steps {}", _0, _1)]
+    #[fail(display = "Start step's ID {} exceeds total number of steps {}", _0, _1)]
     InvalidStartStep(usize, usize),
     /// Step description gives permission to a slot with ID greater than total
     /// number of slots.
@@ -344,9 +330,6 @@ pub enum ValidateStructureError {
         /// Permission which is required but not granted.
         requiree: SlotPermission,
     },
-    /// Description contains no start step.
-    #[fail(display = "Description is missing a starting step")]
-    MissingStart,
     /// Description contains a step which is not reachable from the initial step.
     #[fail(display = "Step {} is not reachable from the initial step", _0)]
     UnreachableState(usize),
