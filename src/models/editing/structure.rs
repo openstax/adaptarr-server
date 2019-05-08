@@ -60,6 +60,10 @@ pub struct Validation {
 }
 
 pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError> {
+    if process.name.is_empty() {
+        return Err(ValidateStructureError::EmptyProcessName);
+    }
+
     // Verify all IDs are correct.
 
     for (stepid, step) in process.steps.iter().enumerate() {
@@ -224,6 +228,9 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
 
 #[derive(Debug, Fail)]
 pub enum ValidateStructureError {
+    /// Process name is empty.
+    #[fail(display = "Process's name cannot be empty")]
+    EmptyProcessName,
     /// Description names start step with ID greater than total number of steps.
     #[fail(display = "Start steps ID {} exceeds total number of steps {}", _0, _1)]
     InvalidStartStep(usize, usize),
