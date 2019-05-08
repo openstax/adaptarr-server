@@ -179,14 +179,22 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
         return Err(UnreachableState(node));
     }
 
-    // Verify there's a patch from every step to a final step.
+    // Verify that the initial step is not also a final step.
 
-    let mut reachable = vec![false; process.steps.len()];
-    let mut stack: Vec<usize> = process.steps.iter()
+    let final_steps: Vec<usize> = process.steps.iter()
         .enumerate()
         .filter(|(_, step)| step.links.is_empty())
         .map(|(inx, _)| inx)
         .collect();
+
+    if final_steps.iter().any(|&f| f == process.start) {
+        return Err(ValidateStructureError::StartIsFinal);
+    }
+
+    // Verify there's a patch from every step to a final step.
+
+    let mut reachable = vec![false; process.steps.len()];
+    let mut stack = final_steps;
 
     let mut links = vec![Vec::new(); process.steps.len()];
     for (inx, step) in process.steps.iter().enumerate() {
@@ -336,4 +344,7 @@ pub enum ValidateStructureError {
     /// Description contains a step from which no final step can be reached.
     #[fail(display = "Step {} is isolated; no final step can be reached from it", _0)]
     IsolatedStep(usize),
+    /// The initial step is also a final step.
+    #[fail(display = "Start step cannot also be a final step")]
+    StartIsFinal,
 }
