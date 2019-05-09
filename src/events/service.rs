@@ -27,7 +27,7 @@ use crate::{
     templates,
     utils::IteratorGroupExt,
 };
-use super::events::{Event, ExpandedEvent, ExpandedUser, ExpandedModule};
+use super::events::{Event, ExpandedEvent, ExpandedUser, ExpandedModule, expand_event};
 
 /// Interval between two notification emails.
 ///
@@ -190,45 +190,7 @@ impl EventManager {
         events: Vec<db::Event>,
     ) -> Result<(), Error> {
         let events = events.into_iter()
-            .map(|event| -> Result<ExpandedEvent, Error> {
-                let data = rmps::from_slice(&event.data)?;
-
-                Ok(match data {
-                    Event::Assigned(ev) => {
-                        let who = match User::by_id(dbcon, ev.who) {
-                            Ok(user) => user,
-                            Err(FindUserError::Internal(err)) =>
-                                return Err(err.into()),
-                            Err(FindUserError::NotFound) => panic!(
-                                "Inconsistent database: user doesn't exist \
-                                but is referenced by an event",
-                            ),
-                        }.into_db();
-                        let module = match Module::by_id(dbcon, ev.module) {
-                            Ok(module) => module,
-                            Err(FindModuleError::Database(err)) =>
-                                return Err(err.into()),
-                            Err(FindModuleError::NotFound) => panic!(
-                                "Inconsistent database: module doesn't exist \
-                                but is referenced by an event",
-                            ),
-                        }.into_db();
-
-                        ExpandedEvent::Assigned {
-                            who: ExpandedUser {
-                                name: who.0.name,
-                                url: format!("https://{}/users/{}",
-                                    self.config.server.domain, who.0.id),
-                            },
-                            module: ExpandedModule {
-                                title: module.1.title,
-                                url: format!("https://{}/modules/{}",
-                                    self.config.server.domain, module.0.id),
-                            },
-                        }
-                    }
-                })
-            })
+            .map(|event| expand_event(&self.config, dbcon, &event))
             .collect::<Result<Vec<_>, _>>()?;
 
         let locale = self.i18n.find_locale(&user.language())
@@ -287,25 +249,6 @@ impl Handler<UnregisterListener> for EventManager {
         let UnregisterListener { user, addr: _ } = msg;
         self.streams.remove(&user);
     }
-}
-
-#[derive(Debug, Fail)]
-pub enum Error {
-    #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] DbError),
-    #[fail(display = "Error obtaining database connection: {}", _0)]
-    DatabasePool(#[cause] r2d2::Error),
-    #[fail(display = "Error serializing event data: {}", _0)]
-    Serialize(#[cause] rmps::encode::Error),
-    #[fail(display = "Error deserializing event data: {}", _0)]
-    Deserialize(#[cause] rmps::decode::Error),
-}
-
-impl_from! { for Error ;
-    DbError => |e| Error::Database(e),
-    r2d2::Error => |e| Error::DatabasePool(e),
-    rmps::encode::Error => |e| Error::Serialize(e),
-    rmps::decode::Error => |e| Error::Deserialize(e),
 }
 
 pub trait EventManagerAddrExt {
