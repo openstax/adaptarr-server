@@ -122,7 +122,7 @@ impl Importer {
             if name == "index.cnxml" {
                 index = Some((
                     inx,
-                    path.parent().map_or_else(|| PathBuf::new(), |p| p.to_owned()),
+                    path.parent().map_or_else(PathBuf::new, ToOwned::to_owned),
                 ));
                 break;
             }
@@ -251,7 +251,7 @@ impl Importer {
                 println!("collection.xml found at {}", file.name());
                 colxml = Some((
                     inx,
-                    path.parent().map_or_else(|| PathBuf::new(), |p| p.to_owned()),
+                    path.parent().map_or_else(PathBuf::new, ToOwned::to_owned),
                 ));
                 break;
             }

@@ -56,7 +56,7 @@ pub struct AddOpts {
 
 fn add_role(cfg: Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
-    let permissions = opts.permissions.unwrap_or(PermissionBits::empty());
+    let permissions = opts.permissions.unwrap_or_else(PermissionBits::empty);
     let role = Role::create(&db, &opts.name, permissions)?;
 
     println!("Created role {}", role.id);

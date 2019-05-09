@@ -343,7 +343,7 @@ where
             }
 
             Ok(Session {
-                data: session.clone(),
+                data: session,
                 _policy: PhantomData,
             })
         } else {
@@ -374,10 +374,6 @@ impl<P: Permission> Policy for P {
 pub enum SessionFromRequestError {
     #[fail(display = "No session")]
     NoSession,
-    #[fail(display = "Unsealing error: {}", _0)]
-    Unsealing(#[cause] utils::UnsealingError),
-    #[fail(display = "Invalid base64: {}", _0)]
-    Decoding(#[cause] base64::DecodeError),
     #[fail(display = "Database error: {}", _0)]
     Database(#[cause] diesel::result::Error),
     #[fail(display = "Cannot obtain database connection: {}", _0)]
@@ -399,8 +395,6 @@ impl ResponseError for SessionFromRequestError {
         match *self {
             NoSession => HttpResponse::Unauthorized()
                 .body("a session is required"),
-            Unsealing(_) | Decoding(_) => HttpResponse::BadRequest()
-                .body("could not decode session cookie"),
             Database(_) | DatabasePool(_) => HttpResponse::InternalServerError()
                 .finish(),
             Policy => HttpResponse::Forbidden()

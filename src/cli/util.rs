@@ -27,13 +27,13 @@ where
 {
     let mut widths = vec![0; H::size()];
 
-    for inx in 0..H::size() {
-        widths[inx] = UnicodeWidthStr::width(header.column(inx));
+    for (inx, width) in widths.iter_mut().enumerate().take(H::size()) {
+        *width = UnicodeWidthStr::width(header.column(inx));
     }
 
     for row in rows.as_ref() {
-        for inx in 0..H::size() {
-            widths[inx] = widths[inx].max(UnicodeWidthStr::width(row.column(inx)));
+        for (inx, width) in widths.iter_mut().enumerate().take(H::size()) {
+            *width = (*width).max(UnicodeWidthStr::width(row.column(inx)));
         }
     }
 
@@ -55,21 +55,21 @@ where
         }
     }
 
-    for inx in 0..H::size() {
+    for (inx, width) in widths.iter().enumerate().take(H::size()) {
         if inx > 0 {
             print!(" ");
         }
         print!("{}{}{}",
-            Underline, Column(header.column(inx), widths[inx]), Reset);
+            Underline, Column(header.column(inx), *width), Reset);
     }
     println!();
 
     for row in rows.as_ref() {
-        for inx in 0..H::size() {
+        for (inx, width) in widths.iter().enumerate().take(H::size()) {
             if inx > 0 {
                 print!(" ");
             }
-            print!("{}", Column(row.column(inx), widths[inx]));
+            print!("{}", Column(row.column(inx), *width));
         }
         println!();
     }

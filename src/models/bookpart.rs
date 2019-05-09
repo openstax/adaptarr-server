@@ -194,7 +194,7 @@ impl BookPart {
                 .values(&db::NewBookPart {
                     book: self.data.book,
                     title,
-                    module: module.map(|m| m.id()),
+                    module: module.map(Module::id),
                     parent: self.data.id,
                     index,
                 })

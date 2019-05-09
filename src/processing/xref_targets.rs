@@ -183,7 +183,7 @@ fn line_contex_text(e: &Element) -> Option<String> {
                 }
             }
 
-            if let Some((len, _)) = r.char_indices().skip(240).next() {
+            if let Some((len, _)) = r.char_indices().nth(240) {
                 r.truncate(len);
             }
 

@@ -208,7 +208,7 @@ impl<'tag> Iterator for FallbackChain<'tag> {
         let value = self.tag;
 
         if let Some(inx) = self.tag.rfind('-') {
-            if inx > 2 && self.tag[inx - 2..].starts_with("-") {
+            if inx > 2 && self.tag[inx - 2..].starts_with('-') {
                 self.tag = &self.tag[..inx-2];
             } else {
                 self.tag = &self.tag[..inx];
@@ -332,7 +332,7 @@ where
     where
         E: serde::de::Error,
     {
-        v.parse().map_err(|err| E::custom(err))
+        v.parse().map_err(E::custom)
     }
 }
 

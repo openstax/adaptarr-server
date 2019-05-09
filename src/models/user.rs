@@ -51,9 +51,9 @@ bitflags! {
     /// Flags controlling which fields are included in [`User::get_public()`].
     pub struct Fields: u32 {
         /// Include user's permissions ([`PublicData::permissions`]).
-        const PERMISSIONS = 0x00000001;
+        const PERMISSIONS = 0x0000_0001;
         /// Include user's role's permissions.
-        const ROLE_PERMISSIONS = 0x00000002;
+        const ROLE_PERMISSIONS = 0x0000_0002;
     }
 }
 

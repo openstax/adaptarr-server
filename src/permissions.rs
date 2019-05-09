@@ -7,31 +7,31 @@ bitflags! {
     #[derive(Default)]
     pub struct PermissionBits: i32 {
         /// All currently allocated bits.
-        const ALL_BITS = 0x0000ffff;
+        const ALL_BITS = 0x0000_ffff;
         /// All bits allocated for user management permissions.
-        const MANAGE_USERS_BITS = 0x0000f00f;
+        const MANAGE_USERS_BITS = 0x0000_f00f;
         /// Permission holder can invite new users into the platform.
-        const INVITE_USER = 0x00000001;
+        const INVITE_USER = 0x0000_0001;
         /// Permission holder can remove existing users from the platform.
-        const DELETE_USER = 0x00000002;
+        const DELETE_USER = 0x0000_0002;
         /// Permission holder can change other user's permissions.
-        const EDIT_USER_PERMISSIONS = 0x00000004;
+        const EDIT_USER_PERMISSIONS = 0x0000_0004;
         /// Permission holder can change other user's roles.
-        const ASSIGN_ROLE = 0x00000008;
+        const ASSIGN_ROLE = 0x0000_0008;
         /// Permission holder can edit data for other users.
-        const EDIT_USER = 0x00001000;
+        const EDIT_USER = 0x0000_1000;
         /// All bits allocated for content management permissions.
-        const MANAGE_CONTENT_BITS = 0x000000f0;
+        const MANAGE_CONTENT_BITS = 0x0000_00f0;
         /// Permission holder can create, edit, and delete books.
-        const EDIT_BOOK = 0x00000010;
+        const EDIT_BOOK = 0x0000_0010;
         /// Permission holder can create, edit, and delete modules.
-        const EDIT_MODULE = 0x00000020;
+        const EDIT_MODULE = 0x0000_0020;
         /// Permission holder can assign users to modules.
-        const ASSIGN_MODULE = 0x00000040;
+        const ASSIGN_MODULE = 0x0000_0040;
         /// All bits allocated for role management permissions.
-        const MANAGE_ROLES_BITS = 0x00000f00;
+        const MANAGE_ROLES_BITS = 0x0000_0f00;
         /// Create, edit, and delete roles.
-        const EDIT_ROLE = 0x00000100;
+        const EDIT_ROLE = 0x0000_0100;
     }
 }
 
@@ -52,12 +52,12 @@ impl PermissionBits {
     ///
     /// This is the same check as `self.contains(permissions)`, but returns an
     /// [`ApiError`].
-    pub fn require(&self, permissions: PermissionBits)
+    pub fn require(self, permissions: PermissionBits)
     -> Result<(), RequirePermissionsError> {
         if self.contains(permissions) {
             Ok(())
         } else {
-            Err(RequirePermissionsError(permissions - *self))
+            Err(RequirePermissionsError(permissions - self))
         }
     }
 }
@@ -84,9 +84,6 @@ macro_rules! permission {
 }
 
 permission!(InviteUser = PermissionBits::INVITE_USER);
-permission!(DeleteUser = PermissionBits::DELETE_USER);
-permission!(EditUserPermissions = PermissionBits::EDIT_USER_PERMISSIONS);
-permission!(AssignRole = PermissionBits::ASSIGN_ROLE);
 permission!(EditBook = PermissionBits::EDIT_BOOK);
 permission!(EditModule = PermissionBits::EDIT_MODULE);
 permission!(AssignModule = PermissionBits::ASSIGN_MODULE);
