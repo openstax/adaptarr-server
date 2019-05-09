@@ -14,6 +14,7 @@ use crate::db::{
         edit_process_slots,
         edit_process_step_slots,
         edit_process_steps,
+        edit_process_versions,
     },
     types::SlotPermission,
 };
@@ -30,6 +31,8 @@ pub struct Step {
 /// A subset of this step's data that can safely be publicly exposed.
 #[derive(Debug, Serialize)]
 pub struct PublicData {
+    pub id: i32,
+    pub process: [i32; 2],
     pub name: String,
     pub links: Vec<LinkData>,
 }
@@ -170,7 +173,7 @@ impl Step {
     /// be limited to just the data visible by a specific slots.
     pub fn get_public(&self, dbcon: &Connection, slots: Option<(Uuid, i32)>)
     -> Result<PublicData, DbError> {
-        let db::EditProcessStep { ref name, .. } = self.data;
+        let db::EditProcessStep { id, process: version, ref name, .. } = self.data;
 
         let links = self.get_links(dbcon, slots)?
             .into_iter()
@@ -182,7 +185,14 @@ impl Step {
             })
             .collect();
 
+        let process = edit_process_versions::table
+            .filter(edit_process_versions::id.eq(version))
+            .select(edit_process_versions::process)
+            .get_result(dbcon)?;
+
         Ok(PublicData {
+            id,
+            process: [process, version],
             name: name.clone(),
             links,
         })
