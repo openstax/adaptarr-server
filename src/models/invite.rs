@@ -38,7 +38,7 @@ impl Invite {
 
             diesel::insert_into(invites::table)
                 .values(db::NewInvite {
-                    email: email,
+                    email,
                     expires: Utc::now().naive_utc() + Duration::days(7),
                 })
                 .get_result::<db::Invite>(dbcon)
@@ -85,11 +85,11 @@ impl Invite {
         language: &str,
     ) -> Result<User, CreateUserError> {
         User::create(
-            dbconn, 
-            &self.email, 
-            name, 
-            password, 
-            false, 
+            dbconn,
+            &self.email,
+            name,
+            password,
+            false,
             language,
             PermissionBits::normal(),
         )

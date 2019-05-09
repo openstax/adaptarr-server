@@ -101,7 +101,7 @@ pub fn login(
     locale: &'static Locale<'static>,
     query: Query<LoginQuery>,
 ) -> RenderedTemplate {
-    if let Some(_) = session {
+    if session.is_some() {
         return Ok(HttpResponse::SeeOther()
             .header("Location", query.next.as_ref().map_or("/", String::as_str))
             .finish());

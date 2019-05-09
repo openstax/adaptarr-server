@@ -40,7 +40,7 @@ impl Event {
 
     /// Load this event's data.
     pub fn load(&self) -> EventData {
-        rmp_serde::from_slice(&self.data.data).expect("can't unpack event data")
+        rmps::from_slice(&self.data.data).expect("can't unpack event data")
     }
 
     /// Change this event's unread state.

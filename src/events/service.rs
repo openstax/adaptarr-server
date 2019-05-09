@@ -143,7 +143,7 @@ impl Handler<UnregisterListener> for EventManager {
     type Result = ();
 
     fn handle(&mut self, msg: UnregisterListener, _: &mut Self::Context) {
-        let UnregisterListener { user, addr: _ } = msg;
+        let UnregisterListener { user, .. } = msg;
         self.streams.remove(&user);
     }
 }

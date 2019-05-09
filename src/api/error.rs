@@ -91,7 +91,7 @@ impl<R: Responder> Responder for ApiResult<R> {
     type Error = actix_web::error::Error;
 
     fn respond_to<S: 'static>(self, req: &HttpRequest<S>)
-    -> Result<Self::Item, Self::Error> {
+    -> Result<Self::Item, <Self as Responder>::Error> {
         let err = match self {
             ApiResult::Response(r) => return r.respond_to(req)
                 .map(Into::into)

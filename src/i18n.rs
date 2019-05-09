@@ -88,7 +88,7 @@ impl I18n<'static> {
         }
 
         Ok(I18n {
-            resources: resources,
+            resources,
             locales: Box::leak(locales.into_boxed_slice()),
         })
     }

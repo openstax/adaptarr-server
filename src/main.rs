@@ -1,4 +1,4 @@
-extern crate adaptarr_server;
+use adaptarr_server;
 
 fn main() {
     if let Err(err) = adaptarr_server::main() {

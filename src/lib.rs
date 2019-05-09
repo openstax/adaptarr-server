@@ -1,38 +1,6 @@
 // TEMPORARY, see diesel-rs/diesel#1787.
 #![allow(proc_macro_derive_resolution_fallback)]
 
-extern crate actix;
-extern crate actix_web;
-extern crate argon2;
-extern crate base64;
-extern crate blake2_rfc as blake2;
-extern crate bytes;
-extern crate chrono;
-extern crate fluent;
-extern crate fluent_bundle;
-extern crate fluent_syntax;
-extern crate futures;
-extern crate lettre;
-extern crate lettre_email;
-extern crate magic;
-extern crate minidom;
-extern crate r2d2;
-extern crate r2d2_diesel;
-extern crate rand;
-extern crate ring;
-extern crate rmp_serde as rmps;
-extern crate sentry;
-extern crate sentry_actix;
-extern crate serde;
-extern crate serde_json;
-extern crate structopt;
-extern crate tempfile;
-extern crate termion;
-extern crate toml;
-extern crate unicode_width;
-extern crate uuid;
-extern crate zip;
-
 #[macro_use] extern crate api_derive;
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate diesel;

@@ -193,7 +193,7 @@ impl BookPart {
             diesel::insert_into(book_parts::table)
                 .values(&db::NewBookPart {
                     book: self.data.book,
-                    title: title,
+                    title,
                     module: module.map(|m| m.id()),
                     parent: self.data.id,
                     index,
@@ -239,7 +239,7 @@ impl BookPart {
                 .set(&db::NewBookPartLocation {
                     book: new.book,
                     parent: new.id,
-                    index: index,
+                    index,
                 })
                 .get_result::<db::BookPart>(dbconn)?;
 

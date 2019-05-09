@@ -72,7 +72,7 @@ pub fn list_notifications(
                 id: event.id,
                 kind: data.kind(),
                 timestamp: event.timestamp,
-                data: data,
+                data,
             }
         })
         .collect();
