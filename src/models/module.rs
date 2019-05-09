@@ -10,7 +10,16 @@ use crate::{
         Connection,
         functions::duplicate_document,
         models as db,
-        schema::{book_parts, documents, drafts, draft_slots, modules, xref_targets},
+        schema::{
+            book_parts,
+            documents,
+            draft_slots,
+            drafts,
+            edit_process_steps,
+            edit_process_versions,
+            modules,
+            xref_targets,
+        },
     },
     processing::{TargetProcessor, ProcessDocument},
 };
@@ -36,6 +45,14 @@ pub struct PublicData {
     pub id: Uuid,
     #[serde(flatten)]
     pub document: DocumentData,
+    pub process: Option<ProcessStatus>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProcessStatus {
+    pub process: i32,
+    pub version: i32,
+    pub step: i32,
 }
 
 impl Module {
@@ -115,11 +132,27 @@ impl Module {
     }
 
     /// Get the public portion of this module's data.
-    pub fn get_public(&self) -> PublicData {
-        PublicData {
+    pub fn get_public(&self, dbconn: &Connection) -> Result<PublicData, DbError> {
+        let process = drafts::table
+            .inner_join(edit_process_steps::table
+                .inner_join(edit_process_versions::table
+                    .on(edit_process_steps::process.eq(edit_process_versions::id))))
+            .filter(drafts::module.eq(self.data.id))
+            .get_result::<(
+                db::Draft, (db::EditProcessStep, db::EditProcessVersion),
+            )>(dbconn)
+            .optional()?
+            .map(|(_, (step, version))| ProcessStatus {
+                process: version.process,
+                version: version.id,
+                step: step.id,
+            });
+
+        Ok(PublicData {
             id: self.data.id,
             document: self.document.get_public(),
-        }
+            process,
+        })
     }
 
     /// Query list of books containing this module.

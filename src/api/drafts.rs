@@ -144,14 +144,14 @@ pub fn advance_draft(
     let draft = Draft::by_id(&*db, *id, session.user)?;
 
     draft.advance(&*db, session.user_id(), form.slot, form.target)
-        .map(|r| match r {
+        .and_then(|r| Ok(match r {
             DraftAdvanceResult::Advanced(draft) => AdvanceResult::Advanced {
                 draft: draft.get_public_small(),
             },
             DraftAdvanceResult::Finished(module) => AdvanceResult::Finished {
-                module: module.get_public(),
+                module: module.get_public(&*db)?,
             },
-        })
+        }))
         .map(Json)
         .map_err(Into::into)
 }
