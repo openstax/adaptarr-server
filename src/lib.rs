@@ -13,6 +13,7 @@ extern crate fluent;
 extern crate fluent_bundle;
 extern crate fluent_syntax;
 extern crate futures;
+extern crate itertools;
 extern crate lettre;
 extern crate lettre_email;
 extern crate magic;

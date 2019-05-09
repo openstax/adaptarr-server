@@ -7,6 +7,7 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use itertools::Itertools;
 use serde::Serialize;
 use std::{collections::HashMap, time::Duration};
 
@@ -25,7 +26,6 @@ use crate::{
         user::{User, FindUserError},
     },
     templates,
-    utils::IteratorGroupExt,
 };
 use super::events::{Event, ExpandedEvent, ExpandedUser, ExpandedModule, expand_event};
 
@@ -160,10 +160,10 @@ impl EventManager {
                 .order((events::user, events::timestamp.asc()))
                 .get_results::<db::Event>(&*db)?
                 .into_iter()
-                .group_by_key::<Vec<_>, _, _>(|event| event.user);
+                .group_by(|event| event.user);
 
-            for events in events {
-                let user = match User::by_id(dbcon, events[0].user) {
+            for (user, events) in events.into_iter() {
+                let user = match User::by_id(dbcon, user) {
                     Ok(user) => user,
                     Err(FindUserError::Internal(err)) => return Err(err.into()),
                     Err(FindUserError::NotFound) => panic!(
@@ -171,7 +171,7 @@ impl EventManager {
                         an event",
                     ),
                 };
-                self.notify_user_by_email(&user, dbcon, events)?;
+                self.notify_user_by_email(&user, dbcon, events.collect())?;
             }
 
             Ok(())
