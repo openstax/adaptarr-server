@@ -106,6 +106,13 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
                     slot: link.slot,
                 });
             }
+
+            if link.to == stepid {
+                return Err(LoopedLink {
+                    step: stepid,
+                    link: linkid,
+                });
+            }
         }
     }
 
@@ -277,6 +284,14 @@ pub enum ValidateStructureError {
         target: usize,
         /// Total number of steps.
         total: usize,
+    },
+    /// Link description specifies its origin as target.
+    #[fail(display = "Link {} of step {} targets itself", link, step)]
+    LoopedLink {
+        /// Offending step's ID.
+        step: usize,
+        /// Offending link's ID.
+        link: usize,
     },
     /// Link description references a slot with ID greater than total number
     /// of slots.
