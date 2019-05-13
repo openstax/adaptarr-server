@@ -41,7 +41,7 @@ pub struct PublicData {
 #[derive(Debug, Serialize)]
 pub struct LinkData {
     pub name: String,
-    pub target: i32,
+    pub to: i32,
     pub slot: i32,
 }
 
@@ -180,7 +180,7 @@ impl Step {
             .map(Link::into_db)
             .map(|link| LinkData {
                 name: link.name,
-                target: link.to,
+                to: link.to,
                 slot: link.slot,
             })
             .collect();
