@@ -1,5 +1,7 @@
 locale-name = Polski
 
+
+
 ## Login page
 
 login-field-email = Adres e-mail
@@ -15,6 +17,8 @@ login-error = { $code ->
     ["user:authenticate:bad-password"] Nieprawidłowe hasło
    *[other] Wystąpił nieznany błąd: { $code }
 }
+
+
 
 ## Session elevation page
 
@@ -33,9 +37,13 @@ elevate-error = { $code ->
    *[other] Wystąpił nieznany błąd: { $code }
 }
 
+
+
 ## Logout page
 
 logout-message = <p>Został/aś wylogowany/a.</p>
+
+
 
 ## Registration page
 
@@ -56,6 +64,8 @@ register-error = { $code ->
     ["invitation:invalid"] Nieprawidłowy kod zaproszenia
    *[other] Wystąpił nieznany błąd: { $code }
 }
+
+
 
 ## Password reset page
 
@@ -82,11 +92,15 @@ reset-error = { $code ->
    *[other] Wystąpił nieznany błąd { $code }
 }
 
+
+
 ## Mail template
 
 mail-logo-alt = Logo OpenStax Polska™
 
 mail-footer = Otrzymujesz tą wiadomość ponieważ jesteś członkiem Adaptarr!.
+
+
 
 ## Invitation email
 
@@ -116,6 +130,8 @@ mail-invite-after-button =
 
 mail-invite-footer = Otrzymujesz tą wiadomość, ponieważ ktoś zaprosił { $email }
     do dołączenia do Adaptarr!.
+
+
 
 ## Password reset email
 
@@ -149,6 +165,8 @@ mail-reset-after-button =
 
     Jeżeli nie prosiłeś/aś o zresetowania hasła nie masz się czym martwić,
     twoje konto jest bezpieczne.
+
+
 
 ## Notification email
 

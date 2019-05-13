@@ -1,5 +1,7 @@
 locale-name = English
 
+
+
 ## Login page
 
 login-field-email = E-Mail address
@@ -15,6 +17,8 @@ login-error = { $code ->
     ["user:authenticate:bad-password"] Bad password
    *[other] Unknown error occurred: { $code }
 }
+
+
 
 ## Session elevation page
 
@@ -33,9 +37,13 @@ elevate-error = { $code ->
    *[other] Unknown error occurred: { $code }
 }
 
+
+
 ## Logout page
 
 logout-message = <p>You have been logged out.</p>
+
+
 
 ## Registration page
 
@@ -56,6 +64,8 @@ register-error = { $code ->
     ["invitation:invalid"] Invitation code is not valid
    *[other] Unknown error occurred: { $code }
 }
+
+
 
 ## Password reset page
 
@@ -82,12 +92,16 @@ reset-error = { $code ->
    *[other] Unknown error occurred: { $code }
 }
 
+
+
 ## Mail template
 
 mail-logo-alt = OpenStax Polska™ logo
 
 mail-footer =
     You are receiving this email because you are a member of Adaptarr!.
+
+
 
 ## Invitation email
 
@@ -122,6 +136,8 @@ mail-invite-after-button =
 mail-invite-footer = You are receiving this message because someone has invited
     { $email } to join Adaptarr!.
 
+
+
 ## Password reset email
 
 mail-reset-subject = Password reset
@@ -154,6 +170,8 @@ mail-reset-after-button =
 
     If you have not requested a password reset you don't have to
     do anything, your account is still secure.
+
+
 
 ## Notification email
 
