@@ -1,5 +1,5 @@
 [package]
-name = "adaptarr-server"
+name = "adaptarr"
 version = "0.0.0"
 authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
 edition = "2018"
