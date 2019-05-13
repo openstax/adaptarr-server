@@ -41,10 +41,10 @@ pub fn routes(app: App<State>) -> App<State> {
             })
             .resource("/{id}/structure", |r| {
                 r.get().api_with(get_process_structure);
-                r.put().api_with(create_version);
             })
             .resource("/{id}/versions", |r| {
                 r.get().api_with(list_process_versions);
+                r.post().api_with(create_version);
             })
             .resource("/{id}/versions/{version}", |r| {
                 r.get().api_with(get_process_version);
@@ -258,7 +258,7 @@ pub fn list_process_versions(
 /// ## Method
 ///
 /// ```text
-/// PUT /processes/:id/structure
+/// POST /processes/:id/versions
 /// ```
 pub fn create_version(
     state: actix_web::State<State>,
