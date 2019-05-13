@@ -10,7 +10,7 @@ use crate::db::{
     models as db,
     schema::book_parts,
 };
-use super::Module;
+use super::module::{Module, FindModuleError};
 
 /// Part of a book.
 ///
@@ -30,7 +30,7 @@ pub struct PublicData {
     part: Variant<i32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 enum Variant<Part> {
     Module {
@@ -47,6 +47,20 @@ pub struct Tree {
     title: String,
     #[serde(flatten)]
     part: Variant<Tree>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum NewTree {
+    Module {
+        title: Option<String>,
+        module: Uuid,
+    },
+    Group {
+        title: String,
+        #[serde(default)]
+        parts: Vec<NewTree>,
+    },
 }
 
 impl BookPart {
@@ -204,6 +218,57 @@ impl BookPart {
         })
     }
 
+    /// Recursively create a tree of book parts.
+    pub fn create_tree(&self, dbconn: &Connection, index: i32, tree: NewTree)
+    -> Result<Tree, RealizeTemplateError> {
+        if self.data.module.is_some() {
+            return Err(RealizeTemplateError::IsAModule);
+        }
+
+        dbconn.transaction(|| {
+            self.create_part_inner(dbconn, index, tree)
+        })
+    }
+
+    fn create_part_inner(&self, dbconn: &Connection, index: i32, tree: NewTree)
+    -> Result<Tree, RealizeTemplateError> {
+        match tree {
+            NewTree::Module { title, module } => {
+                let module = Module::by_id(dbconn, module)?;
+
+                let part = self.insert_module(
+                    dbconn,
+                    index,
+                    title.as_ref().map_or(module.title.as_str(), String::as_str),
+                    &module,
+                )?;
+
+                Ok(Tree {
+                    number: part.id,
+                    title: title.unwrap_or_else(|| module.title.clone()),
+                    part: Variant::Module {
+                        id: module.id(),
+                    },
+                })
+            }
+            NewTree::Group { title, parts } => {
+                let group = self.create_group(dbconn, index, title.as_str())?;
+
+                Ok(Tree {
+                    number: group.id,
+                    title,
+                    part: Variant::Group {
+                        parts: parts.into_iter()
+                            .enumerate()
+                            .map(|(index, part)| group.create_part_inner(
+                                dbconn, index as i32, part))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    },
+                })
+            }
+        }
+    }
+
     /// Change title of this book part.
     pub fn set_title(&mut self, dbconn: &Connection, title: &str) -> Result<(), DbError> {
         diesel::update(&self.data)
@@ -331,6 +396,31 @@ pub enum CreatePartError {
 
 impl_from! { for CreatePartError ;
     DbError => |e| CreatePartError::Database(e),
+}
+
+#[derive(ApiError, Debug, Fail)]
+pub enum RealizeTemplateError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
+    Database(#[cause] DbError),
+    /// This part is a module, it has no parts of its own.
+    #[fail(display = "Module has no parts")]
+    #[api(code = "bookpart:create-part:is-module", status = "BAD_REQUEST")]
+    IsAModule,
+    #[fail(display = "Module not found: {}", _0)]
+    ModuleNotFound(#[cause] FindModuleError),
+    #[fail(display = "Part could not be created: {}", _0)]
+    CreatePart(#[cause] CreatePartError),
+}
+
+impl_from! { for RealizeTemplateError ;
+    DbError => |e| RealizeTemplateError::Database(e),
+    FindModuleError => |e| RealizeTemplateError::ModuleNotFound(e),
+    CreatePartError => |e| match e {
+        CreatePartError::Database(e) => RealizeTemplateError::Database(e),
+        _ => RealizeTemplateError::CreatePart(e),
+    },
 }
 
 #[derive(ApiError, Debug, Fail)]

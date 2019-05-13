@@ -7,23 +7,20 @@ use actix_web::{
     Path,
     pred,
 };
-use diesel::result::Error as DbError;
 use futures::{Future, Stream, future};
 use std::io::Write;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 use crate::{
-    db,
     models::{
-        module::{Module, FindModuleError},
         book::{Book, PublicData as BookData},
         bookpart::{
             BookPart,
-            CreatePartError,
             PublicData as PartData,
             ReparentPartError,
             Tree,
+            NewTree,
         },
     },
     multipart::Multipart,
@@ -260,32 +257,11 @@ pub fn book_contents(
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
-pub enum NewPart {
-    Module {
-        title: Option<String>,
-        module: Uuid,
-    },
-    Group {
-        title: String,
-        #[serde(default)]
-        parts: Vec<NewPart>,
-    },
-}
-
-#[derive(Debug, Deserialize)]
-pub struct NewPartRoot {
+pub struct NewTreeRoot {
     #[serde(flatten)]
-    part: NewPart,
+    tree: NewTree,
     parent: i32,
     index: i32,
-}
-
-#[derive(Debug, Serialize)]
-pub struct NewPartData {
-    number: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    parts: Option<Vec<NewPartData>>,
 }
 
 /// Create a new part.
@@ -299,78 +275,15 @@ pub fn create_part(
     state: actix_web::State<State>,
     _session: Session<EditBook>,
     book: Path<Uuid>,
-    part: Json<NewPartRoot>,
-) -> Result<Json<NewPartData>> {
+    tree: Json<NewTreeRoot>,
+) -> Result<Json<Tree>> {
     let db = state.db.get()?;
-    let NewPartRoot { part, parent, index } = part.into_inner();
+    let NewTreeRoot { tree, parent, index } = tree.into_inner();
     let parent = BookPart::by_id(&*db, *book, parent)?;
 
-    println!("DATA: {:?}", part);
-
-    use diesel::Connection;
-    let data = db.transaction(|| {
-        create_part_inner(&*db, &parent, index, part)
-    })?;
-
-    Ok(Json(data))
-}
-
-/// Recursively create parts.
-fn create_part_inner(
-    dbconn: &db::Connection,
-    parent: &BookPart,
-    index: i32,
-    template: NewPart,
-) -> std::result::Result<NewPartData, RealizeTemplateError> {
-    match template {
-        NewPart::Module { title, module } => {
-            let module = Module::by_id(dbconn, module)?;
-
-            let part = parent.insert_module(
-                dbconn,
-                index,
-                title.as_ref().map_or(module.title.as_str(), String::as_str),
-                &module,
-            )?;
-
-            Ok(NewPartData {
-                number: part.id,
-                parts: None,
-            })
-        }
-        NewPart::Group { title, parts } => {
-            let group = parent.create_group(dbconn, index, title.as_str())?;
-
-            Ok(NewPartData {
-                number: group.id,
-                parts: parts.into_iter()
-                    .enumerate()
-                    .map(|(index, part)| {
-                        create_part_inner(dbconn, &group, index as i32, part)
-                    })
-                    .collect::<std::result::Result<Vec<_>, _>>()
-                    .map(Some)?,
-            })
-        }
-    }
-}
-
-#[derive(ApiError, Debug, Fail)]
-enum RealizeTemplateError {
-    #[fail(display = "Database error: {}", _0)]
-    #[api(internal)]
-    Database(#[cause] DbError),
-    #[fail(display = "Module not found: {}", _0)]
-    #[api(code = "module:not-found", status = "NOT_FOUND")]
-    ModuleNotFound(#[cause] FindModuleError),
-    #[fail(display = "Part could not be created: {}", _0)]
-    PartCreation(#[cause] CreatePartError),
-}
-
-impl_from! { for RealizeTemplateError ;
-    DbError => |e| RealizeTemplateError::Database(e),
-    FindModuleError => |e| RealizeTemplateError::ModuleNotFound(e),
-    CreatePartError => |e| RealizeTemplateError::PartCreation(e),
+    parent.create_tree(&*db, index, tree)
+        .map(Json)
+        .map_err(Into::into)
 }
 
 /// Inspect a single part of a book.
