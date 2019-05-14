@@ -133,7 +133,16 @@ impl Version {
                 .set(edit_process_versions::start.eq(steps[structure.start].id))
                 .get_result(dbcon)?;
 
-            Ok(Version::from_db(version, Process::from_db(process)))
+            let process = if structure.name != process.name {
+                diesel::update(&process)
+                    .set(edit_processes::name.eq(&structure.name))
+                    .get_result(dbcon)
+                    .map(Process::from_db)?
+            } else {
+                Process::from_db(process)
+            };
+
+            Ok(Version::from_db(version, process))
         })
     }
 
