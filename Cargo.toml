@@ -5,7 +5,7 @@ authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
 edition = "2018"
 
 [workspace]
-members = [".", "api-derive"]
+members = [".", "macros"]
 
 [profile.dev]
 lto = false
@@ -16,7 +16,7 @@ lto = false
 [dependencies]
 actix = "0.7.9"
 actix-web = "0.7.14"
-api-derive = { path = "./api-derive" }
+adaptarr-macros = { path = "./macros" }
 base64 = "0.10.0"
 bitflags = "1.0.4"
 blake2 = { version = "0.2.18", package = "blake2-rfc" }

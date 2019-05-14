@@ -1,7 +1,7 @@
 // TEMPORARY, see diesel-rs/diesel#1787.
 #![allow(proc_macro_derive_resolution_fallback)]
 
-#[macro_use] extern crate api_derive;
+#[macro_use] extern crate adaptarr_macros;
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate diesel;
 #[macro_use] extern crate failure;
