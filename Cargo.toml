@@ -7,6 +7,12 @@ edition = "2018"
 [workspace]
 members = [".", "api-derive"]
 
+[profile.dev]
+lto = false
+
+[profile.test]
+lto = false
+
 [dependencies]
 actix = "0.7.9"
 actix-web = "0.7.14"
