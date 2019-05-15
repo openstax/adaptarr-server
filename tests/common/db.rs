@@ -4,7 +4,7 @@ use adaptarr::impl_from;
 use diesel::{
     RunQueryDsl,
     backend::Backend,
-    connection::SimpleConnection,
+    connection::{Connection as _, SimpleConnection},
     pg::PgConnection,
     query_builder::*,
     result::QueryResult,
@@ -19,7 +19,7 @@ use failure::{Error, Fail};
 use r2d2_diesel::ConnectionManager;
 use std::sync::Mutex;
 
-pub type Pool = r2d2::Pool<ConnectionManager<PgConnection>>;
+pub use adaptarr::db::{Connection, Pool};
 
 pub struct Database {
     lock: Mutex<()>,
