@@ -62,7 +62,7 @@ pub fn app(state: State) -> App<State> {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum LoginAction {
+pub enum LoginAction {
     /// Redirect to the URl specified in `next`.
     Next,
     /// Use `window.postMessage()` to notify opener.

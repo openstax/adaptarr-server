@@ -15,6 +15,7 @@
 #[macro_use]
 extern crate diesel_migrations;
 
+pub use adaptarr_macros::*;
 pub use self::cli::main;
 
 pub(crate) use self::config::Config;
@@ -22,18 +23,18 @@ pub(crate) use self::config::Config;
 #[macro_use] mod macros;
 #[macro_use] mod multipart;
 
-mod api;
-mod cli;
-mod config;
-mod db;
-mod events;
-mod i18n;
-mod import;
-mod mail;
-mod models;
-mod permissions;
-mod processing;
-mod templates;
-mod utils;
+pub mod api;
+pub mod cli;
+pub mod config;
+pub mod db;
+pub mod events;
+pub mod i18n;
+pub mod import;
+pub mod mail;
+pub mod models;
+pub mod permissions;
+pub mod processing;
+pub mod templates;
+pub mod utils;
 
 pub type Result<T, E=failure::Error> = std::result::Result<T, E>;

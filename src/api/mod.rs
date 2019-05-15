@@ -21,17 +21,17 @@ pub use self::error::{ApiError, Error};
 
 pub(self) use self::error::{RouteExt, RouterExt};
 
-mod books;
-mod conversations;
-mod drafts;
-mod error;
-mod events;
-mod modules;
-mod pages;
-mod roles;
-mod session;
-mod users;
-mod util;
+pub mod books;
+pub mod conversations;
+pub mod drafts;
+pub mod error;
+pub mod events;
+pub mod modules;
+pub mod pages;
+pub mod roles;
+pub mod session;
+pub mod users;
+pub mod util;
 
 /// Start an API server.
 pub fn start(cfg: Config) -> Result<()> {
