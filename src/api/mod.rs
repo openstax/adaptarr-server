@@ -35,25 +35,10 @@ pub mod util;
 
 /// Start an API server.
 pub fn start(cfg: Config) -> Result<()> {
-    let i18n = I18n::load()?;
     let system = System::new("adaptarr");
-
-    let db = db::pool(&cfg)?;
-    let xref_processor = TargetProcessor::start(db.clone());
-
-    let state = State {
-        config: cfg.clone(),
-        db: db.clone(),
-        mailer: Mailer::from_config(cfg.mail.clone())?,
-        events: event_manager::start(db.clone()),
-        i18n,
-        importer: Importer::start(
-            db.clone(), cfg.storage.clone(), xref_processor.clone()),
-        xref_processor,
-    };
-
+    let state = configure(cfg.clone())?;
     let server = server::new(move || vec![
-        api_app(state.clone()),
+        new_app(state.clone()),
         pages::app(state.clone()),
     ]);
 
@@ -90,7 +75,24 @@ pub struct State {
     pub xref_processor: Addr<TargetProcessor>,
 }
 
-fn api_app(state: State) -> App<State> {
+pub fn configure(cfg: Config) -> Result<State> {
+    let i18n = I18n::load()?;
+    let db = db::pool(&cfg)?;
+    let xref_processor = TargetProcessor::start(db.clone());
+
+    Ok(State {
+        config: cfg.clone(),
+        db: db.clone(),
+        mailer: Mailer::from_config(cfg.mail.clone())?,
+        events: event_manager::start(db.clone()),
+        i18n,
+        importer: Importer::start(
+            db.clone(), cfg.storage.clone(), xref_processor.clone()),
+        xref_processor,
+    })
+}
+
+pub fn new_app(state: State) -> App<State> {
     let sessions = session::SessionManager::new(
         state.config.server.secret.clone(),
         state.db.clone(),
