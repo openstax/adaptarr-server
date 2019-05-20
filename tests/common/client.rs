@@ -60,6 +60,8 @@ pub struct Client {
     importer: Mocker<Importer>,
     xref_processor: Mocker<TargetProcessor>,
     server: TestServer,
+    /// Current session.
+    session: Option<Cookie<'static>>,
 }
 
 impl Client {
@@ -89,12 +91,24 @@ impl Client {
             importer,
             xref_processor,
             server,
+            session: None,
         }
+    }
+
+    /// Set a session cookie to be used in all requests.
+    ///
+    /// Passing `None` will remove the cookie.
+    pub fn set_session(&mut self, session: Option<Cookie<'static>>) {
+        self.session = session;
     }
 
     /// Prepare a request.
     pub fn request(&mut self, method: Method, path: &str) -> Request {
-        let request = self.server.client(method, path);
+        let mut request = self.server.client(method, path);
+
+        if let Some(ref cookie) = self.session {
+            request.cookie(cookie.clone());
+        }
 
         Request {
             client: self,
