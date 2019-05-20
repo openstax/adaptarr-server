@@ -39,6 +39,13 @@ pub fn create_database(_: TokenStream, item: ItemFn) -> Result<TokenStream> {
 #[derive(Debug)]
 pub struct TestOptions {
     database: Option<Path>,
+    configs: Vec<Configurator>,
+}
+
+#[derive(Debug)]
+struct Configurator {
+    name: Ident,
+    options: Vec<(Ident, Expr)>,
 }
 
 /// Build a test case.
@@ -50,6 +57,7 @@ pub fn create_test(mut opts: TestOptions, mut item: ItemFn) -> Result<TokenStrea
     let vis = item.vis.clone();
     let name = item.ident.clone();
     let database = test_database(&mut opts)?;
+    let configs = configure_tests(&opts.configs);
 
     make_bounds(&mut item.decl);
 
@@ -58,7 +66,7 @@ pub fn create_test(mut opts: TestOptions, mut item: ItemFn) -> Result<TokenStrea
         #vis fn #name() {
             #item
 
-            crate::common::run_test(&#database, #name);
+            crate::common::run_test(&#database, #configs, #name);
         }
     })
 }
@@ -142,6 +150,24 @@ fn make_bounds(decl: &mut FnDecl) {
     }
 }
 
+/// Generate code for invoking test configurators.
+fn configure_tests(configs: &[Configurator]) -> TokenStream {
+    let configs = configs.iter()
+        .map(|config| {
+            let name = &config.name;
+            let name = Ident::new(&format!("configure_{}", name), name.span());
+            let options = config.options.iter()
+                .map(|(name, value)| quote_spanned!(name.span()=> .#name(#value)));
+
+            quote_spanned! {name.span()=>
+                common::#name()
+                    #(#options)*
+            }
+        });
+
+    quote!((#(#configs,)*))
+}
+
 mod kw {
     syn::custom_keyword!(database);
 }
@@ -149,13 +175,14 @@ mod kw {
 impl Parse for TestOptions {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut database = None;
+        let mut configs = Vec::new();
 
         while !input.is_empty() {
             if input.parse::<kw::database>().is_ok() {
                 input.parse::<Token![=]>()?;
                 database = Some(input.parse()?);
             } else {
-                return Err(input.error("Unexpected token"));
+                configs.push(input.parse()?);
             }
 
             input.parse::<Option<Token![,]>>()?;
@@ -163,6 +190,32 @@ impl Parse for TestOptions {
 
         Ok(TestOptions {
             database,
+            configs,
+        })
+    }
+}
+
+impl Parse for Configurator {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let name = input.parse()?;
+        let content;
+        syn::parenthesized!(content in input);
+
+        let mut options = Vec::new();
+
+        while !content.is_empty() {
+            let option = content.parse()?;
+            content.parse::<Token![=]>()?;
+            let value = content.parse()?;
+
+            options.push((option, value));
+
+            content.parse::<Option<Token![,]>>()?;
+        }
+
+        Ok(Configurator {
+            name,
+            options,
         })
     }
 }

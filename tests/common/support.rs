@@ -4,6 +4,7 @@
 //! macros.
 
 use failure::Error;
+use std::{any::{Any, TypeId}, collections::HashMap};
 
 use super::db::{Database, Pool, Pooled};
 
@@ -35,6 +36,45 @@ impl TestResult for () {
 pub struct TestOptions<'a> {
     /// Pool of connections to a test database.
     pub pool: &'a Pool,
+    /// Extra data with unknown type.
+    extra: HashMap<TypeId, Box<dyn Any>>,
+}
+
+impl<'a> TestOptions<'a> {
+    fn new(pool: &'a Pool) -> Self {
+        TestOptions {
+            pool,
+            extra: HashMap::new(),
+        }
+    }
+
+    /// Put an extra configuration option of any type.
+    ///
+    /// This option will later be retrievable using [`get`], provided the caller
+    /// knows its type.
+    pub fn put<E>(&mut self, extra: E)
+    where
+        E: 'static,
+    {
+        self.extra.insert(extra.type_id(), Box::new(extra));
+    }
+
+    /// Get an extra configuration option.
+    ///
+    /// This option must have been registered earlier using [`put`].
+    pub fn get<E>(&self) -> Option<&E>
+    where
+        E: 'static,
+    {
+        self.extra.get(&TypeId::of::<E>())
+            .map(Box::as_ref)
+            .and_then(Any::downcast_ref)
+    }
+}
+
+/// Common trait for types which can be used to configure a test.
+pub trait ConfigureTest {
+    fn configure(self, opts: &mut TestOptions) -> Result<(), Error>;
 }
 
 /// Common trait implemented by test fixtures.
@@ -54,22 +94,29 @@ pub trait Test<Args: Fixture> {
 }
 
 /// Run a test case.
-pub fn run_test<A, T>(db: &Database, test: T)
+pub fn run_test<C, A, T>(db: &Database, configure: C, test: T)
 where
+    C: ConfigureTest,
     A: Fixture,
     T: Test<A>,
 {
     let _ = env_logger::builder().is_test(true).try_init();
 
     match db.lock(|pool| {
-        let fixtures = A::make(&TestOptions {
-            pool: &pool,
-        })?;
+        let mut options = TestOptions::new(&pool);
+        ConfigureTest::configure(configure, &mut options)?;
+        let fixtures = A::make(&options)?;
 
         test.run(fixtures).into_result()
     }) {
         Ok(_) => (),
         Err(err) => panic!("{}", err),
+    }
+}
+
+impl ConfigureTest for () {
+    fn configure(self, _: &mut TestOptions) -> Result<(), Error> {
+        Ok(())
     }
 }
 
@@ -108,6 +155,18 @@ macro_rules! impl_test {
         $( $($id:ident),+ );+ $(;)?
     } => {
         $(
+            impl<$($id),+> ConfigureTest for ($($id,)+)
+            where
+                $($id: ConfigureTest,)+
+            {
+                fn configure(self, opts: &mut TestOptions) -> Result<(), Error> {
+                    #[allow(non_snake_case)]
+                    let ($($id,)+) = self;
+                    $(<$id as ConfigureTest>::configure($id, opts)?;)+
+                    Ok(())
+                }
+            }
+
             impl<$($id),+> Fixture for ($($id,)+)
             where
                 $($id: Fixture,)+
