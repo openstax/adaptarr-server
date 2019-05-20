@@ -16,10 +16,13 @@ use diesel_migrations::{
     run_pending_migrations_in_directory,
 };
 use failure::{Error, Fail};
+use r2d2::PooledConnection;
 use r2d2_diesel::ConnectionManager;
 use std::sync::Mutex;
 
 pub use adaptarr::db::{Connection, Pool};
+
+pub type Pooled = PooledConnection<ConnectionManager<Connection>>;
 
 pub struct Database {
     lock: Mutex<()>,

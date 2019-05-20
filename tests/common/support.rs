@@ -5,7 +5,7 @@
 
 use failure::Error;
 
-use super::db::{Connection, Database, Pool};
+use super::db::{Database, Pool, Pooled};
 
 /// Only types implementing this trait can be returned from test functions.
 pub trait TestResult {
@@ -82,6 +82,12 @@ impl Fixture for () {
 impl Fixture for Pool {
     fn make(opts: &TestOptions) -> Result<Self, Error> {
         Ok(opts.pool.clone())
+    }
+}
+
+impl Fixture for Pooled {
+    fn make(opts: &TestOptions) -> Result<Self, Error> {
+        opts.pool.get().map_err(From::from)
     }
 }
 

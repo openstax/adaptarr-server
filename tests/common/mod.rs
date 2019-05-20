@@ -5,6 +5,6 @@ mod support;
 
 pub use self::{
     client::{CONFIG, Client},
-    db::{Connection, Database, Pool, setup_db},
+    db::{Connection, Database, Pool, Pooled, setup_db},
     support::{Fixture, TestResult, run_test},
 };
