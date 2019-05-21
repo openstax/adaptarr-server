@@ -56,6 +56,7 @@ struct Configurator {
 pub fn create_test(mut opts: TestOptions, mut item: ItemFn) -> Result<TokenStream> {
     let vis = item.vis.clone();
     let name = item.ident.clone();
+    let attrs = item.attrs.split_off(0);
     let database = test_database(&mut opts)?;
     let configs = configure_tests(&opts.configs);
 
@@ -63,6 +64,7 @@ pub fn create_test(mut opts: TestOptions, mut item: ItemFn) -> Result<TokenStrea
 
     Ok(quote_spanned! {item.span()=>
         #[test]
+        #(#attrs)*
         #vis fn #name() {
             #item
 
