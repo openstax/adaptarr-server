@@ -3,11 +3,15 @@
 use actix_web::http::Cookie;
 use adaptarr::{
     db::{models::{Session as DbSession, NewSession}, schema::sessions},
+    models::User,
     permissions::PermissionBits,
 };
 use chrono::{Duration, NaiveDateTime, Utc};
 use diesel::{PgConnection, prelude::*, result::Error as DbError};
+use failure::Error;
 use std::cell::RefCell;
+
+use super::support::{ConfigureTest, Fixture, TestOptions};
 
 /// Find an existing session by its ID.
 pub fn find(dbcon: &PgConnection, id: i32) -> Result<Session, DbError> {
@@ -122,5 +126,118 @@ impl<'db> Builder<'db> {
             })
             .get_result(db)
             .map(Session::new)
+    }
+}
+
+impl Fixture for Session {
+    fn make(opts: &TestOptions) -> Result<Self, Error> {
+        opts.get()
+            .map(Clone::clone)
+            .ok_or_else(|| failure::format_err!(
+                "No session configured, add #[adaptarr::test(session(options))] \
+                to test"))
+    }
+}
+
+/// Configure a session for test client.
+///
+/// ```
+/// #[adaptarr::test(
+///     session(
+///         r#for = "email",
+///         expires = expression,
+///         last_used = expression,
+///         is_elevated = boolean,
+///         permissions = expression,
+///     ),
+/// )]
+/// ```
+///
+/// all options except `r#for` are optional.
+pub fn configure_session() -> SessionOptions {
+    SessionOptions::default()
+}
+
+#[derive(Default)]
+pub struct SessionOptions {
+    email: Option<String>,
+    expires: Option<NaiveDateTime>,
+    last_used: Option<NaiveDateTime>,
+    is_elevated: Option<bool>,
+    permissions: Option<PermissionBits>,
+}
+
+impl SessionOptions {
+    pub fn r#for<S>(mut self, email: S) -> Self
+    where
+        String: From<S>,
+    {
+        self.email = Some(email.into());
+        self
+    }
+
+    pub fn expires<E>(mut self, when: E) -> Self
+    where
+        NaiveDateTime: From<E>,
+    {
+        self.expires = Some(when.into());
+        self
+    }
+
+    pub fn last_used<E>(mut self, when: E) -> Self
+    where
+        NaiveDateTime: From<E>,
+    {
+        self.last_used = Some(when.into());
+        self
+    }
+
+    pub fn elevated(mut self, elevated: bool) -> Self {
+        self.is_elevated = Some(elevated);
+        self
+    }
+
+    pub fn permissions<E>(mut self, bits: E) -> Self
+    where
+        PermissionBits: From<E>,
+    {
+        self.permissions = Some(bits.into());
+        self
+    }
+}
+
+impl ConfigureTest for SessionOptions {
+    fn configure(self, opts: &mut TestOptions) -> Result<(), Error> {
+        let email = self.email
+            .ok_or_else(|| failure::format_err!(
+                r#"No user for session, add #[adaptarr::test(session(r#for = \
+                "email"))]"#))?;
+
+        let db = opts.pool.get()?;
+        let user = User::by_email(&*db, &email)?;
+
+        let mut session = Builder::new(&*db, user.id);
+
+        if let Some(expires) = self.expires {
+            session = session.expires(expires);
+        }
+
+        if let Some(last_used) = self.last_used {
+            session = session.last_used(last_used);
+        }
+
+        if let Some(is_elevated) = self.is_elevated {
+            session = session
+                .elevated(is_elevated)
+                .permissions(user.permissions(true));
+        }
+
+        if let Some(permissions) = self.permissions {
+            session = session.permissions(permissions);
+        }
+
+        opts.put(session.build()?);
+
+        Ok(())
     }
 }

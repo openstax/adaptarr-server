@@ -7,6 +7,6 @@ mod support;
 pub use self::{
     client::{CONFIG, Client},
     db::{Connection, Database, Pool, Pooled, setup_db},
-    session::{Session, find as find_session},
+    session::{Session, configure_session, find as find_session},
     support::{ConfigureTest, Fixture, TestResult, run_test},
 };

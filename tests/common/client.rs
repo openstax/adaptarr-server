@@ -29,7 +29,12 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{fmt::Display, net::Ipv4Addr};
 
-use super::{db::Pool, mock::Mocker, support::{Fixture, TestOptions}};
+use super::{
+    db::Pool,
+    mock::Mocker,
+    session::Session,
+    support::{Fixture, TestOptions},
+};
 
 lazy_static! {
     pub static ref CONFIG: Config = Config {
@@ -148,7 +153,13 @@ impl Client {
 
 impl Fixture for Client {
     fn make(opts: &TestOptions) -> Result<Client, Error> {
-        Ok(Client::new(opts.pool.clone()))
+        let mut client = Client::new(opts.pool.clone());
+
+        if let Some(session) = opts.get::<Session>() {
+            client.set_session(Some(session.cookie()));
+        }
+
+        Ok(client)
     }
 }
 
