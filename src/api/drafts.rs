@@ -16,7 +16,7 @@ use crate::{
     models::{
         File,
         user::{User, Fields, PublicData as UserData},
-        editing::{VersionData, SlotData},
+        editing::{Slot, VersionData, SlotData},
         draft::{Draft, PublicData as DraftData, AdvanceResult as DraftAdvanceResult},
         module::PublicData as ModuleData,
     },
@@ -52,6 +52,7 @@ pub fn routes(app: App<State>) -> App<State> {
         })
         .api_route("/drafts/{id}/books", Method::GET, list_containing_books)
         .api_route("/drafts/{id}/process", Method::GET, get_process_details)
+        .api_route("/drafts/{id}/process/slots/{slot}", Method::PUT, assign_slot)
 }
 
 type Result<T, E=Error> = std::result::Result<T, E>;
@@ -380,6 +381,30 @@ pub fn get_process_details(
         process: process.get_public(),
         slots,
     }))
+}
+
+/// Assign a specific user to a slot.
+///
+/// ## Method
+///
+/// ```text
+/// PUT /drafts/:id/process/slots/:slot
+/// ```
+pub fn assign_slot(
+    state: actix_web::State<State>,
+    session: Session<ManageProcess>,
+    path: Path<(Uuid, i32)>,
+    user: Json<i32>,
+) -> Result<HttpResponse> {
+    let (draft, slot) = path.into_inner();
+    let db = state.db.get()?;
+    let draft = Draft::by_id(&*db, draft, session.user)?;
+    let slot = Slot::by_id(&*db, slot)?;
+    let user = User::by_id(&*db, *user)?;
+
+    slot.fill_with(&*db, draft.module_id(), &user)?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[derive(ApiError, Debug, Fail)]
