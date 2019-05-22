@@ -18,7 +18,7 @@ use crate::db::{
     },
     types::SlotPermission,
 };
-use super::{Link, Slot};
+use super::{Link, Slot, version::{Version, FindVersionError}};
 
 /// A single step in an editing process.
 ///
@@ -66,6 +66,21 @@ impl Step {
             .filter(edit_process_links::from.eq(self.data.id))
             .get_result::<i64>(dbcon)
             .map(|c| c == 0)
+    }
+
+    /// Get the process this step is a part of.
+    pub fn get_process(&self, dbcon: &Connection) -> Result<Version, DbError> {
+        let process = edit_process_versions::table
+            .filter(edit_process_versions::id.eq(self.data.process))
+            .select(edit_process_versions::process)
+            .get_result(dbcon)?;
+
+        match Version::by_id(dbcon, process, self.data.process) {
+            Ok(v) => Ok(v),
+            Err(FindVersionError::Database(err)) => Err(err),
+            Err(FindVersionError::NotFound) =>
+                panic!("Inconsistent database: no version for step"),
+        }
     }
 
     /// Get list of slots and permissions they have during this step.

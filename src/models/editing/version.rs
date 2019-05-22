@@ -161,6 +161,14 @@ impl Version {
         }
     }
 
+    /// Get list of all slots in this process.
+    pub fn get_slots(&self, dbcon: &Connection) -> Result<Vec<Slot>, DbError> {
+        edit_process_slots::table
+            .filter(edit_process_slots::process.eq(self.data.id))
+            .get_results(dbcon)
+            .map(|v| v.into_iter().map(Slot::from_db).collect())
+    }
+
     /// Find a slot in this process.
     pub fn get_slot(&self, dbcon: &Connection, id: i32)
     -> Result<Slot, FindSlotError> {

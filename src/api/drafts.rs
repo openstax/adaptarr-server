@@ -15,9 +15,12 @@ use crate::{
     db::types::SlotPermission,
     models::{
         File,
+        user::{User, Fields, PublicData as UserData},
+        editing::{VersionData, SlotData},
         draft::{Draft, PublicData as DraftData, AdvanceResult as DraftAdvanceResult},
         module::PublicData as ModuleData,
     },
+    permissions::ManageProcess,
 };
 use super::{
     Error,
@@ -48,6 +51,7 @@ pub fn routes(app: App<State>) -> App<State> {
             r.delete().api_with(delete_file);
         })
         .api_route("/drafts/{id}/books", Method::GET, list_containing_books)
+        .api_route("/drafts/{id}/process", Method::GET, get_process_details)
 }
 
 type Result<T, E=Error> = std::result::Result<T, E>;
@@ -331,6 +335,51 @@ pub fn list_containing_books(
     draft.get_books(&*db)
         .map(Json)
         .map_err(Into::into)
+}
+
+#[derive(Serialize)]
+pub struct SlotSeating {
+    #[serde(flatten)]
+    slot: SlotData,
+    user: Option<UserData>,
+}
+
+#[derive(Serialize)]
+pub struct ProcessDetails {
+    #[serde(flatten)]
+    process: VersionData,
+    slots: Vec<SlotSeating>,
+}
+
+/// Get details of the process this draft follows.
+///
+/// ## Method
+///
+/// ```text
+/// GET /drafts/:id/process
+/// ```
+pub fn get_process_details(
+    state: actix_web::State<State>,
+    session: Session<ManageProcess>,
+    id: Path<Uuid>,
+) -> Result<Json<ProcessDetails>> {
+    let db = state.db.get()?;
+    let draft = Draft::by_id(&*db, *id, session.user)?;
+    let process = draft.get_process(&*db)?;
+
+    let slots = process.get_slots(&*db)?
+        .into_iter()
+        .map(|slot| Ok(SlotSeating {
+            slot: slot.get_public(),
+            user: slot.get_occupant(&*db, draft.module_id())?
+                .map(|user| user.get_public(Fields::empty())),
+        }))
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Json(ProcessDetails {
+        process: process.get_public(),
+        slots,
+    }))
 }
 
 #[derive(ApiError, Debug, Fail)]

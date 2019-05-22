@@ -123,7 +123,7 @@ pub mod version;
 pub use self::{
     link::Link,
     process::{Process, PublicData as ProcessData},
-    slot::Slot,
+    slot::{Slot, PublicData as SlotData},
     step::{Step, PublicData as StepData},
     version::{Version, PublicData as VersionData},
 };

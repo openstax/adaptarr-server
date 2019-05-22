@@ -19,7 +19,7 @@ use crate::{
         },
         functions::count_distinct,
     },
-    models::{Document, Draft},
+    models::{Document, Draft, user::{User, FindUserError}},
 };
 
 /// Abstract representation of roles a user can take during an editing process.
@@ -107,6 +107,22 @@ impl Slot {
             id,
             name: name.clone(),
         }
+    }
+
+    /// Get current occupant of this slot in a draft.
+    pub fn get_occupant(&self, dbcon: &Connection, draft: Uuid)
+    -> Result<Option<User>, DbError> {
+        draft_slots::table
+            .filter(draft_slots::draft.eq(draft)
+                .and(draft_slots::slot.eq(self.data.id)))
+            .get_result::<db::DraftSlot>(dbcon)
+            .optional()?
+            .map(|slot| match User::by_id(dbcon, slot.user) {
+                Ok(user) => Ok(user),
+                Err(FindUserError::Internal(err)) => Err(err),
+                Err(_) => panic!("Database inconsistency: no user for draft slot"),
+            })
+            .transpose()
     }
 
     /// Fill this slot with an auto-selected user for a particular draft.

@@ -28,7 +28,7 @@ use super::{
     File,
     Module,
     document::{Document, PublicData as DocumentData},
-    editing::{Step, StepData, slot::FillSlotError},
+    editing::{Step, StepData, Version, slot::FillSlotError},
 };
 
 #[derive(Debug)]
@@ -101,6 +101,11 @@ impl Draft {
         })
     }
 
+    /// Get ID of the module this draft was created from.
+    pub fn module_id(&self) -> Uuid {
+        self.data.module
+    }
+
     /// Get list of permissions a user has to a draft.
     pub fn get_permissions(&self, dbconn: &Connection, user: i32)
     -> Result<Vec<SlotPermission>, DbError> {
@@ -112,6 +117,11 @@ impl Draft {
                 .and(edit_process_step_slots::step.eq(self.data.step)))
             .select(edit_process_step_slots::permission)
             .get_results(dbconn)
+    }
+
+    /// Get details about the editing process this draft follows.
+    pub fn get_process(&self, dbconn: &Connection) -> Result<Version, DbError> {
+        self.get_step(dbconn)?.get_process(dbconn)
     }
 
     /// Get details about current editing step.
