@@ -239,7 +239,7 @@ pub fn update_module(
     update: Json<ModuleUpdate>,
 ) -> Result<HttpResponse> {
     let db = state.db.get()?;
-    let module = Module::by_id(&*db, id.into_inner())?;
+    let mut module = Module::by_id(&*db, id.into_inner())?;
 
     use diesel::Connection;
     let dbconn = &*db;

@@ -229,11 +229,11 @@ impl Module {
     }
 
     /// Change user assigned to this module.
-    pub fn set_assignee(&self, dbconn: &Connection, user: Option<i32>)
+    pub fn set_assignee(&mut self, dbconn: &Connection, user: Option<i32>)
     -> Result<(), DbError> {
-        diesel::update(&self.data)
+        self.data = diesel::update(&self.data)
             .set(modules::assignee.eq(user))
-            .execute(dbconn)?;
+            .get_result(dbconn)?;
         Ok(())
     }
 }
