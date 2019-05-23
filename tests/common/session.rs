@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use super::support::{ConfigureTest, Fixture, TestOptions};
 
 /// Find an existing session by its ID.
+#[allow(dead_code)]
 pub fn find(dbcon: &PgConnection, id: i32) -> Result<Session, DbError> {
     sessions::table
         .filter(sessions::id.eq(id))
@@ -44,6 +45,7 @@ impl Session {
     }
 
     /// Reload this session's data.
+    #[allow(dead_code)]
     pub fn reload(&mut self, dbcon: &PgConnection) -> Result<(), DbError> {
         self.data = sessions::table
             .filter(sessions::id.eq(self.data.id))
@@ -52,6 +54,7 @@ impl Session {
     }
 
     /// Get set of permissions this session has.
+    #[allow(dead_code)]
     pub fn permissions(&self) -> PermissionBits {
         PermissionBits::from_bits_truncate(self.data.permissions)
     }
@@ -176,6 +179,7 @@ impl SessionOptions {
         self
     }
 
+    #[allow(dead_code)]
     pub fn expires<E>(mut self, when: E) -> Self
     where
         NaiveDateTime: From<E>,
@@ -184,6 +188,7 @@ impl SessionOptions {
         self
     }
 
+    #[allow(dead_code)]
     pub fn last_used<E>(mut self, when: E) -> Self
     where
         NaiveDateTime: From<E>,
@@ -197,6 +202,7 @@ impl SessionOptions {
         self
     }
 
+    #[allow(dead_code)]
     pub fn permissions<E>(mut self, bits: E) -> Self
     where
         PermissionBits: From<E>,

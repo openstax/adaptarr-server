@@ -3,11 +3,8 @@
 use adaptarr::{
     api::{State, new_app, pages},
     config::{self, Config},
-    events::EventManager,
     i18n::I18n,
-    import::Importer,
     mail::Mailer,
-    processing::TargetProcessor,
 };
 use actix_web::{
     Body,
@@ -16,7 +13,6 @@ use actix_web::{
     error::JsonPayloadError,
     http::{
         Cookie,
-        HttpTryFrom,
         Method,
         StatusCode,
         header::{AsHeaderName, HeaderValue},
@@ -61,9 +57,6 @@ lazy_static! {
 }
 
 pub struct Client {
-    events: Mocker<EventManager>,
-    importer: Mocker<Importer>,
-    xref_processor: Mocker<TargetProcessor>,
     server: TestServer,
     /// Current session.
     session: Option<Cookie<'static>>,
@@ -72,18 +65,14 @@ pub struct Client {
 impl Client {
     /// Build a new test client driver.
     pub fn new(db: Pool) -> Client {
-        let events = Mocker::new();
-        let importer = Mocker::new();
-        let xref_processor = Mocker::new();
-
         let state = State {
             config: CONFIG.clone(),
             db,
             mailer: Mailer::from_config(CONFIG.mail.clone()).unwrap(),
-            events: events.addr(),
+            events: Mocker::new().addr(),
             i18n: I18n::load().unwrap(),
-            importer: importer.addr(),
-            xref_processor: xref_processor.addr(),
+            importer: Mocker::new().addr(),
+            xref_processor: Mocker::new().addr(),
         };
 
         let server = TestServer::with_factory(move || vec![
@@ -92,9 +81,6 @@ impl Client {
         ]);
 
         Client {
-            events,
-            importer,
-            xref_processor,
             server,
             session: None,
         }
@@ -132,11 +118,13 @@ impl Client {
     }
 
     /// Prepare a PUT request.
+    #[allow(dead_code)]
     pub fn put(&mut self, path: &str) -> Request {
         self.request(Method::PUT, path)
     }
 
     /// Prepare a DELETE request.
+    #[allow(dead_code)]
     pub fn delete(&mut self, path: &str) -> Request {
         self.request(Method::DELETE, path)
     }
@@ -171,6 +159,7 @@ pub struct Request<'client> {
 
 impl<'client> Request<'client> {
     /// Add a cookie.
+    #[allow(dead_code)]
     pub fn cookie(mut self, cookie: Cookie) -> Self {
         self.request.cookie(cookie);
         self
@@ -180,6 +169,7 @@ impl<'client> Request<'client> {
     /// response, and blocking while waiting.
     ///
     /// This function will panic on errors.
+    #[allow(dead_code)]
     pub fn body<B>(self, body: B) -> Response<'client>
     where
         Body: From<B>,
@@ -192,6 +182,7 @@ impl<'client> Request<'client> {
     /// response, and blocking while waiting.
     ///
     /// This function will panic on errors.
+    #[allow(dead_code)]
     pub fn form<T>(self, form: T) -> Response<'client>
     where
         T: Serialize,
@@ -204,6 +195,7 @@ impl<'client> Request<'client> {
     /// blocking while waiting.
     ///
     /// This function will panic on errors.
+    #[allow(dead_code)]
     pub fn json<T>(self, json: T) -> Response<'client>
     where
         T: Serialize,
@@ -228,6 +220,7 @@ pub struct Response<'client> {
 
 impl<'client> Response<'client> {
     /// Assert that this response uses specified code.
+    #[allow(dead_code)]
     pub fn assert_status(self, code: StatusCode) -> Self {
         let status = self.response.status();
         assert_eq!(status, code, "Bad status code");
@@ -254,6 +247,7 @@ impl<'client> Response<'client> {
     }
 
     /// Assert that this response is a redirection
+    #[allow(dead_code)]
     pub fn assert_redirection(mut self) -> Self {
         let Response { ref mut client, ref response } = self;
         let status = response.status();
@@ -274,6 +268,7 @@ impl<'client> Response<'client> {
 
     /// Assert that this response is an API error with specified HTTP status
     /// code and error code string.
+    #[allow(dead_code)]
     pub fn assert_error(self, status: StatusCode, code: &str) {
         let s = self.response.status();
 
@@ -301,6 +296,7 @@ impl<'client> Response<'client> {
     /// Get value of a header.
     ///
     /// This function will panic if header was not set.
+    #[allow(dead_code)]
     pub fn header<N>(&self, name: N) -> &HeaderValue
     where
         N: AsHeaderName + Clone + Display,
@@ -314,6 +310,7 @@ impl<'client> Response<'client> {
     /// Get value of a cookie.
     ///
     /// This function will panic if cookie was not set.
+    #[allow(dead_code)]
     pub fn cookie(&self, name: &str) -> Cookie {
         match self.response.cookie(name) {
             Some(c) => c,
