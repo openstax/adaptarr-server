@@ -10,7 +10,7 @@ use actix_web::{
     pred,
 };
 use futures::{Future, Stream, future};
-use serde::de::{Deserialize, Deserializer};
+use serde::{Deserialize, Serialize, de::Deserializer};
 use std::io::Write;
 use tempfile::NamedTempFile;
 use uuid::Uuid;

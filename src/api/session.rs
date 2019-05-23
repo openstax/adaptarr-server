@@ -11,6 +11,7 @@ use actix_web::{
 };
 use chrono::{Duration, Utc};
 use diesel::{prelude::*, result::{Error as DbError}};
+use failure::Fail;
 use std::marker::PhantomData;
 
 use crate::{

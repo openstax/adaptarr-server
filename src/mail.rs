@@ -1,6 +1,6 @@
 use lettre::{Transport as _, SendableEmail, SendmailTransport};
 use lettre_email::{EmailBuilder, Mailbox};
-use serde::{Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{cell::RefCell, collections::HashMap};
 
 use crate::{

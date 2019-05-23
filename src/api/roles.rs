@@ -1,5 +1,6 @@
 use actix_web::{App, HttpResponse, Json, Path};
 use diesel::{Connection as _};
+use serde::Deserialize;
 
 use crate::{
     models::role::{Role, PublicData as RoleData},

@@ -10,6 +10,7 @@ use actix_web::{
     error::PayloadError,
 };
 use bytes::Bytes;
+use failure::Fail;
 use futures::{Future, Stream, future::self};
 use std::io::Write;
 use tempfile::NamedTempFile;

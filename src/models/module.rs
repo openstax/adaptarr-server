@@ -3,13 +3,18 @@ use diesel::{
     prelude::*,
     result::{DatabaseErrorKind, Error as DbError},
 };
+use failure::Fail;
+use serde::Serialize;
 use uuid::Uuid;
 
-use crate::db::{
-    Connection,
-    functions::duplicate_document,
-    models as db,
-    schema::{book_parts, documents, drafts, modules, xref_targets},
+use crate::{
+    ApiError,
+    db::{
+        Connection,
+        functions::duplicate_document,
+        models as db,
+        schema::{book_parts, documents, drafts, modules, xref_targets},
+    },
 };
 use super::{
     Draft,

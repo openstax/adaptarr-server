@@ -3,12 +3,17 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use failure::Fail;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::{
-    Connection,
-    models as db,
-    schema::book_parts,
+use crate::{
+    ApiError,
+    db::{
+        Connection,
+        models as db,
+        schema::book_parts,
+    },
 };
 use super::module::{Module, FindModuleError};
 

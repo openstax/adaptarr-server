@@ -3,12 +3,15 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use serde::Serialize;
 use uuid::Uuid;
 
-use crate::db::{
-    Connection,
-    models as db,
-    schema::{book_parts, documents, document_files, drafts, modules},
+use crate::{
+    db::{
+        Connection,
+        models as db,
+        schema::{book_parts, documents, document_files, drafts, modules},
+    },
 };
 use super::{
     File,

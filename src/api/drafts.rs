@@ -9,6 +9,7 @@ use actix_web::{
     http::Method,
 };
 use futures::{Future, future};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{

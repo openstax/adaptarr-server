@@ -4,6 +4,7 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use failure::Fail;
 use futures::{Future, Stream, future};
 use std::{
     fs,
@@ -13,6 +14,7 @@ use std::{
 use tempfile::{Builder as TempBuilder, NamedTempFile};
 
 use crate::{
+    ApiError,
     config::{Config, Storage},
     db::{
         Connection,

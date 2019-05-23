@@ -19,6 +19,7 @@ use actix_web::{
     ws::{self, WebsocketContext},
 };
 use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use crate::{

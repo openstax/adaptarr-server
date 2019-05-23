@@ -3,8 +3,10 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use failure::Fail;
 
 use crate::{
+    ApiError,
     Config,
     db::{
         Connection,

@@ -1,8 +1,9 @@
+use failure::Fail;
 use log::LevelFilter;
 use rand::RngCore;
 use std::{collections::HashMap, fs, net::{SocketAddr, Ipv4Addr}};
 use toml;
-use serde::de::{Deserializer, Error, Visitor, Unexpected};
+use serde::{Deserialize, de::{Deserializer, Error, Visitor, Unexpected}};
 
 pub fn load() -> crate::Result<Config> {
     let data = fs::read("config.toml").map_err(ReadConfigurationError)?;

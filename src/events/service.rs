@@ -6,6 +6,7 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use failure::Fail;
 use serde::Serialize;
 use std::collections::HashMap;
 

@@ -2,12 +2,17 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use failure::Fail;
+use serde::Serialize;
 use uuid::Uuid;
 
-use crate::db::{
-    Connection,
-    models as db,
-    schema::books,
+use crate::{
+    ApiError,
+    db::{
+        Connection,
+        models as db,
+        schema::books,
+    },
 };
 use super::bookpart::{BookPart, FindBookPartError};
 

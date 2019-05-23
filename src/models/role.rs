@@ -1,6 +1,9 @@
 use diesel::{prelude::*, result::{DatabaseErrorKind, Error as DbError}};
+use failure::Fail;
+use serde::Serialize;
 
 use crate::{
+    ApiError,
     db::{
         Connection,
         models as db,

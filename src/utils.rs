@@ -1,3 +1,4 @@
+use failure::Fail;
 use rand::{self, Rng};
 use ring::aead;
 use rmps;

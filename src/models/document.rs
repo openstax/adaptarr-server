@@ -3,11 +3,16 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use failure::Fail;
+use serde::Serialize;
 
-use crate::db::{
-    Connection,
-    models as db,
-    schema::{documents, document_files, files},
+use crate::{
+    ApiError,
+    db::{
+        Connection,
+        models as db,
+        schema::{documents, document_files, files},
+    },
 };
 use super::file::{File, FindFileError};
 

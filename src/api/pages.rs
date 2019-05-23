@@ -8,6 +8,7 @@ use actix_web::{
     middleware::Logger,
     pred,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{

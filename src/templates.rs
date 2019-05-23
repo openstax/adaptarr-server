@@ -1,5 +1,6 @@
 use fluent_bundle::types::FluentValue;
-use tera::{Tera, Value};
+use lazy_static::lazy_static;
+use tera::{Tera, Value, compile_templates};
 use std::{cell::Cell, collections::HashMap};
 use serde::Serialize;
 

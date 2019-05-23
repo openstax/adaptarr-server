@@ -2,6 +2,7 @@ use diesel::{
     Connection as _,
     prelude::*,
 };
+use failure::format_err;
 use std::path::PathBuf;
 use structopt::StructOpt;
 use uuid::Uuid;

@@ -1,6 +1,7 @@
 //! Commands for managing users.
 
 use diesel::Connection as _;
+use failure::Fail;
 use std::{collections::HashMap, str::FromStr};
 use structopt::StructOpt;
 

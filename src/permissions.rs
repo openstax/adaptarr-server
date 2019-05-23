@@ -1,5 +1,9 @@
+use bitflags::bitflags;
+use failure::Fail;
 use serde::{de, ser::{self, SerializeSeq}};
 use std::fmt;
+
+use crate::ApiError;
 
 bitflags! {
     /// Permissions allow for a fine-grained control over what actions a given

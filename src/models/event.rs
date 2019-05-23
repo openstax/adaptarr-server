@@ -2,8 +2,10 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use failure::Fail;
 
 use crate::{
+    ApiError,
     db::{
         Connection,
         models as db,

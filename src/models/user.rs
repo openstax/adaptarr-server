@@ -1,11 +1,15 @@
+use bitflags::bitflags;
 use diesel::{
     Connection as _Connection,
     prelude::*,
     result::{DatabaseErrorKind, Error as DbError},
 };
+use failure::Fail;
 use rand::RngCore;
+use serde::Serialize;
 
 use crate::{
+    ApiError,
     db::{
         Connection,
         models as db,

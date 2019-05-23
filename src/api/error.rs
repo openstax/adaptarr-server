@@ -12,6 +12,7 @@ use failure::Fail;
 use futures::{Async, Future, Poll};
 use sentry::{Hub, integrations::failure::event_from_fail};
 use sentry_actix::ActixWebHubExt;
+use serde::Serialize;
 
 /// An error that occurred while handling an API request.
 pub trait ApiError: Fail {

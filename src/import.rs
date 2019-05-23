@@ -5,12 +5,14 @@ use diesel::{
     Connection as _Connection,
     result::Error as DbError,
 };
+use failure::Fail;
 use minidom::Element as XmlElement;
 use std::{path::PathBuf, io::Read, str::FromStr};
 use tempfile::NamedTempFile;
 use zip::{ZipArchive, result::ZipError};
 
 use crate::{
+    ApiError,
     config::Storage,
     db::{Connection, Pool},
     models::{

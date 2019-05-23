@@ -1,5 +1,5 @@
 use diesel::pg::PgConnection;
-use failure::err_msg;
+use failure::{Fail, err_msg};
 use r2d2_diesel::ConnectionManager;
 use std::env;
 

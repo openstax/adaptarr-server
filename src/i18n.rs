@@ -1,7 +1,8 @@
+use failure::Fail;
 use fluent::{FluentBundle, FluentResource};
 use fluent_bundle::{errors::FluentError, types::FluentValue};
 use fluent_syntax::parser::errors::ParserError;
-use serde::{de, ser};
+use serde::{Serialize, de, ser};
 use std::{
     collections::HashMap,
     fmt::{self, Write as _},
