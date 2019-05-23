@@ -3,10 +3,12 @@ use diesel::{
     prelude::*,
     result::Error as DbError,
 };
+use failure::Fail;
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
+    ApiError,
     db::{
         Connection,
         models as db,
@@ -54,12 +56,15 @@ impl Draft {
     }
 
     /// Find draft by ID.
-    pub fn by_id(dbconn: &Connection, module: Uuid, user: i32) -> Result<Draft, DbError> {
+    pub fn by_id(dbconn: &Connection, module: Uuid, user: i32)
+    -> Result<Draft, FindDraftError> {
         drafts::table
             .filter(drafts::module.eq(module)
                 .and(drafts::user.eq(user)))
             .inner_join(documents::table)
             .get_result::<(db::Draft, db::Document)>(dbconn)
+            .optional()?
+            .ok_or(FindDraftError::NotFound)
             .map(|(data, document)| Draft {
                 data,
                 document: Document::from_db(document),
@@ -157,4 +162,20 @@ impl std::ops::Deref for Draft {
     fn deref(&self) -> &Document {
         &self.document
     }
+}
+
+#[derive(ApiError, Debug, Fail)]
+pub enum FindDraftError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    #[api(internal)]
+    Database(#[cause] DbError),
+    /// No draft found matching given criteria.
+    #[fail(display = "No such draft")]
+    #[api(code = "draft:not-found", status = "NOT_FOUND")]
+    NotFound,
+}
+
+impl_from! { for FindDraftError ;
+    DbError => |e| FindDraftError::Database(e),
 }
