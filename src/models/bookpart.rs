@@ -49,7 +49,7 @@ pub struct Tree {
     part: Variant<Tree>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum NewTree {
     Module {
