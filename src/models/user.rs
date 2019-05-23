@@ -354,7 +354,7 @@ impl User {
                 .execute(dbcon)?;
             diesel::update(sessions::table.filter(
                     sessions::user.eq(self.id).and(
-                        sessions::is_elevated.eq(false))))
+                        sessions::is_elevated.eq(true))))
                 .set(sessions::permissions.eq(sessions_perms.bits()))
                 .execute(dbcon)?;
 
