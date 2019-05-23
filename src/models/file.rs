@@ -27,7 +27,7 @@ use crate::{
 
 thread_local! {
     static MAGIC: magic::Cookie = {
-        let cookie = magic::Cookie::open(magic::flags::MIME)
+        let cookie = magic::Cookie::open(magic::flags::MIME_TYPE)
             .expect("libmagic to initialize");
         cookie.load(&["/usr/share/misc/magic"])
             .expect("libmagic to load database");
