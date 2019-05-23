@@ -74,6 +74,15 @@ pub struct NewSession {
     pub permissions: i32,
 }
 
+#[derive(AsChangeset, Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[table_name = "sessions"]
+pub struct SessionUpdate {
+    pub expires: Option<NaiveDateTime>,
+    pub last_used: Option<NaiveDateTime>,
+    pub is_elevated: Option<bool>,
+    pub permissions: Option<i32>,
+}
+
 #[derive(Clone, Debug, Identifiable, Queryable)]
 pub struct Invite {
     /// ID of this invitation.

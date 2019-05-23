@@ -18,7 +18,7 @@ use crate::{
     db::{
         Connection,
         Pool,
-        models::{Session as DbSession, NewSession},
+        models::{Session as DbSession, NewSession, SessionUpdate},
         schema::sessions,
     },
     models::user::{User, FindUserError},
@@ -59,11 +59,6 @@ pub struct Session<Policy = Normal> {
     _policy: PhantomData<Policy>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SessionSetting {
-    pub is_elevated: bool,
-}
-
 /// Policies govern what sessions can do. For example a [`Normal`] session can
 /// not be used to modify server settings, only an [`Elevated`] session can
 /// do so.
@@ -89,7 +84,7 @@ pub enum Validation {
     ///
     /// If the second argument is true then the session should be let through,
     /// otherwise it should be rejected. It will be updated regardless.
-    Update(SessionSetting, bool),
+    Update(SessionUpdate, bool),
     /// Reject this session.
     Reject,
 }
@@ -135,9 +130,13 @@ impl SessionManager {
         // Downgrade elevated session back to a normal session after some
         // time.
         if ses.is_elevated && diff > Duration::minutes(SUPER_EXPIRATION) {
-            return Validation::Update(SessionSetting {
-                is_elevated: false,
-            }, false);
+            let permissions = ses.permissions & PermissionBits::normal().bits();
+
+            return Validation::Update(SessionUpdate {
+                is_elevated: Some(false),
+                permissions: Some(permissions),
+                .. SessionUpdate::default()
+            }, true);
         }
 
         Validation::Pass
@@ -176,9 +175,9 @@ impl<S> Middleware<S> for SessionManager {
 
         let pass = match SessionManager::validate(&session) {
             Validation::Pass => true,
-            Validation::Update(settings, pass) => {
+            Validation::Update(update, pass) => {
                 diesel::update(&session)
-                    .set(sessions::is_elevated.eq(settings.is_elevated))
+                    .set(update)
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
                 pass
@@ -330,10 +329,10 @@ where
 
             match P::validate(&session) {
                 Validation::Pass => (),
-                Validation::Update(settings, pass) => {
+                Validation::Update(update, pass) => {
                     let db = req.state().db.get()?;
                     diesel::update(&session)
-                        .set(sessions::is_elevated.eq(settings.is_elevated))
+                        .set(update)
                         .execute(&*db)?;
 
                     if !pass {
