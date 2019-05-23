@@ -4,6 +4,7 @@ use actix_web::{
     HttpRequest,
     HttpResponse,
     Responder,
+    ResponseError,
     Scope,
     dev::{AsyncResult, Route},
     http::{StatusCode, Method},
@@ -79,6 +80,30 @@ impl_from! { for Error ;
     tera::Error => |e| Error::Template(e.to_string()),
     actix::MailboxError => |e| Error::ActixMailbox(e),
     actix_web::error::PayloadError => |e| Error::Payload(e),
+}
+
+impl ResponseError for Error {
+    fn error_response(&self) -> HttpResponse {
+        match self {
+            Error::Api(err) => match err.code() {
+                Some(code) => HttpResponse::build(err.status())
+                    .json(ErrorResponse {
+                        error: code,
+                        raw: err.to_string(),
+                    }),
+                None => {
+                    error!("{}", err);
+                    HttpResponse::new(err.status())
+                }
+            },
+            Error::Payload(e) => e.error_response(),
+            _ => {
+                error!("{}", self);
+                HttpResponse::InternalServerError()
+                    .finish()
+            }
+        }
+    }
 }
 
 #[derive(Debug)]

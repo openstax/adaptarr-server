@@ -4,7 +4,6 @@ use actix_web::{
     HttpRequest,
     HttpResponse,
     FromRequest,
-    ResponseError,
     middleware::{Middleware, Started, Response},
     error::{ErrorInternalServerError, Result},
     http::Cookie,
@@ -15,6 +14,7 @@ use failure::Fail;
 use std::marker::PhantomData;
 
 use crate::{
+    ApiError,
     db::{
         Connection,
         Pool,
@@ -22,10 +22,10 @@ use crate::{
         schema::sessions,
     },
     models::user::{User, FindUserError},
-    permissions::{Permission, PermissionBits},
+    permissions::{Permission, PermissionBits, RequirePermissionsError},
     utils,
 };
-use super::State;
+use super::{Error, State};
 
 /// Name of the cookie carrying session ID.
 const COOKIE: &str = "sesid";
@@ -68,16 +68,18 @@ pub struct Session<Policy = Normal> {
 /// it differently, you can assume that the session you are validating has
 /// already passed [`Normal`].
 pub trait Policy {
+    type Error;
+
     /// Validate a session.
     ///
     /// This method should return `true` if the request should pass, and `false`
     /// otherwise.
-    fn validate(session: &DbSession) -> Validation;
+    fn validate(session: &DbSession) -> Validation<Self::Error>;
 }
 
 /// Outcome of policy validation.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Validation {
+pub enum Validation<E = Error> {
     /// Let this session through.
     Pass,
     /// Update this session.
@@ -87,6 +89,8 @@ pub enum Validation {
     Update(SessionUpdate, bool),
     /// Reject this session.
     Reject,
+    /// Reject this session with a specific error.
+    Error(E),
 }
 
 /// Normal policy.
@@ -174,23 +178,23 @@ impl<S> Middleware<S> for SessionManager {
         };
 
         let pass = match SessionManager::validate(&session) {
-            Validation::Pass => true,
-            Validation::Update(update, pass) => {
+            Validation::Pass => Some(session),
+            Validation::Update(update, _) => {
                 diesel::update(&session)
                     .set(update)
-                    .execute(&*db)
-                    .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-                pass
+                    .get_result::<DbSession>(&*db)
+                    .map(Some)
+                    .map_err(|e| ErrorInternalServerError(e.to_string()))?
             }
-            Validation::Reject => {
+            Validation::Reject | Validation::Error(_) => {
                 diesel::delete(&session)
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-                false
+                None
             }
         };
 
-        if pass {
+        if let Some(session) = pass {
             req.extensions_mut().insert(SessionData {
                 existing: Some(session),
                 new: None,
@@ -319,9 +323,10 @@ impl<P> std::ops::Deref for Session<P> {
 impl<P> FromRequest<State> for Session<P>
 where
     P: Policy,
+    Error: From<P::Error>,
 {
     type Config = ();
-    type Result = Result<Session<P>, SessionFromRequestError>;
+    type Result = Result<Session<P>, Error>;
 
     fn from_request(req: &HttpRequest<State>, _cfg: &()) -> Self::Result {
         if let Some(session) = req.extensions().get::<SessionData>()
@@ -336,10 +341,12 @@ where
                         .execute(&*db)?;
 
                     if !pass {
-                        return Err(SessionFromRequestError::Policy);
+                        return Err(SessionFromRequestError::Policy.into());
                     }
                 }
-                Validation::Reject => return Err(SessionFromRequestError::Policy),
+                Validation::Reject =>
+                    return Err(SessionFromRequestError::Policy.into()),
+                Validation::Error(error) => return Err(error.into()),
             }
 
             Ok(Session {
@@ -347,58 +354,45 @@ where
                 _policy: PhantomData,
             })
         } else {
-            Err(SessionFromRequestError::NoSession)
+            Err(SessionFromRequestError::NoSession.into())
         }
     }
 }
 
 impl Policy for Normal {
+    type Error = Error;
+
     fn validate(_: &DbSession) -> Validation {
         Validation::Pass
     }
 }
 
 impl<P: Permission> Policy for P {
-    fn validate(session: &DbSession) -> Validation {
+    type Error = RequirePermissionsError;
+
+    fn validate(session: &DbSession) -> Validation<RequirePermissionsError> {
         let bits = PermissionBits::from_bits_truncate(session.permissions);
 
-        if bits.contains(P::bits()) {
-            Validation::Pass
-        } else {
-            Validation::Reject
+        match bits.require(P::bits()) {
+            Ok(()) => Validation::Pass,
+            Err(err) => Validation::Error(err),
         }
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(ApiError, Debug, Fail)]
 pub enum SessionFromRequestError {
-    #[fail(display = "No session")]
+    #[api(status = "UNAUTHORIZED", code = "user:session:required")]
+    #[fail(display = "A session is required to access this resource")]
     NoSession,
-    #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] diesel::result::Error),
-    #[fail(display = "Cannot obtain database connection: {}", _0)]
-    DatabasePool(#[cause] r2d2::Error),
+    #[api(internal)]
+    #[fail(display = "Unsealing error: {}", _0)]
+    Unsealing(#[cause] utils::UnsealingError),
+    #[api(internal)]
+    #[fail(display = "Invalid base64: {}", _0)]
+    Decoding(#[cause] base64::DecodeError),
     /// Session was rejected by policy.
+    #[api(status = "FORBIDDEN", code = "user:session:rejected")]
     #[fail(display = "Rejected by policy")]
     Policy,
-}
-
-impl_from! { for SessionFromRequestError ;
-    diesel::result::Error => |e| SessionFromRequestError::Database(e),
-    r2d2::Error => |e| SessionFromRequestError::DatabasePool(e),
-}
-
-impl ResponseError for SessionFromRequestError {
-    fn error_response(&self) -> HttpResponse {
-        use self::SessionFromRequestError::*;
-
-        match *self {
-            NoSession => HttpResponse::Unauthorized()
-                .body("a session is required"),
-            Database(_) | DatabasePool(_) => HttpResponse::InternalServerError()
-                .finish(),
-            Policy => HttpResponse::Forbidden()
-                .body("access denied by policy"),
-        }
-    }
 }
