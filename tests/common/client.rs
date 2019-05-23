@@ -235,25 +235,66 @@ impl<'client> Response<'client> {
     }
 
     /// Assert that this response is a success.
-    pub fn assert_success(self) -> Self {
-        let status = self.response.status();
-        assert!(status.is_success(), "Expected success, not {}", status);
+    pub fn assert_success(mut self) -> Self {
+        let Response { ref mut client, ref response } = self;
+        let status = response.status();
+
+        if !status.is_success() {
+            if let Ok(err) = client.server.execute(response.json::<ErrorData>()) {
+                panic!("Expected success, not {} {}: {}",
+                    status, err.error, err.raw);
+            } else {
+                let body = self.body();
+                let err = String::from_utf8_lossy(&body);
+                panic!("Expected success, not {}: {}", status, err);
+            }
+        }
+
         self
     }
 
     /// Assert that this response is a redirection
-    pub fn assert_redirection(self) -> Self {
-        let status = self.response.status();
-        assert!(status.is_redirection(), "Expected redirection, not {}", status);
+    pub fn assert_redirection(mut self) -> Self {
+        let Response { ref mut client, ref response } = self;
+        let status = response.status();
+
+        if !status.is_redirection() {
+            if let Ok(err) = client.server.execute(response.json::<ErrorData>()) {
+                panic!("Expected redirection, not {} {}: {}",
+                    status, err.error, err.raw);
+            } else {
+                let body = self.body();
+                let err = String::from_utf8_lossy(&body);
+                panic!("Expected redirection, not {}: {}", status, err);
+            }
+        }
+
         self
     }
 
     /// Assert that this response is an API error with specified HTTP status
     /// code and error code string.
     pub fn assert_error(self, status: StatusCode, code: &str) {
-        assert_eq!(self.response.status(), status);
+        let s = self.response.status();
 
-        let data: ErrorData = self.json();
+        if s.is_success() || s.is_redirection() {
+            panic!("Expected {} {}, not {}", status, code, s);
+        }
+
+        let data: ErrorData = match self.client.server.execute(self.response.json()) {
+            Ok(data) => data,
+            Err(_) => {
+                let body = self.body();
+                let data = String::from_utf8_lossy(&body);
+                panic!("Expected {} {}, not {} {}", status, code, s, data);
+            }
+        };
+
+        if status != status {
+            panic!("Expected {} {}, not {} {} {}",
+                status, code, s, data.error, data.raw);
+        }
+
         assert_eq!(data.error, code);
     }
 
