@@ -263,7 +263,7 @@ pub fn modify_password(
     }
 
     if form.new != form.new2 {
-        return Err(UserAuthenticateError::BadPassword.into());
+        return Err(PasswordChangeError::PasswordsDontMatch.into());
     }
 
     user.change_password(&*db, &form.new)?;
@@ -272,6 +272,13 @@ pub fn modify_password(
     Session::<Normal>::create(&req, &user, false);
 
     Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(ApiError, Debug, Fail)]
+enum PasswordChangeError {
+    #[api(status = "BAD_REQUEST", code = "user:password:bad-confirmation")]
+    #[fail(display = "password and confirmation don't match")]
+    PasswordsDontMatch,
 }
 
 #[derive(Debug, Serialize)]

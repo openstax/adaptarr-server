@@ -555,7 +555,7 @@ pub fn do_register(
             StatusCode::BAD_REQUEST,
             "register.html",
             &RegisterTemplate {
-                error: Some("user:register:passwords-dont-match"),
+                error: Some("user:password:bad-confirmation"),
                 email: &invite.email,
                 invite: &form.invite,
                 locales: &state.i18n.locales,

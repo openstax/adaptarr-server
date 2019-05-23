@@ -50,7 +50,7 @@ register-submit = Zarejestruj
 # Variables:
 # - $code (string): error code
 register-error = { $code ->
-    ["user:register:passwords-dont-match"] Hasła nie pasują
+    ["user:password:bad-confirmation"] Hasła nie pasują
     ["user:register:email-changed"]
         Nie możesz zmienić adresu e-mail podczas rejestracji
     ["invitation:invalid"] Nieprawidłowy kod zaproszenia
@@ -79,6 +79,7 @@ reset-submit = Zresetuj hasło
 # - $code (string): error code
 reset-error = { $code ->
     ["user:not-found"] Nieznany adres e-mail
+    ["user:password:bad-confirmation"] Hasała nie pasują
     ["password:reset:invalid"] Niepoprawny kod resetowania hasła
     ["password:reset:passwords-dont-match"] Hasała nie pasują
     ["user:change-password:empty"] Hasło nie może być puste
