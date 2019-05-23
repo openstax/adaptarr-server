@@ -245,14 +245,15 @@ pub fn update_module(
     let dbconn = &*db;
     dbconn.transaction::<_, Error, _>(|| {
         if let Some(user) = update.assignee {
-            module.set_assignee(dbconn, user)?;
-
             if let Some(id) = user {
                 let user = User::by_id(dbconn, id)?;
+                module.set_assignee(dbconn, Some(&user))?;
                 state.events.notify(user, events::Assigned {
                     who: session.user,
                     module: module.id(),
                 });
+            } else {
+                module.set_assignee(dbconn, None)?;
             }
         }
 
