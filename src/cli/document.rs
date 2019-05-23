@@ -1,7 +1,4 @@
-use diesel::{
-    Connection as _,
-    prelude::*,
-};
+use diesel::prelude::*;
 use failure::format_err;
 use std::path::PathBuf;
 use structopt::StructOpt;
