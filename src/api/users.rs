@@ -288,6 +288,13 @@ pub struct SessionData {
     permissions: PermissionBits,
 }
 
+/// Get details about current session.
+///
+/// ## Method
+///
+/// ```text
+/// GET /users/me/session
+/// ```
 pub fn get_session(session: Session) -> Json<SessionData> {
     Json(SessionData {
         expires: session.expires,
