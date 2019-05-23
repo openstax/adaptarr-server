@@ -24,6 +24,7 @@ use failure::Error;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{fmt::Display, net::Ipv4Addr};
+use tempfile::TempDir;
 
 use super::{
     db::Pool,
@@ -33,6 +34,9 @@ use super::{
 };
 
 lazy_static! {
+    static ref TEMP_DIR: TempDir = TempDir::new()
+        .expect("Cannot create temporary directory");
+
     pub static ref CONFIG: Config = Config {
         server: config::Server {
             address: (Ipv4Addr::LOCALHOST, 80).into(),
@@ -45,7 +49,7 @@ lazy_static! {
             transport: adaptarr::mail::Transports::Log,
         },
         storage: config::Storage {
-            path: "tests/.run-data".into(),
+            path: TEMP_DIR.path().to_path_buf(),
         },
         logging: config::Logging {
             level: log::LevelFilter::Debug,
