@@ -22,11 +22,13 @@ use crate::{
         },
         types::SlotPermission,
     },
+    permissions::PermissionBits,
     processing::{ProcessDocument, TargetProcessor},
 };
 use super::{
     File,
     Module,
+    User,
     document::{Document, PublicData as DocumentData},
     editing::{Step, StepData, Version, slot::FillSlotError},
 };
@@ -73,8 +75,23 @@ impl Draft {
             })
     }
 
-    /// Find draft by ID.
-    pub fn by_id(dbconn: &Connection, module: Uuid, user: i32)
+    /// Find a draft by ID.
+    pub fn by_id(dbconn: &Connection, module: Uuid)
+    -> Result<Draft, FindDraftError> {
+        drafts::table
+            .filter(drafts::module.eq(module))
+            .inner_join(documents::table)
+            .get_result::<(db::Draft, db::Document)>(dbconn)
+            .map(|(data, document)| Draft {
+                data,
+                document: Document::from_db(document),
+            })
+            .optional()?
+            .ok_or(FindDraftError::NotFound)
+    }
+
+    /// Find by ID draft owned by a user.
+    pub fn by_id_and_user(dbconn: &Connection, module: Uuid, user: i32)
     -> Result<Draft, FindDraftError> {
         drafts::table
             .filter(drafts::module.eq_any(
@@ -161,6 +178,22 @@ impl Draft {
             .into_iter()
             .map(|part| part.book)
             .collect())
+    }
+
+    /// Check that a user can access a draft.
+    pub fn check_access(&self, dbconn: &Connection, user: &User)
+    -> Result<bool, DbError> {
+        // Process managers have access to all drafts.
+        if user.permissions(true).contains(PermissionBits::MANAGE_PROCESS) {
+            return Ok(true);
+        }
+
+        draft_slots::table
+            .select(diesel::dsl::count(draft_slots::user))
+            .filter(draft_slots::draft.eq(self.data.module)
+                .and(draft_slots::user.eq(user.id)))
+            .get_result::<i64>(dbconn)
+            .map(|c| c > 0)
     }
 
     /// Check that a user currently possesses specified slot permissions.

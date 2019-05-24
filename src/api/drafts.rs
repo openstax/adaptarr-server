@@ -17,7 +17,12 @@ use crate::{
         File,
         user::{User, Fields, PublicData as UserData},
         editing::{Slot, VersionData, SlotData},
-        draft::{Draft, PublicData as DraftData, AdvanceResult as DraftAdvanceResult},
+        draft::{
+            Draft,
+            PublicData as DraftData,
+            AdvanceResult as DraftAdvanceResult,
+            FindDraftError,
+        },
         module::PublicData as ModuleData,
     },
     permissions::ManageProcess,
@@ -90,7 +95,7 @@ pub fn get_draft(
     id: Path<Uuid>,
 ) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, *id, session.user)?;
+    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
 
     draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
 }
@@ -114,7 +119,7 @@ pub fn update_draft(
     update: Json<DraftUpdate>,
 ) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
-    let mut draft = Draft::by_id(&*db, *id, session.user)?;
+    let mut draft = Draft::by_id_and_user(&*db, *id, session.user)?;
 
     if !draft.check_permission(&*db, session.user_id(), SlotPermission::Edit)? {
         return Err(InsufficientSlotPermission(SlotPermission::Edit).into());
@@ -146,7 +151,7 @@ pub fn advance_draft(
 ) -> Result<Json<AdvanceResult>> {
     let db = state.db.get()?;
     let form = form.into_inner();
-    let draft = Draft::by_id(&*db, *id, session.user)?;
+    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
 
     draft.advance(&*db, session.user_id(), form.slot, form.target)
         .and_then(|r| Ok(match r {
@@ -215,7 +220,7 @@ pub fn list_files(
     id: Path<Uuid>,
 ) -> Result<Json<Vec<FileInfo>>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, *id, session.user)?;
+    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
 
     let files = draft.get_files(&*db)?
         .into_iter()
@@ -242,7 +247,7 @@ pub fn get_file(
 ) -> Result<impl Responder> {
     let (id, name) = path.into_inner();
     let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, id, session.user)?;
+    let draft = Draft::by_id_and_user(&*db, id, session.user)?;
 
     Ok(draft.get_file(&*db, &name)?
         .stream(&state.config))
@@ -269,7 +274,7 @@ pub fn update_file(
         Err(err) => return Box::new(future::err(err.into())),
     };
 
-    let draft = match Draft::by_id(&*db, id, session.user) {
+    let draft = match Draft::by_id_and_user(&*db, id, session.user) {
         Ok(draft) => draft,
         Err(err) => return Box::new(future::err(err.into())),
     };
@@ -307,7 +312,7 @@ pub fn delete_file(
 ) -> Result<HttpResponse> {
     let (id, name) = path.into_inner();
     let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, id, session.user)?;
+    let draft = Draft::by_id_and_user(&*db, id, session.user)?;
 
     if !draft.check_permission(&*db, session.user_id(), SlotPermission::Edit)? {
         return Err(InsufficientSlotPermission(SlotPermission::Edit).into());
@@ -331,7 +336,7 @@ pub fn list_containing_books(
     id: Path<Uuid>,
 ) -> Result<Json<Vec<Uuid>>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, *id, session.user)?;
+    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
 
     draft.get_books(&*db)
         .map(Json)
@@ -365,8 +370,12 @@ pub fn get_process_details(
     id: Path<Uuid>,
 ) -> Result<Json<ProcessDetails>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, *id, session.user)?;
+    let draft = Draft::by_id(&*db, *id)?;
     let process = draft.get_process(&*db)?;
+
+    if !draft.check_access(&*db, &session.user(&*db)?)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     let slots = process.get_slots(&*db)?
         .into_iter()
@@ -398,7 +407,7 @@ pub fn assign_slot(
 ) -> Result<HttpResponse> {
     let (draft, slot) = path.into_inner();
     let db = state.db.get()?;
-    let draft = Draft::by_id(&*db, draft, session.user)?;
+    let draft = Draft::by_id(&*db, draft)?;
     let slot = Slot::by_id(&*db, slot)?;
     let user = User::by_id(&*db, *user)?;
 
