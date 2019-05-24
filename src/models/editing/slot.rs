@@ -33,6 +33,7 @@ pub struct Slot {
 pub struct PublicData {
     pub id: i32,
     pub name: String,
+    pub role: Option<i32>,
 }
 
 impl Slot {
@@ -101,11 +102,12 @@ impl Slot {
 
     /// Get the public portion of this slot's data.
     pub fn get_public(&self) -> PublicData {
-        let db::EditProcessSlot { id, ref name, .. } = self.data;
+        let db::EditProcessSlot { id, ref name, role, .. } = self.data;
 
         PublicData {
             id,
             name: name.clone(),
+            role,
         }
     }
 
