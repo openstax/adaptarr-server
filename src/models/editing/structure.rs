@@ -1,11 +1,12 @@
 use failure::Fail;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub use crate::db::types::SlotPermission;
 
 use self::ValidateStructureError::*;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Process {
     /// Process's name.
     pub name: String,
@@ -17,7 +18,7 @@ pub struct Process {
     pub steps: Vec<Step>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Slot {
     /// Database ID of this slot.
     #[serde(skip_deserializing)]
@@ -29,7 +30,7 @@ pub struct Slot {
     pub autofill: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Step {
     /// Database ID of this step.
     #[serde(skip_deserializing)]
@@ -41,13 +42,13 @@ pub struct Step {
     pub links: Vec<Link>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StepSlot {
     pub slot: usize,
     pub permission: SlotPermission,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Link {
     pub name: String,
     pub to: usize,
@@ -55,13 +56,61 @@ pub struct Link {
 }
 
 /// Result of validation.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Validation {
 }
 
 pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError> {
+    // Verify there are no empty or duplicate names.
+
     if process.name.is_empty() {
         return Err(ValidateStructureError::EmptyProcessName);
+    }
+
+    let mut slots = HashMap::new();
+
+    for (slotid, slot) in process.slots.iter().enumerate() {
+        if slot.name.is_empty() {
+            return Err(ValidateStructureError::EmptySlotName(slotid));
+        }
+
+        if let Some(inx) = slots.get(&slot.name) {
+            return Err(ValidateStructureError::DuplicateSlotName(slotid, *inx));
+        }
+
+        slots.insert(&slot.name, slotid);
+    }
+
+    let mut steps = HashMap::new();
+
+    for (stepid, step) in process.steps.iter().enumerate() {
+        if step.name.is_empty() {
+            return Err(ValidateStructureError::EmptyStepName(stepid));
+        }
+
+        if let Some(inx) = steps.get(&step.name) {
+            return Err(ValidateStructureError::DuplicateStepName(stepid, *inx));
+        }
+
+        steps.insert(&step.name, stepid);
+
+        let mut links = HashMap::new();
+
+        for (linkid, link) in step.links.iter().enumerate() {
+            if link.name.is_empty() {
+                return Err(ValidateStructureError::EmptyLinkName(stepid, linkid));
+            }
+
+            if let Some(inx) = links.get(&link.name) {
+                return Err(ValidateStructureError::DuplicateLinkName {
+                    step: stepid,
+                    link: linkid,
+                    previous: *inx,
+                });
+            }
+
+            links.insert(&link.name, linkid);
+        }
     }
 
     // Verify all IDs are correct.
@@ -139,7 +188,7 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
                     has_editing = true;
                 }
                 SlotPermission::ProposeChanges => {
-                    if has_editing {
+                    if has_propose {
                         return Err(PermissionDuplication {
                             step: stepid,
                             permission: slot.permission,
@@ -238,14 +287,44 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
     Ok(Validation {})
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Eq, Fail, PartialEq)]
 pub enum ValidateStructureError {
     /// Process name is empty.
     #[fail(display = "Process's name cannot be empty")]
     EmptyProcessName,
+    /// Name of a slot is empty.
+    #[fail(display = "Slot {}'s name cannot be empty", _0)]
+    EmptySlotName(usize),
+    /// Name of a step is empty.
+    #[fail(display = "Step {}'s name cannot be empty", _0)]
+    EmptyStepName(usize),
+    /// Name of a link is empty.
+    #[fail(display = "Step {}'s link {}'s name cannot be empty", _0, _1)]
+    EmptyLinkName(usize, usize),
     /// Description names start step with ID greater than total number of steps.
     #[fail(display = "Start step's ID {} exceeds total number of steps {}", _0, _1)]
     InvalidStartStep(usize, usize),
+    /// Process contains two slots with the same name.
+    #[fail(display = "Slot {} has the same name as slot {}", _0, _1)]
+    DuplicateSlotName(usize, usize),
+    /// Process contains two steps with the same name.
+    #[fail(display = "Step {} has the same name as step {}", _0, _1)]
+    DuplicateStepName(usize, usize),
+    /// Step contains two links with the same name.
+    #[fail(
+        display = "Link {} in step {} has the same name as link {}",
+        link,
+        step,
+        previous,
+    )]
+    DuplicateLinkName {
+        /// Offending step's ID.
+        step: usize,
+        /// Offending link's ID.
+        link: usize,
+        /// Previous link with the same name.
+        previous: usize,
+    },
     /// Step description gives permission to a slot with ID greater than total
     /// number of slots.
     #[fail(
@@ -390,4 +469,244 @@ pub enum ValidateStructureError {
     /// The initial step is also a final step.
     #[fail(display = "Start step cannot also be a final step")]
     StartIsFinal,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validation() {
+        let good = Process {
+            name: "Process".into(),
+            start: 0,
+            slots: vec![
+                Slot {
+                    id: 0,
+                    name: "Slot".into(),
+                    role: None,
+                    autofill: false,
+                },
+            ],
+            steps: vec![
+                Step {
+                    id: 0,
+                    name: "Start".into(),
+                    slots: vec![
+                        StepSlot {
+                            slot: 0,
+                            permission: SlotPermission::Edit,
+                        },
+                    ],
+                    links: vec![
+                        Link {
+                            name: "Link".into(),
+                            slot: 0,
+                            to: 1,
+                        },
+                    ],
+                },
+                Step {
+                    id: 0,
+                    name: "End".into(),
+                    slots: vec![],
+                    links: vec![],
+                },
+            ],
+        };
+
+        assert_eq!(validate(&good), Ok(Validation {}));
+
+        let mut test = good.clone();
+        test.slots[0].name = "".into();
+        assert_eq!(validate(&test), Err(ValidateStructureError::EmptySlotName(0)));
+
+        let mut test = good.clone();
+        test.steps[0].name = "".into();
+        assert_eq!(validate(&test), Err(ValidateStructureError::EmptyStepName(0)));
+
+        let mut test = good.clone();
+        test.steps[0].links[0].name = "".into();
+        assert_eq!(validate(&test), Err(ValidateStructureError::EmptyLinkName(0, 0)));
+
+        let mut test = good.clone();
+        test.slots.push(Slot {
+            id: 1,
+            name: "Slot".into(),
+            role: None,
+            autofill: false,
+        });
+        assert_eq!(
+            validate(&test), Err(ValidateStructureError::DuplicateSlotName(1, 0)));
+
+        let mut test = good.clone();
+        test.steps[1].name = "Start".into();
+        assert_eq!(
+            validate(&test), Err(ValidateStructureError::DuplicateStepName(1, 0)));
+
+        let mut test = good.clone();
+        test.steps[0].links.push(Link {
+            name: "Link".into(),
+            slot: 0,
+            to: 1,
+        });
+        assert_eq!(
+            validate(&test),
+            Err(ValidateStructureError::DuplicateLinkName {
+                step: 0,
+                link: 1,
+                previous: 0,
+            }),
+        );
+
+        assert_eq!(validate(&Process {
+            name: "".into(),
+            .. good.clone()
+        }), Err(ValidateStructureError::EmptyProcessName));
+
+        assert_eq!(validate(&Process {
+            steps: vec![],
+            .. good.clone()
+        }), Err(ValidateStructureError::InvalidStartStep(0, 0)));
+
+        let mut test = good.clone();
+        test.steps[0].links.clear();
+        test.steps.remove(1);
+        assert_eq!(validate(&test), Err(ValidateStructureError::StartIsFinal));
+
+        let mut test = good.clone();
+        test.steps[0].links.clear();
+        assert_eq!(
+            validate(&test), Err(ValidateStructureError::UnreachableState(1)));
+
+        let mut test = good.clone();
+        test.steps[0].links[0].slot = 3;
+        assert_eq!(validate(&test), Err(ValidateStructureError::InvalidLinkSlot {
+            step: 0,
+            link: 0,
+            slot: 3,
+            total: 1,
+        }));
+
+        let mut test = good.clone();
+        test.steps[0].slots.clear();
+        assert_eq!(validate(&test), Err(ValidateStructureError::UnusableLink {
+            step: 0,
+            link: 0,
+            slot: 0,
+        }));
+
+        let mut test = good.clone();
+        test.steps[0].links.push(Link {
+            name: "Another link".into(),
+            slot: 0,
+            to: 0,
+        });
+        assert_eq!(validate(&test), Err(ValidateStructureError::LoopedLink {
+            step: 0,
+            link: 1,
+        }));
+
+        let mut test = good.clone();
+        test.steps[0].links.push(Link {
+            name: "Another link".into(),
+            slot: 0,
+            to: 3,
+        });
+        assert_eq!(validate(&test), Err(ValidateStructureError::InvalidLinkTarget {
+            step: 0,
+            link: 1,
+            target: 3,
+            total: 2,
+        }));
+
+        let mut test = good.clone();
+        test.steps[0].slots.push(StepSlot {
+            slot: 3,
+            permission: SlotPermission::View,
+        });
+        assert_eq!(validate(&test), Err(ValidateStructureError::InvalidStepSlot {
+            step: 0,
+            slot: 3,
+            permission: SlotPermission::View,
+            total: 1,
+        }));
+
+        let mut test = good.clone();
+        test.slots.push(Slot {
+            id: 1,
+            name: "Another".into(),
+            role: None,
+            autofill: false,
+        });
+        test.steps[0].slots.push(StepSlot {
+            slot: 1,
+            permission: SlotPermission::Edit,
+        });
+        assert_eq!(validate(&test), Err(ValidateStructureError::PermissionDuplication {
+            step: 0,
+            permission: SlotPermission::Edit,
+        }));
+
+        let mut test = good.clone();
+        test.steps[0].slots.push(StepSlot {
+            slot: 0,
+            permission: SlotPermission::ProposeChanges,
+        });
+        assert_eq!(validate(&test), Err(ValidateStructureError::ConflictingPermissions {
+            step: 0,
+            permission_a: SlotPermission::Edit,
+            permission_b: SlotPermission::ProposeChanges,
+        }));
+
+        let mut test = good.clone();
+        test.steps[0].slots[0].permission = SlotPermission::AcceptChanges;
+        assert_eq!(validate(&test), Err(ValidateStructureError::MissingRequiredPermission {
+            step: 0,
+            requirer: SlotPermission::AcceptChanges,
+            requiree: SlotPermission::ProposeChanges,
+        }));
+
+        let mut test = good.clone();
+        test.steps.push(Step {
+            id: 2,
+            name: "Isolated A".into(),
+            slots: vec![
+                StepSlot {
+                    slot: 0,
+                    permission: SlotPermission::View,
+                },
+            ],
+            links: vec![
+                Link {
+                    name: "Link".into(),
+                    slot: 0,
+                    to: 3,
+                },
+            ],
+        });
+        test.steps.push(Step {
+            id: 3,
+            name: "Isolated B".into(),
+            slots: vec![
+                StepSlot {
+                    slot: 0,
+                    permission: SlotPermission::View,
+                },
+            ],
+            links: vec![
+                Link {
+                    name: "Link".into(),
+                    slot: 0,
+                    to: 2,
+                },
+            ],
+        });
+        test.steps[0].links.push(Link {
+            name: "Another link".into(),
+            slot: 0,
+            to: 2,
+        });
+        assert_eq!(validate(&test), Err(ValidateStructureError::IsolatedStep(2)));
+    }
 }
