@@ -1,14 +1,20 @@
 //! Tests for content management (books, modules, drafts, files, etc.).
 
-// #[macro_use] extern crate lazy_static;
-
 use actix_web::http::StatusCode;
 use adaptarr::{
     db::{
         models as db,
         schema::{books, documents, modules, document_files, xref_targets},
+        types::SlotPermission,
     },
-    models::{Book, User, Module, File, bookpart::NewTree},
+    models::{
+        Book,
+        User,
+        Module,
+        File,
+        bookpart::NewTree,
+        editing::{Process, structure},
+    },
     permissions::PermissionBits,
 };
 use diesel::prelude::*;
@@ -20,7 +26,7 @@ use lazy_static::lazy_static;
 
 mod common;
 
-use self::common::{Client, Connection, Pooled};
+use self::common::{Client, Connection};
 
 lazy_static! {
     static ref M1: Uuid = Uuid::from_bytes([0x11; 16]);
@@ -42,7 +48,7 @@ fn setup_db(db: &Connection) -> Result<(), failure::Error> {
         PermissionBits::empty(),
     )?;
 
-    let admin = User::create(
+    User::create(
         db,
         "administrator@adaptarr.test",
         "Administrator",
@@ -79,12 +85,10 @@ fn setup_db(db: &Connection) -> Result<(), failure::Error> {
             db::Module {
                 id: *M1,
                 document: d1.id,
-                assignee: Some(admin.id),
             },
             db::Module {
                 id: *M2,
                 document: d2.id,
-                assignee: Some(user.id),
             },
         ].as_ref())
         .execute(db)?;
@@ -144,7 +148,47 @@ fn setup_db(db: &Connection) -> Result<(), failure::Error> {
         ],
     })?;
 
-    m2.create_draft(db, user.id)?;
+    let process = Process::create(&*db, &structure::Process {
+        name: "Test process".into(),
+        start: 0,
+        slots: vec![
+            structure::Slot {
+                id: 0,
+                name: "Slot".into(),
+                role: None,
+                autofill: false,
+            },
+        ],
+        steps: vec![
+            structure::Step {
+                id: 0,
+                name: "Start".into(),
+                slots: vec![
+                    structure::StepSlot {
+                        slot: 0,
+                        permission: SlotPermission::Edit,
+                    },
+                ],
+                links: vec![
+                    structure::Link {
+                        name: "Link".into(),
+                        to: 1,
+                        slot: 0,
+                    },
+                ],
+            },
+            structure::Step {
+                id: 0,
+                name: "End".into(),
+                slots: vec![],
+                links: vec![],
+            },
+        ],
+    })?;
+
+    let slot = process.get_slot(&*db, 1)?;
+
+    m2.begin_process(&*db, &process, std::iter::once((slot, user)))?;
 
     Ok(())
 }
@@ -158,7 +202,6 @@ struct DocumentData<'a> {
 #[derive(Debug, Deserialize, Eq, PartialEq)]
 struct ModuleData<'a> {
     id: Uuid,
-    assignee: Option<i32>,
     #[serde(flatten)]
     document: DocumentData<'a>,
 }
@@ -173,7 +216,6 @@ fn api_list_of_modules(mut client: Client) {
     assert_eq!(data, [
         ModuleData {
             id: *M1,
-            assignee: Some(2),
             document: DocumentData {
                 title: "First test".into(),
                 language: "en".into(),
@@ -181,26 +223,6 @@ fn api_list_of_modules(mut client: Client) {
         },
         ModuleData {
             id: *M2,
-            assignee: Some(1),
-            document: DocumentData {
-                title: "Second test".into(),
-                language: "pl".into(),
-            },
-        },
-    ]);
-}
-
-#[adaptarr::test(session(r#for = "user@adaptarr.test"))]
-fn api_list_of_modules_assigned_to_user(mut client: Client) {
-    let data = client.get("/api/v1/modules/assigned/to/1")
-        .send()
-        .assert_success()
-        .json::<Vec<ModuleData>>();
-
-    assert_eq!(data, [
-        ModuleData {
-            id: *M2,
-            assignee: Some(1),
             document: DocumentData {
                 title: "Second test".into(),
                 language: "pl".into(),
@@ -218,7 +240,6 @@ fn api_get_specific_module(mut client: Client) {
 
     assert_eq!(data, ModuleData {
         id: *M1,
-        assignee: Some(2),
         document: DocumentData {
             title: "First test".into(),
             language: "en".into(),
@@ -438,6 +459,25 @@ struct DraftData<'a> {
     module: Uuid,
     #[serde(flatten)]
     document: DocumentData<'a>,
+    #[serde(default)]
+    permissions: Vec<SlotPermission>,
+    #[serde(default)]
+    step: Option<StepData<'a>>,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+struct StepData<'a> {
+    id: i32,
+    process: [i32; 2],
+    name: Cow<'a, str>,
+    links: Vec<LinkData<'a>>,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+struct LinkData<'a> {
+    name: Cow<'a, str>,
+    to: i32,
+    slot: i32,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -454,6 +494,19 @@ fn api_list_of_drafts(mut client: Client) {
                 title: "Second test".into(),
                 language: "pl".into(),
             },
+            permissions: vec![SlotPermission::Edit],
+            step: Some(StepData {
+                id: 1,
+                process: [1, 1],
+                name: "Start".into(),
+                links: vec![
+                    LinkData {
+                        name: "Link".into(),
+                        to: 2,
+                        slot: 1,
+                    },
+                ],
+            }),
         },
     ]);
 }
@@ -471,6 +524,19 @@ fn api_get_specific_draft(mut client: Client) {
             title: "Second test".into(),
             language: "pl".into(),
         },
+        permissions: vec![SlotPermission::Edit],
+        step: Some(StepData {
+            id: 1,
+            process: [1, 1],
+            name: "Start".into(),
+            links: vec![
+                LinkData {
+                    name: "Link".into(),
+                    to: 2,
+                    slot: 1,
+                },
+            ],
+        }),
     });
 }
 
@@ -537,7 +603,6 @@ fn create_empty_module(mut client: Client) {
 
     assert_eq!(data, ModuleData {
         id: data.id,
-        assignee: None,
         document: DocumentData {
             title: "New module".into(),
             language: "en".into(),
@@ -559,7 +624,6 @@ fn creating_module_from_zip_requires_permission() {
 
 #[derive(Debug, Serialize)]
 pub struct ModuleUpdate {
-    pub assignee: Option<i32>,
 }
 
 // TODO: Module deletion is not yet implemented.
@@ -581,48 +645,6 @@ fn delete_module(mut client: Client) {
 fn deleting_module_requires_permission(mut client: Client) {
     client.delete("/api/v1/modules/11111111-1111-1111-1111-111111111111")
         .send()
-        .assert_error(StatusCode::FORBIDDEN, "user:insufficient-permissions");
-}
-
-#[adaptarr::test(session(r#for = "administrator@adaptarr.test", elevated = true))]
-fn assign_user_to_module(db: Pooled, mut client: Client) -> Fallible<()> {
-    client.put("/api/v1/modules/11111111-1111-1111-1111-111111111111")
-        .json(ModuleUpdate {
-            assignee: Some(1234567890),
-        })
-        .assert_error(StatusCode::BAD_REQUEST, "user:not-found");
-
-    let user = User::by_email(&*db, "user@adaptarr.test")?;
-
-    client.put("/api/v1/modules/11111111-1111-1111-1111-111111111111")
-        .json(ModuleUpdate {
-            assignee: Some(user.id),
-        })
-        .assert_success();
-
-    let module = Module::by_id(&*db, *M1)?.into_db().0;
-
-    assert_eq!(module.assignee, Some(user.id));
-
-    client.put("/api/v1/modules/11111111-1111-1111-1111-111111111111")
-        .json(ModuleUpdate {
-            assignee: None,
-        })
-        .assert_success();
-
-    let module = Module::by_id(&*db, *M1)?.into_db().0;
-
-    assert_eq!(module.assignee, None);
-
-    Ok(())
-}
-
-#[adaptarr::test(session(r#for = "user@adaptarr.test"))]
-fn assigning_user_to_module_requires_permission(mut client: Client) {
-    client.put("/api/v1/modules/11111111-1111-1111-1111-111111111111")
-        .json(ModuleUpdate {
-            assignee: Some(1234567890),
-        })
         .assert_error(StatusCode::FORBIDDEN, "user:insufficient-permissions");
 }
 
@@ -862,10 +884,19 @@ fn delete_book_part(mut client: Client) {
     });
 }
 
-#[adaptarr::test(session(r#for = "administrator@adaptarr.test"))]
+#[derive(Serialize)]
+struct BeginProcess {
+    process: i32,
+    slots: Vec<(i32, i32)>,
+}
+
+#[adaptarr::test(session(r#for = "administrator@adaptarr.test", elevated = true))]
 fn create_draft_of_module(mut client: Client) {
     let data = client.post("/api/v1/modules/11111111-1111-1111-1111-111111111111")
-        .send()
+        .json(BeginProcess {
+            process: 1,
+            slots: vec![(1, 2)],
+        })
         .assert_success()
         .json::<DraftData>();
 
@@ -875,20 +906,39 @@ fn create_draft_of_module(mut client: Client) {
             title: "First test".into(),
             language: "en".into(),
         },
+        permissions: vec![SlotPermission::Edit],
+        step: Some(StepData {
+            id: 1,
+            process: [1, 1],
+            name: "Start".into(),
+            links: vec![
+                LinkData {
+                    name: "Link".into(),
+                    to: 2,
+                    slot: 1,
+                },
+            ],
+        }),
     });
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
-fn cannot_create_draft_of_module_if_not_assigned(mut client: Client) {
+fn cannot_create_draft_of_module_without_permissions(mut client: Client) {
     client.post("/api/v1/modules/11111111-1111-1111-1111-111111111111")
-        .send()
-        .assert_error(StatusCode::BAD_REQUEST, "draft:create:not-assigned");
+        .json(BeginProcess {
+            process: 1,
+            slots: vec![],
+        })
+        .assert_error(StatusCode::BAD_REQUEST, "user:insufficient-permissions");
 }
 
-#[adaptarr::test(session(r#for = "user@adaptarr.test"))]
+#[adaptarr::test(session(r#for = "administrator@adaptarr.test", elevated = true))]
 fn cannot_create_second_draft_of_module(mut client: Client) {
     client.post("/api/v1/modules/22222222-2222-2222-2222-222222222222")
-        .send()
+        .json(BeginProcess {
+            process: 1,
+            slots: vec![],
+        })
         .assert_error(StatusCode::BAD_REQUEST, "draft:create:exists");
 }
 
@@ -912,18 +962,26 @@ fn update_draft_metadata(mut client: Client) {
             title: "New title".into(),
             language: "pl".into(),
         },
+        permissions: vec![SlotPermission::Edit],
+        step: Some(StepData {
+            id: 1,
+            process: [1, 1],
+            name: "Start".into(),
+            links: vec![
+                LinkData {
+                    name: "Link".into(),
+                    to: 2,
+                    slot: 1,
+                },
+            ],
+        }),
     });
 }
 
-#[adaptarr::test(session(r#for = "user@adaptarr.test"))]
-fn delete_draft(mut client: Client) {
-    client.delete("/api/v1/drafts/22222222-2222-2222-2222-222222222222")
-        .send()
-        .assert_success();
-
-    client.get("/api/v1/drafts/22222222-2222-2222-2222-222222222222")
-        .send()
-        .assert_error(StatusCode::NOT_FOUND, "draft:not-found");
+#[derive(Serialize)]
+struct AdvanceDraft {
+    target: i32,
+    slot: i32,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -936,8 +994,11 @@ fn save_draft(mut client: Client) {
         .body(b"New".as_ref())
         .assert_success();
 
-    client.post("/api/v1/drafts/22222222-2222-2222-2222-222222222222/save")
-        .send()
+    client.post("/api/v1/drafts/22222222-2222-2222-2222-222222222222/advance")
+        .json(AdvanceDraft {
+            target: 2,
+            slot: 1,
+        })
         .assert_success();
 
     let changed = client.get("/api/v1/modules/22222222-2222-2222-2222-222222222222/files/index.cnxml")

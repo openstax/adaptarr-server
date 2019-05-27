@@ -13,15 +13,26 @@ use crate::{
         Connection,
         functions::duplicate_document,
         models as db,
-        schema::{book_parts, documents, drafts, modules, xref_targets},
+        schema::{
+            book_parts,
+            documents,
+            draft_slots,
+            drafts,
+            edit_process_steps,
+            edit_process_versions,
+            modules,
+            xref_targets,
+        },
     },
+    processing::TargetProcessor,
 };
 use super::{
     Draft,
     File,
+    User,
     XrefTarget,
     document::{Document, PublicData as DocumentData},
-    user::{User, FindUserError},
+    editing::{Version, Slot},
 };
 
 /// A module is a version of Document that can be part of a Book.
@@ -35,12 +46,24 @@ pub struct Module {
 #[derive(Debug, Serialize)]
 pub struct PublicData {
     pub id: Uuid,
-    pub assignee: Option<i32>,
     #[serde(flatten)]
     pub document: DocumentData,
+    pub process: Option<ProcessStatus>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProcessStatus {
+    pub process: i32,
+    pub version: i32,
+    pub step: i32,
 }
 
 impl Module {
+    /// Construct `Module` from its database counterpart.
+    pub(crate) fn from_db(data: db::Module, document: Document) -> Self {
+        Module { data, document }
+    }
+
     /// Get all modules.
     ///
     /// *Warning*: this function is temporary and will be removed once we figure
@@ -51,26 +74,10 @@ impl Module {
             .get_results::<(db::Module, db::Document)>(dbconn)
             .map(|v| {
                 v.into_iter()
-                    .map(|(data, document)| Module {
+                    .map(|(data, document)| Module::from_db(
                         data,
-                        document: Document::from_db(document),
-                    })
-                    .collect()
-            })
-    }
-
-    /// Get all modules assigned to a user.
-    pub fn assigned_to(dbconn: &Connection, user: i32) -> Result<Vec<Module>, DbError> {
-        modules::table
-            .filter(modules::assignee.eq(user))
-            .inner_join(documents::table)
-            .get_results::<(db::Module, db::Document)>(dbconn)
-            .map(|v| {
-                v.into_iter()
-                    .map(|(data, document)| Module {
-                        data,
-                        document: Document::from_db(document),
-                    })
+                        Document::from_db(document),
+                    ))
                     .collect()
             })
     }
@@ -83,10 +90,10 @@ impl Module {
             .get_result::<(db::Module, db::Document)>(dbconn)
             .optional()?
             .ok_or(FindModuleError::NotFound)
-            .map(|(data, document)| Module {
+            .map(|(data, document)| Module::from_db(
                 data,
-                document: Document::from_db(document),
-            })
+                Document::from_db(document),
+            ))
     }
 
     /// Create a new module.
@@ -101,19 +108,22 @@ impl Module {
         I: IntoIterator<Item = (N, File)>,
         N: AsRef<str>,
     {
-        dbconn.transaction(|| {
+        let module = dbconn.transaction::<_, DbError, _>(|| {
             let document = Document::create(dbconn, title, language, index, files)?;
 
             let data = diesel::insert_into(modules::table)
                 .values(&db::Module {
                     id: Uuid::new_v4(),
                     document: document.id,
-                    assignee: None,
                 })
                 .get_result::<db::Module>(dbconn)?;
 
-            Ok(Module { data, document })
-        })
+            Ok(Module::from_db(data, document))
+        })?;
+
+        TargetProcessor::process(module.document.clone());
+
+        Ok(module)
     }
 
     /// Unpack database data.
@@ -130,12 +140,27 @@ impl Module {
     }
 
     /// Get the public portion of this module's data.
-    pub fn get_public(&self) -> PublicData {
-        PublicData {
+    pub fn get_public(&self, dbconn: &Connection) -> Result<PublicData, DbError> {
+        let process = drafts::table
+            .inner_join(edit_process_steps::table
+                .inner_join(edit_process_versions::table
+                    .on(edit_process_steps::process.eq(edit_process_versions::id))))
+            .filter(drafts::module.eq(self.data.id))
+            .get_result::<(
+                db::Draft, (db::EditProcessStep, db::EditProcessVersion),
+            )>(dbconn)
+            .optional()?
+            .map(|(_, (step, version))| ProcessStatus {
+                process: version.process,
+                version: version.id,
+                step: step.id,
+            });
+
+        Ok(PublicData {
             id: self.data.id,
-            assignee: self.data.assignee,
             document: self.document.get_public(),
-        }
+            process,
+        })
     }
 
     /// Query list of books containing this module.
@@ -146,22 +171,6 @@ impl Module {
             .into_iter()
             .map(|part| part.book)
             .collect())
-    }
-
-    /// Get the user assigned to this module.
-    pub fn get_assignee(&self, dbconn: &Connection)
-    -> Result<Option<User>, DbError> {
-        if let Some(id) = self.data.assignee {
-            User::by_id(dbconn, id)
-                .map(Some)
-                .map_err(|err| match err {
-                    FindUserError::Internal(err) => err,
-                    FindUserError::NotFound =>panic!(
-                        "database inconsistency: assigned user doesn't exist"),
-                })
-        } else {
-            Ok(None)
-        }
     }
 
     /// Get list of all possible cross-reference targets within this module.
@@ -178,26 +187,50 @@ impl Module {
             .map(|v| v.into_iter().map(XrefTarget::from_db).collect())
     }
 
-    /// Create a new draft of this module for a given user.
-    pub fn create_draft(&self, dbconn: &Connection, user: i32)
-    -> Result<Draft, CreateDraftError> {
-        if self.data.assignee != Some(user) {
-            return Err(CreateDraftError::UserNotAssigned);
-        }
+    /// Begin a new editing process for this module.
+    pub fn begin_process<S>(
+        &self,
+        dbconn: &Connection,
+        version: &Version,
+        slots: S,
+    ) -> Result<Draft, BeginProcessError>
+    where
+        S: IntoIterator<Item = (Slot, User)>,
+    {
+        dbconn.transaction(|| {
+            let slots = slots.into_iter()
+                .map(|(slot, user)| {
+                    if slot.process != version.id {
+                        Err(BeginProcessError::BadSlot(
+                            slot.id, version.process().id))
+                    } else {
+                        Ok(db::DraftSlot {
+                            draft: self.data.id,
+                            slot: slot.id,
+                            user: user.id
+                        })
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
 
-        let draft = diesel::insert_into(drafts::table)
-            .values((
-                drafts::module.eq(self.data.id),
-                drafts::user.eq(user),
-                drafts::document.eq(duplicate_document(self.document.id)),
-            ))
-            .get_result::<db::Draft>(dbconn)?;
+            let draft = diesel::insert_into(drafts::table)
+                .values((
+                    drafts::module.eq(self.data.id),
+                    drafts::document.eq(duplicate_document(self.document.id)),
+                    drafts::step.eq(version.start),
+                ))
+                .get_result::<db::Draft>(dbconn)?;
 
-        let document = documents::table
-            .filter(documents::id.eq(draft.document))
-            .get_result::<db::Document>(dbconn)?;
+            diesel::insert_into(draft_slots::table)
+                .values(slots)
+                .execute(dbconn)?;
 
-        Ok(Draft::from_db(draft, Document::from_db(document)))
+            let document = documents::table
+                .filter(documents::id.eq(draft.document))
+                .get_result::<db::Document>(dbconn)?;
+
+            Ok(Draft::from_db(draft, Document::from_db(document)))
+        })
     }
 
     /// Replace contents of this module.
@@ -230,15 +263,10 @@ impl Module {
             self.document = document;
 
             Ok(())
-        })
-    }
+        })?;
 
-    /// Change user assigned to this module.
-    pub fn set_assignee(&mut self, dbconn: &Connection, user: Option<&User>)
-    -> Result<(), DbError> {
-        self.data = diesel::update(&self.data)
-            .set(modules::assignee.eq(user.map(|u| u.id)))
-            .get_result(dbconn)?;
+        TargetProcessor::process(self.document.clone());
+
         Ok(())
     }
 }
@@ -268,26 +296,26 @@ impl_from! { for FindModuleError ;
 }
 
 #[derive(ApiError, Debug, Fail)]
-pub enum CreateDraftError {
+pub enum BeginProcessError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
     Database(#[cause] DbError),
-    /// Tried to create draft for an user other than the one assigned.
-    #[fail(display = "Only assigned user can create a draft")]
-    #[api(code = "draft:create:not-assigned", status = "BAD_REQUEST")]
-    UserNotAssigned,
-    /// User already has a draft of this module.
-    #[fail(display = "User already has a draft")]
+    /// There is already a draft of this module.
+    #[fail(display = "There is already a draft of this module")]
     #[api(code = "draft:create:exists", status = "BAD_REQUEST")]
     Exists,
+    /// One of the slots specified was not a part of the process specified.
+    #[fail(display = "Slot {} is not part of process {}", _0, _1)]
+    #[api(code = "draft:create:bad-slot", status = "BAD_REQUEST")]
+    BadSlot(i32, i32),
 }
 
-impl_from! { for CreateDraftError ;
+impl_from! { for BeginProcessError ;
     DbError => |e| match e {
         DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) =>
-            CreateDraftError::Exists,
-        _ => CreateDraftError::Database(e),
+            BeginProcessError::Exists,
+        _ => BeginProcessError::Database(e),
     }
 }
 

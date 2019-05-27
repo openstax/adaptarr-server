@@ -25,14 +25,14 @@ pub enum Command {
     Add(AddOpts),
 }
 
-pub fn main(cfg: Config, opts: Opts) -> Result<()> {
+pub fn main(cfg: &Config, opts: Opts) -> Result<()> {
     match opts.command {
         Command::List => list(cfg),
         Command::Add(opts) => add_role(cfg, opts),
     }
 }
 
-fn list(cfg: Config) -> Result<()> {
+fn list(cfg: &Config) -> Result<()> {
     let db = db::connect(&cfg)?;
     let roles = Role::all(&db)?;
 
@@ -54,7 +54,7 @@ pub struct AddOpts {
     permissions: Option<PermissionBits>,
 }
 
-fn add_role(cfg: Config, opts: AddOpts) -> Result<()> {
+fn add_role(cfg: &Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let permissions = opts.permissions.unwrap_or_else(PermissionBits::empty);
     let role = Role::create(&db, &opts.name, permissions)?;

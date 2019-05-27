@@ -1,4 +1,14 @@
-use actix::{Actor, Addr, Handler, Message, SyncArbiter, SyncContext};
+use actix::{
+    Actor,
+    Addr,
+    Context,
+    Handler,
+    Message,
+    Supervised,
+    SyncArbiter,
+    SyncContext,
+    SystemService,
+};
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -245,20 +255,63 @@ impl Message for ProcessDocument {
 /// Actix actor handling generation of cross-reference target lists for newly
 /// uploaded documents.
 pub struct TargetProcessor {
-    pool: Pool,
+    processor: Addr<RealProcessor>,
 }
 
 impl TargetProcessor {
     pub fn new(pool: Pool) -> TargetProcessor {
         TargetProcessor {
-            pool,
+            processor: SyncArbiter::start(1, move || RealProcessor {
+                pool: pool.clone(),
+            }),
         }
     }
 
-    pub fn start(pool: Pool) -> Addr<TargetProcessor> {
-        SyncArbiter::start(1, move || TargetProcessor::new(pool.clone()))
-    }
+    /// Try to send a document for processing
+    ///
+    /// Errors will be logged, but otherwise ignored.
+    pub fn process(document: db::Document) {
+        let processor = TargetProcessor::from_registry();
+        let id = document.id;
+        let message = ProcessDocument { document };
 
+        if let Err(err) = processor.try_send(message) {
+            error!("Could not send document {} for processing: {}", id, err);
+        }
+    }
+}
+
+impl Default for TargetProcessor {
+    fn default() -> TargetProcessor {
+        let pool = crate::db::pool().expect("Cannot obtain DB pool");
+        TargetProcessor::new(pool)
+    }
+}
+
+impl Actor for TargetProcessor {
+    type Context = Context<Self>;
+}
+
+impl Handler<ProcessDocument> for TargetProcessor {
+    type Result = ();
+
+    fn handle(&mut self, msg: ProcessDocument, _: &mut Self::Context) {
+        self.processor.do_send(msg);
+    }
+}
+
+impl Supervised for TargetProcessor {
+}
+
+impl SystemService for TargetProcessor {
+}
+
+/// Synchronous actor handling processing of documents.
+struct RealProcessor {
+    pool: Pool,
+}
+
+impl RealProcessor {
     fn process(&mut self, document: &db::Document) -> Result<(), Error> {
         let db = self.pool.get()?;
         process_document(&*db, document)?;
@@ -272,7 +325,7 @@ impl TargetProcessor {
     }
 }
 
-impl Actor for TargetProcessor {
+impl Actor for RealProcessor {
     type Context = SyncContext<Self>;
 
     fn started(&mut self, _: &mut Self::Context) {
@@ -282,7 +335,7 @@ impl Actor for TargetProcessor {
     }
 }
 
-impl Handler<ProcessDocument> for TargetProcessor {
+impl Handler<ProcessDocument> for RealProcessor {
     type Result = ();
 
     fn handle(&mut self, msg: ProcessDocument, _: &mut Self::Context) {

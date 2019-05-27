@@ -188,8 +188,6 @@ pub struct Module {
     pub id: Uuid,
     /// Document which is the current content of this module.
     pub document: i32,
-    /// User assigned to this module.
-    pub assignee: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable, Queryable)]
@@ -256,14 +254,26 @@ pub struct NewBookPartLocation {
 }
 
 #[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
-#[primary_key(module, user)]
+#[primary_key(module)]
 pub struct Draft {
     /// Module of which this is a draft.
     pub module: Uuid,
-    /// User owning this draft.
-    pub user: i32,
     /// Contents of this draft.
     pub document: i32,
+    /// Editing step this draft is currently in.
+    pub step: i32,
+}
+
+/// Describes users assigned to particular slots in a draft.
+#[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(draft, slot)]
+pub struct DraftSlot {
+    /// Draft being described.
+    pub draft: Uuid,
+    /// Slot being described.
+    pub slot: i32,
+    /// User assigned to this slot in this draft.
+    pub user: i32,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]
@@ -345,4 +355,133 @@ pub struct Role {
 pub struct NewRole<'s> {
     pub name: &'s str,
     pub permissions: i32,
+}
+
+/// Root model of an editing process.
+///
+/// Editing processes are versioned, the actual implementation of an editing
+/// process is described by the [`EditProcessVersion`] model. The actual version
+/// is the newest [`EditProcessVersion`], according to its `version` field.
+#[derive(Clone, Debug, Identifiable, Queryable)]
+#[table_name = "edit_processes"]
+pub struct EditProcess {
+    /// Process's ID.
+    pub id: i32,
+    /// Process's name.
+    pub name: String,
+}
+
+#[derive(AsChangeset, Clone, Debug, Insertable)]
+#[table_name = "edit_processes"]
+pub struct NewEditProcess<'a> {
+    pub name: &'a str,
+}
+
+/// Actual implementation of an editing process.
+#[derive(Associations, Clone, Debug, Identifiable, Queryable)]
+#[belongs_to(EditProcess, foreign_key = "process")]
+pub struct EditProcessVersion {
+    /// Version's ID.
+    pub id: i32,
+    /// Process's ID.
+    pub process: i32,
+    /// Date of last modification.
+    pub version: NaiveDateTime,
+    /// Initial step.
+    pub start: i32,
+}
+
+#[derive(AsChangeset, Clone, Copy, Insertable)]
+#[table_name = "edit_process_versions"]
+pub struct NewEditProcessVersion {
+    pub process: i32,
+    pub version: NaiveDateTime,
+    pub start: i32,
+}
+
+/// A “seat” occupied per document by one of the users involved in editing that
+/// document.
+#[derive(Associations, Clone, Debug, Eq, Identifiable, PartialEq, Queryable)]
+#[belongs_to(EditProcessVersion, foreign_key = "process")]
+pub struct EditProcessSlot {
+    /// Slot's ID.
+    pub id: i32,
+    /// Parent process version's ID.
+    pub process: i32,
+    /// Slot's name.
+    pub name: String,
+    /// When set, role to which this slot is limited.
+    pub role: Option<i32>,
+    /// Whether the system should automatically fill this slot with a user.
+    pub autofill: bool,
+}
+
+#[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
+#[table_name = "edit_process_slots"]
+pub struct NewEditProcessSlot<'a> {
+    pub process: i32,
+    pub name: &'a str,
+    pub role: Option<i32>,
+    pub autofill: bool,
+}
+
+/// A single editing step.
+#[derive(Associations, Clone, Debug, Identifiable, Queryable)]
+#[belongs_to(EditProcessVersion, foreign_key = "process")]
+pub struct EditProcessStep {
+    /// Step's ID.
+    pub id: i32,
+    /// Parent process version's ID.
+    pub process: i32,
+    /// Step's name.
+    ///
+    /// This name is used to identify a step when editing a process, and when
+    /// displaying a module's status.
+    pub name: String,
+}
+
+#[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
+#[table_name = "edit_process_steps"]
+pub struct NewEditProcessStep<'a> {
+    pub process: i32,
+    pub name: &'a str,
+}
+
+/// List of slots assigned to a document at a given editing step.
+#[derive(Associations, Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(step, slot, permission)]
+#[belongs_to(EditProcessStep, foreign_key = "step")]
+pub struct EditProcessStepSlot {
+    /// Step's ID.
+    pub step: i32,
+    /// Slot's ID.
+    pub slot: i32,
+    /// Slot's permission.
+    pub permission: super::types::SlotPermission,
+}
+
+/// Possible transition between editing steps.
+#[derive(Clone, Debug, Identifiable, Queryable)]
+#[primary_key(from, to)]
+pub struct EditProcessLink {
+    /// Source step's ID.
+    pub from: i32,
+    /// Destination step's ID.
+    pub to: i32,
+    /// Link's name.
+    ///
+    /// This name is displayed in UI as an action changing module's current
+    /// step.
+    pub name: String,
+    /// ID of slot allowed to change modules step.
+    pub slot: i32,
+}
+
+#[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
+#[table_name = "edit_process_links"]
+pub struct NewEditProcessLink<'a> {
+    pub from: i32,
+    pub to: i32,
+    pub name: &'a str,
+    pub slot: i32,
 }

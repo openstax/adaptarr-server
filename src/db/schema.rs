@@ -36,10 +36,69 @@ table! {
 }
 
 table! {
-    drafts (module, user) {
+    drafts (module) {
         module -> Uuid,
-        user -> Int4,
         document -> Int4,
+        step -> Int4,
+    }
+}
+
+table! {
+    draft_slots (draft, slot) {
+        draft -> Uuid,
+        slot -> Int4,
+        user -> Int4,
+    }
+}
+
+table! {
+    edit_processes (id) {
+        id -> Int4,
+        name -> Varchar,
+    }
+}
+
+table! {
+    edit_process_links (from, to) {
+        from -> Int4,
+        to -> Int4,
+        name -> Varchar,
+        slot -> Int4,
+    }
+}
+
+table! {
+    edit_process_slots (id) {
+        id -> Int4,
+        process -> Int4,
+        name -> Varchar,
+        role -> Nullable<Int4>,
+        autofill -> Bool,
+    }
+}
+
+table! {
+    edit_process_steps (id) {
+        id -> Int4,
+        process -> Int4,
+        name -> Varchar,
+    }
+}
+
+table! {
+    edit_process_step_slots (step, slot, permission) {
+        step -> Int4,
+        slot -> Int4,
+        permission -> crate::db::types::Slot_permission,
+    }
+}
+
+table! {
+    edit_process_versions (id) {
+        id -> Int4,
+        process -> Int4,
+        version -> Timestamp,
+        start -> Int4,
     }
 }
 
@@ -75,7 +134,6 @@ table! {
     modules (id) {
         id -> Uuid,
         document -> Int4,
-        assignee -> Nullable<Int4>,
     }
 }
 
@@ -145,14 +203,22 @@ joinable!(book_parts -> modules (module));
 joinable!(document_files -> documents (document));
 joinable!(document_files -> files (file));
 joinable!(documents -> files (index));
+joinable!(draft_slots -> drafts (draft));
+joinable!(draft_slots -> edit_process_slots (slot));
+joinable!(draft_slots -> users (user));
 joinable!(drafts -> documents (document));
+joinable!(drafts -> edit_process_steps (step));
 joinable!(drafts -> modules (module));
-joinable!(drafts -> users (user));
+joinable!(edit_process_links -> edit_process_slots (slot));
+joinable!(edit_process_slots -> edit_process_versions (process));
+joinable!(edit_process_slots -> roles (role));
+joinable!(edit_process_step_slots -> edit_process_slots (slot));
+joinable!(edit_process_step_slots -> edit_process_steps (step));
+joinable!(edit_process_versions -> edit_processes (process));
 joinable!(events -> users (user));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
 joinable!(modules -> documents (document));
-joinable!(modules -> users (assignee));
 joinable!(password_reset_tokens -> users (user));
 joinable!(sessions -> users (user));
 joinable!(users -> roles (role));
@@ -164,6 +230,13 @@ allow_tables_to_appear_in_same_query!(
     document_files,
     documents,
     drafts,
+    draft_slots,
+    edit_processes,
+    edit_process_links,
+    edit_process_slots,
+    edit_process_steps,
+    edit_process_step_slots,
+    edit_process_versions,
     events,
     files,
     invites,

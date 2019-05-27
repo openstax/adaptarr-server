@@ -1,0 +1,13 @@
+diff --git a/src/db/schema.rs b/src/db/schema.rs
+index f42d324..ff74f81 100644
+--- a/src/db/schema.rs
++++ b/src/db/schema.rs
+@@ -81,7 +81,7 @@ table! {
+     edit_process_step_slots (step, slot, permission) {
+         step -> Int4,
+         slot -> Int4,
+-        permission -> Slot_permission,
++        permission -> crate::db::types::Slot_permission,
+     }
+ }
+ 

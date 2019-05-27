@@ -14,7 +14,6 @@ use super::{
     i18n::I18n,
     import::Importer,
     mail::Mailer,
-    processing::TargetProcessor,
 };
 
 pub use self::error::{ApiError, Error};
@@ -28,13 +27,14 @@ pub mod error;
 pub mod events;
 pub mod modules;
 pub mod pages;
+pub mod process;
 pub mod roles;
 pub mod session;
 pub mod users;
 pub mod util;
 
 /// Start an API server.
-pub fn start(cfg: Config) -> Result<()> {
+pub fn start(cfg: &Config) -> Result<()> {
     let system = System::new("adaptarr");
     let state = configure(cfg.clone())?;
     let server = server::new(move || vec![
@@ -71,14 +71,11 @@ pub struct State {
     pub i18n: I18n<'static>,
     /// ZIP importer.
     pub importer: Addr<Importer>,
-    /// Cross-reference processing service.
-    pub xref_processor: Addr<TargetProcessor>,
 }
 
 pub fn configure(cfg: Config) -> Result<State> {
     let i18n = I18n::load()?;
-    let db = db::pool(&cfg)?;
-    let xref_processor = TargetProcessor::start(db.clone());
+    let db = db::pool()?;
 
     Ok(State {
         config: cfg.clone(),
@@ -86,9 +83,7 @@ pub fn configure(cfg: Config) -> Result<State> {
         mailer: Mailer::from_config(cfg.mail.clone())?,
         events: event_manager::start(db.clone()),
         i18n,
-        importer: Importer::start(
-            db.clone(), cfg.storage.clone(), xref_processor.clone()),
-        xref_processor,
+        importer: Importer::start(db.clone(), cfg.storage.clone()),
     })
 }
 
@@ -108,6 +103,7 @@ pub fn new_app(state: State) -> App<State> {
         .configure(drafts::routes)
         .configure(events::routes)
         .configure(modules::routes)
+        .configure(process::routes)
         .configure(roles::routes)
         .configure(users::routes)
 }

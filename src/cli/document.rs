@@ -49,7 +49,7 @@ pub enum Command {
     New(NewOpts),
 }
 
-pub fn main(cfg: Config, opts: Opts) -> Result<()> {
+pub fn main(cfg: &Config, opts: Opts) -> Result<()> {
     if opts.document.is_none() && opts.command.is_none() {
         Opts::clap().print_help()?;
         return Ok(());
@@ -68,7 +68,7 @@ pub fn main(cfg: Config, opts: Opts) -> Result<()> {
     }
 }
 
-fn inspect(cfg: Config, opts: &Opts) -> Result<()> {
+fn inspect(cfg: &Config, opts: &Opts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let module = opts.document(&db)?;
 
@@ -76,11 +76,7 @@ fn inspect(cfg: Config, opts: &Opts) -> Result<()> {
     println!("Title:    {}", module.title);
     println!("Language: {}", module.language);
 
-    if let Some(user) = module.get_assignee(&db)? {
-        println!("Assignee: {} ({})", user.name, user.id);
-    } else {
-        println!("Assignee: none");
-    }
+    // TODO: display process
 
     println!("\nFiles:");
 
@@ -94,7 +90,7 @@ fn inspect(cfg: Config, opts: &Opts) -> Result<()> {
     Ok(())
 }
 
-fn list(cfg: Config) -> Result<()> {
+fn list(cfg: &Config) -> Result<()> {
     let db = db::connect(&cfg)?;
     let modules = Module::all(&db)?;
 
@@ -107,7 +103,7 @@ fn list(cfg: Config) -> Result<()> {
     Ok(())
 }
 
-fn versions(cfg: Config, opts: &Opts) -> Result<()> {
+fn versions(cfg: &Config, opts: &Opts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let document = opts.document_id()?;
 
@@ -150,7 +146,7 @@ pub struct FileOpts {
     name: String,
 }
 
-fn file(cfg: Config, opts: &Opts, file: &FileOpts) -> Result<()> {
+fn file(cfg: &Config, opts: &Opts, file: &FileOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let module = opts.document(&db)?;
     let file = module.get_file(&db, &file.name)?;
@@ -169,7 +165,7 @@ pub struct CatOpts {
     name: String,
 }
 
-fn cat(cfg: Config, opts: &Opts, cat: &CatOpts) -> Result<()> {
+fn cat(cfg: &Config, opts: &Opts, cat: &CatOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let module = opts.document(&db)?;
     let file = module.get_file(&db, &cat.name)?;
@@ -189,7 +185,7 @@ pub struct NewOpts {
     language: LanguageTag,
 }
 
-fn new(cfg: Config, opts: &Opts, new: &NewOpts) -> Result<()> {
+fn new(cfg: &Config, opts: &Opts, new: &NewOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
 
     if let Some(id) = opts.document {

@@ -3,11 +3,13 @@ use failure::{Fail, err_msg};
 use r2d2_diesel::ConnectionManager;
 use std::env;
 
+use crate::utils::SingleInit;
 use super::Config;
 
 pub mod functions;
 pub mod models;
 pub mod schema;
+pub mod types;
 
 pub type Connection = PgConnection;
 
@@ -48,22 +50,30 @@ pub fn connect(cfg: &Config) -> crate::Result<Connection> {
     Ok(conn)
 }
 
+static POOL: SingleInit<Pool> = SingleInit::uninit();
+
 /// Create a connection pool for the database.
-pub fn pool(cfg: &Config) -> crate::Result<Pool> {
-    let url = database_url(cfg)?;
-    let manager = ConnectionManager::new(url);
-    let pool = Pool::new(manager)?;
+///
+/// Note that this function will only ever create a single pool. If it has
+/// succeeded once, every call after that will return the same pool.
+pub fn pool() -> crate::Result<Pool> {
+    POOL.get_or_try_init(|| {
+        let cfg = crate::config::load()?;
+        let url = database_url(cfg)?;
+        let manager = ConnectionManager::new(url);
+        let pool = Pool::new(manager)?;
 
-    // Try to connect to database to detect errors early.
-    let conn = pool.get()?;
+        // Try to connect to database to detect errors early.
+        let conn = pool.get()?;
 
-    // Run migrations in production build.
-    if cfg!(not(debug_assertions)) {
-        embedded_migrations::run_with_output(&*conn, &mut ::std::io::stderr())
-            .map_err(|_| err_msg("Migrations failed"))?;
-    }
+        // Run migrations in production build.
+        if cfg!(not(debug_assertions)) {
+            embedded_migrations::run_with_output(&*conn, &mut ::std::io::stderr())
+                .map_err(|_| err_msg("Migrations failed"))?;
+        }
 
-    Ok(pool)
+        Ok(pool)
+    }).map(Clone::clone)
 }
 
 // Embed migrations when building for production.

@@ -76,7 +76,6 @@ impl Client {
             events: Mocker::new().addr(),
             i18n: I18n::load().unwrap(),
             importer: Mocker::new().addr(),
-            xref_processor: Mocker::new().addr(),
         };
 
         let server = TestServer::with_factory(move || vec![

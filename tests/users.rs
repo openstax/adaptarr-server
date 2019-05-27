@@ -24,7 +24,7 @@ fn setup_db(db: &Connection) -> Fallible<()> {
     Role::create(
         db,
         "Second Role",
-        PermissionBits::EDIT_USER_PERMISSIONS | PermissionBits::ASSIGN_MODULE,
+        PermissionBits::EDIT_USER_PERMISSIONS | PermissionBits::MANAGE_PROCESS,
     )?;
 
     User::create(
@@ -378,7 +378,7 @@ fn api_list_of_roles_with_permissions(mut client: Client) {
             id: 2,
             name: "Second Role".into(),
             permissions: Some(PermissionBits::EDIT_USER_PERMISSIONS
-                | PermissionBits::ASSIGN_MODULE),
+                | PermissionBits::MANAGE_PROCESS),
         },
     ]);
 }
@@ -408,7 +408,7 @@ fn api_get_specific_role_with_permissions(mut client: Client) {
         id: 2,
         name: "Second Role".into(),
         permissions: Some(PermissionBits::EDIT_USER_PERMISSIONS
-            | PermissionBits::ASSIGN_MODULE),
+            | PermissionBits::MANAGE_PROCESS),
     });
 }
 
@@ -480,7 +480,7 @@ fn update_role(mut client: Client) {
         id: 2,
         name: "Renamed".into(),
         permissions: Some(PermissionBits::EDIT_USER_PERMISSIONS
-            | PermissionBits::ASSIGN_MODULE),
+            | PermissionBits::MANAGE_PROCESS),
     });
 
     let data = client.put("/api/v1/roles/2")
@@ -529,7 +529,7 @@ fn delete_role(mut client: Client) {
             id: 2,
             name: "Second Role".into(),
             permissions: Some(PermissionBits::EDIT_USER_PERMISSIONS
-                | PermissionBits::ASSIGN_MODULE),
+                | PermissionBits::MANAGE_PROCESS),
         }
     ]);
 }

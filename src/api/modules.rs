@@ -16,17 +16,17 @@ use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 use crate::{
-    events::{self, EventManagerAddrExt},
     models::{
         File,
         User,
         draft::PublicData as DraftData,
+        editing::Process,
         module::{Module, PublicData as ModuleData},
         xref_target::PublicData as XrefTargetData,
     },
     import::{ImportModule, ReplaceModule},
     multipart::Multipart,
-    permissions::{AssignModule, EditModule},
+    permissions::{EditModule, ManageProcess},
 };
 use super::{
     Error,
@@ -34,7 +34,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
-    users::UserId,
+    util::FormOrJson,
 };
 
 /// Configure routes.
@@ -48,13 +48,9 @@ pub fn routes(app: App<State>) -> App<State> {
             r.post()
                 .api_with_async(create_module_from_zip);
         })
-        .api_route("/modules/assigned/to/{user}", Method::GET, list_assigned)
         .resource("/modules/{id}", |r| {
             r.get().api_with(get_module);
-            r.post().api_with(crete_draft);
-            r.put()
-                .filter(pred::Header("Content-Type", "application/json"))
-                .api_with(update_module);
+            r.post().api_with(begin_process);
             r.put().api_with_async(replace_module);
             r.delete().f(delete_module);
         })
@@ -89,29 +85,12 @@ pub fn list_modules(
 ) -> Result<Json<Vec<ModuleData>>> {
     let db = state.db.get()?;
     let modules = Module::all(&*db)?;
-    Ok(Json(modules.into_iter()
-        .map(|module| module.get_public())
-        .collect()))
-}
 
-/// Get list of all modules assigned to a particular user.
-///
-/// ## Method
-///
-/// ```text
-/// GET /modules/assigned/to/:user
-/// ```
-pub fn list_assigned(
-    state: actix_web::State<State>,
-    session: Session,
-    user: Path<UserId>,
-) -> Result<Json<Vec<ModuleData>>, Error> {
-    let db = state.db.get()?;
-    let user = user.get_user(&*state, &session)?;
-    let modules = Module::assigned_to(&*db, user.id)?;
-    Ok(Json(modules.into_iter()
-        .map(|module| module.get_public())
-        .collect()))
+    modules.into_iter()
+        .map(|module| module.get_public(&*db))
+        .collect::<Result<_, _>>()
+        .map(Json)
+        .map_err(Into::into)
 }
 
 /// Create a new empty module.
@@ -146,7 +125,7 @@ pub fn create_module(
     let module = Module::create::<&str, _>(
         &*db, &data.title, &data.language, index, std::iter::empty())?;
 
-    Ok(Json(module.get_public()))
+    module.get_public(&*db).map(Json).map_err(Into::into)
 }
 
 pub struct NewModuleZip {
@@ -178,7 +157,11 @@ pub fn create_module_from_zip(
     state.importer.send(ImportModule { title, file })
         .from_err()
         .and_then(|r| future::result(r).from_err())
-        .map(|module| Json(module.get_public()))
+        .and_then(move |module| -> Result<_, Error> {
+            let db = state.db.get()?;
+            module.get_public(&*db).map_err(Into::into)
+        })
+        .map(Json)
 }
 
 /// Get a module by ID.
@@ -196,71 +179,49 @@ pub fn get_module(
     let db = state.db.get()?;
     let module = Module::by_id(&*db, id.into_inner())?;
 
-    Ok(Json(module.get_public()))
+    module.get_public(&*db).map(Json).map_err(Into::into)
 }
 
-/// Create a new draft of a module.
+#[derive(Deserialize)]
+pub struct BeginProcess {
+    process: i32,
+    /// Mapping from slot IDs to user IDs.
+    slots: Vec<(i32, i32)>,
+}
+
+/// Begin a new editing process for a module.
 ///
 /// ## Method
 ///
 /// ```text
 /// POST /modules/:id
 /// ```
-pub fn crete_draft(
+pub fn begin_process(
     state: actix_web::State<State>,
-    session: Session,
+    session: Session<ManageProcess>,
     id: Path<Uuid>,
+    data: FormOrJson<BeginProcess>,
 ) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
+    let data = data.into_inner();
     let module = Module::by_id(&*db, id.into_inner())?;
-    let draft = module.create_draft(&*db, session.user)?;
+    let process = Process::by_id(&*db, data.process)?;
+    let version = process.get_current(&*db)?;
 
-    Ok(Json(draft.get_public()))
+    let slots = data.slots.into_iter()
+        .map(|(slot, user)| Ok((
+            version.get_slot(&*db, slot)?,
+            User::by_id(&*db, user)?,
+        )))
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    let draft = module.begin_process(&*db, &version, slots)?;
+
+    draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ModuleUpdate {
-    #[serde(default, deserialize_with = "de_optional_null")]
-    pub assignee: Option<Option<i32>>,
-}
-
-/// Update module
-///
-/// ## Method
-///
-/// ```text
-/// PUT /modules/:id
-/// Content-Type: application/json
-/// ```
-pub fn update_module(
-    state: actix_web::State<State>,
-    session: Session<AssignModule>,
-    id: Path<Uuid>,
-    update: Json<ModuleUpdate>,
-) -> Result<HttpResponse> {
-    let db = state.db.get()?;
-    let mut module = Module::by_id(&*db, id.into_inner())?;
-
-    use diesel::Connection;
-    let dbconn = &*db;
-    dbconn.transaction::<_, Error, _>(|| {
-        if let Some(user) = update.assignee {
-            if let Some(id) = user {
-                let user = User::by_id(dbconn, id)?;
-                module.set_assignee(dbconn, Some(&user))?;
-                state.events.notify(user, events::Assigned {
-                    who: session.user,
-                    module: module.id(),
-                });
-            } else {
-                module.set_assignee(dbconn, None)?;
-            }
-        }
-
-        Ok(())
-    })?;
-
-    Ok(HttpResponse::Ok().finish())
 }
 
 /// Replace module with contents of a ZIP archive.
@@ -278,15 +239,19 @@ pub fn replace_module(
 ) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     future::result(
         state.db.get()
-            .map_err(Into::into)
-            .and_then(|db| Module::by_id(&*db, id.into_inner())
-                .map_err(Into::into)))
-        .and_then(|module| future::result(
+            .map_err(Error::from)
+            .and_then(|db| {
+                let module = Module::by_id(&*db, id.into_inner())?;
+                Ok((db, module))
+            })
+            .map_err(Error::from))
+        .and_then(|(db, module)| future::result(
             NamedTempFile::new()
-                .map(|file| (module, file))
-                .map_err(Into::into)))
-        .and_then(move |(module, file)| {
+                .map(|file| (db, module, file))
+                .map_err(Error::from)))
+        .and_then(move |(db, module, file)| {
             req.payload()
+                .map_err(Error::from)
                 .from_err()
                 .fold(file, |mut file, chunk| {
                     match file.write_all(chunk.as_ref()) {
@@ -294,14 +259,17 @@ pub fn replace_module(
                         Err(e) => future::err(e),
                     }
                 })
-                .map(|file| (module, file))
+                .map(|file| (db, module, file))
         })
-        .and_then(move |(module, file)| {
+        .and_then(move |(db, module, file)| {
             state.importer.send(ReplaceModule { module, file })
+                .map_err(Error::from)
+                .and_then(|r| future::result(r).from_err())
+                .map(|ok| (db, ok))
                 .from_err()
         })
-        .and_then(|r| future::result(r).from_err())
-        .map(|module| Json(module.get_public()))
+        .and_then(|(db, module)| module.get_public(&*db).map_err(Error::from))
+        .map(Json)
 }
 
 /// Delete a module

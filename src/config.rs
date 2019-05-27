@@ -5,9 +5,15 @@ use std::{collections::HashMap, fs, net::{SocketAddr, Ipv4Addr}};
 use toml;
 use serde::{Deserialize, de::{Deserializer, Error, Visitor, Unexpected}};
 
-pub fn load() -> crate::Result<Config> {
-    let data = fs::read("config.toml").map_err(ReadConfigurationError)?;
-    toml::from_slice(&data).map_err(|e| ConfigurationError(e).into())
+use crate::utils::SingleInit;
+
+static CONFIG: SingleInit<Config> = SingleInit::uninit();
+
+pub fn load() -> crate::Result<&'static Config> {
+    CONFIG.get_or_try_init(|| {
+        let data = fs::read("config.toml").map_err(ReadConfigurationError)?;
+        toml::from_slice(&data).map_err(|e| ConfigurationError(e).into())
+    })
 }
 
 #[derive(Clone, Debug, Deserialize)]

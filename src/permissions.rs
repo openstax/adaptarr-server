@@ -11,7 +11,10 @@ bitflags! {
     #[derive(Default)]
     pub struct PermissionBits: i32 {
         /// All currently allocated bits.
-        const ALL_BITS = 0x0000_ffff;
+        const ALL_BITS = 0x000f_ffff;
+        /// Bits which used to name permissions, but those permissions were
+        /// deprecated.
+        const DEPRECATED_BITS = 0x0000_0040;
         /// All bits allocated for user management permissions.
         const MANAGE_USERS_BITS = 0x0000_f00f;
         /// Permission holder can invite new users into the platform.
@@ -25,17 +28,22 @@ bitflags! {
         /// Permission holder can edit data for other users.
         const EDIT_USER = 0x0000_1000;
         /// All bits allocated for content management permissions.
-        const MANAGE_CONTENT_BITS = 0x0000_00f0;
+        const MANAGE_CONTENT_BITS = 0x0000_00b0;
         /// Permission holder can create, edit, and delete books.
         const EDIT_BOOK = 0x0000_0010;
         /// Permission holder can create, edit, and delete modules.
         const EDIT_MODULE = 0x0000_0020;
         /// Permission holder can assign users to modules.
-        const ASSIGN_MODULE = 0x0000_0040;
-        /// All bits allocated for role management permissions.
         const MANAGE_ROLES_BITS = 0x0000_0f00;
         /// Create, edit, and delete roles.
         const EDIT_ROLE = 0x0000_0100;
+        /// All bits allocated for editing process management permissions.
+        const MANAGE_PROCESS_BITS = 0x000f_0000;
+        /// Permission holder can create, edit, and delete editing processes.
+        const EDIT_PROCESS = 0x0001_0000;
+        /// Permission holder can begin and manage editing process for specific
+        /// modules.
+        const MANAGE_PROCESS = 0x0002_0000;
     }
 }
 
@@ -90,8 +98,9 @@ macro_rules! permission {
 permission!(InviteUser = PermissionBits::INVITE_USER);
 permission!(EditBook = PermissionBits::EDIT_BOOK);
 permission!(EditModule = PermissionBits::EDIT_MODULE);
-permission!(AssignModule = PermissionBits::ASSIGN_MODULE);
 permission!(EditRole = PermissionBits::EDIT_ROLE);
+permission!(EditProcess = PermissionBits::EDIT_PROCESS);
+permission!(ManageProcess = PermissionBits::MANAGE_PROCESS);
 
 #[derive(ApiError, Debug, Fail)]
 #[api(status = "FORBIDDEN", code = "user:insufficient-permissions")]
@@ -148,11 +157,14 @@ impl ser::Serialize for PermissionBits {
         if self.contains(PermissionBits::EDIT_MODULE) {
             seq.serialize_element("module:edit")?;
         }
-        if self.contains(PermissionBits::ASSIGN_MODULE) {
-            seq.serialize_element("module:assign")?;
-        }
         if self.contains(PermissionBits::EDIT_ROLE) {
             seq.serialize_element("role:edit")?;
+        }
+        if self.contains(PermissionBits::EDIT_PROCESS) {
+            seq.serialize_element("editing-process:edit")?;
+        }
+        if self.contains(PermissionBits::MANAGE_PROCESS) {
+            seq.serialize_element("editing-process:manage")?;
         }
         seq.end()
     }
@@ -209,8 +221,9 @@ impl<'de> de::Visitor<'de> for BitsVisitor {
             "user:edit" => PermissionBits::EDIT_USER,
             "book:edit" => PermissionBits::EDIT_BOOK,
             "module:edit" => PermissionBits::EDIT_MODULE,
-            "module:assign" => PermissionBits::ASSIGN_MODULE,
             "role:edit" => PermissionBits::EDIT_ROLE,
+            "editing-process:edit" => PermissionBits::EDIT_PROCESS,
+            "editing-process:manage" => PermissionBits::MANAGE_PROCESS,
             _ => return Err(E::invalid_value(
                 de::Unexpected::Str(v), &"a permission name")),
         })

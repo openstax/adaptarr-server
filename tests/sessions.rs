@@ -17,7 +17,7 @@ fn setup_db(db: &Connection) -> Fallible<()> {
     let role = Role::create(
         db,
         "Role",
-        PermissionBits::EDIT_MODULE | PermissionBits::ASSIGN_MODULE,
+        PermissionBits::EDIT_MODULE | PermissionBits::MANAGE_PROCESS,
     )?;
 
     User::create(
@@ -294,7 +294,7 @@ fn session_includes_role_permissions(db: Pooled, mut client: Client)
     assert_eq!(session.is_elevated, true);
     assert_eq!(
         session.permissions(),
-        (PermissionBits::EDIT_MODULE | PermissionBits::ASSIGN_MODULE
+        (PermissionBits::EDIT_MODULE | PermissionBits::MANAGE_PROCESS
             | PermissionBits::EDIT_BOOK),
     );
 
@@ -326,7 +326,7 @@ fn assigning_user_a_role_updates_session_permissions(
 
     assert_eq!(
         session.permissions(),
-        (PermissionBits::EDIT_MODULE | PermissionBits::ASSIGN_MODULE),
+        (PermissionBits::EDIT_MODULE | PermissionBits::MANAGE_PROCESS),
     );
 
     user.set_role(&*db, None)?;
