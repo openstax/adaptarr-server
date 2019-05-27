@@ -166,6 +166,9 @@ impl Slot {
                 slot: self.data.id,
                 user: user.id,
             })
+            .on_conflict((draft_slots::draft, draft_slots::slot))
+            .do_update()
+            .set(draft_slots::user.eq(user.id))
             .execute(dbcon)?;
 
         Ok(())
