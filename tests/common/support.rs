@@ -4,6 +4,7 @@
 //! macros.
 
 use failure::Error;
+use log::LevelFilter;
 use std::{any::{Any, TypeId}, collections::HashMap};
 
 use super::db::{Database, Pool, Pooled};
@@ -100,7 +101,11 @@ where
     A: Fixture,
     T: Test<A>,
 {
-    let _ = env_logger::builder().is_test(true).try_init();
+    let _ = env_logger::builder()
+        .is_test(true)
+        .filter_level(LevelFilter::Warn)
+        .filter_module("adaptarr", LevelFilter::Debug)
+        .try_init();
 
     match db.lock(|pool| {
         let mut options = TestOptions::new(&pool);
