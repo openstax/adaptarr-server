@@ -6,7 +6,7 @@ pub use crate::db::types::SlotPermission;
 
 use self::ValidateStructureError::*;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Process {
     /// Process's name.
     pub name: String,
@@ -18,10 +18,10 @@ pub struct Process {
     pub steps: Vec<Step>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Slot {
     /// Database ID of this slot.
-    #[serde(skip_deserializing)]
+    #[serde(default)]
     pub id: i32,
     pub name: String,
     #[serde(default)]
@@ -30,10 +30,10 @@ pub struct Slot {
     pub autofill: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Step {
     /// Database ID of this step.
-    #[serde(skip_deserializing)]
+    #[serde(default)]
     pub id: i32,
     pub name: String,
     #[serde(default)]
@@ -42,13 +42,13 @@ pub struct Step {
     pub links: Vec<Link>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct StepSlot {
     pub slot: usize,
     pub permission: SlotPermission,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Link {
     pub name: String,
     pub to: usize,

@@ -19,6 +19,12 @@ pub struct AdvanceDraft {
 }
 
 #[derive(Serialize)]
+pub struct AssignToSlot {
+    pub draft: Uuid,
+    pub slot: i32,
+}
+
+#[derive(Serialize)]
 pub struct BeginProcess {
     pub process: i32,
     pub slots: Vec<(i32, i32)>,
@@ -69,6 +75,13 @@ pub struct ElevateCredentials<'a> {
 pub struct FileInfo<'a> {
     pub name: Cow<'a, str>,
     pub mime: Cow<'a, str>,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+pub struct FreeSlot<'a> {
+    #[serde(flatten)]
+    pub slot: SlotData<'a>,
+    pub draft: DraftData<'a>,
 }
 
 #[derive(Serialize)]
@@ -157,6 +170,24 @@ pub struct PasswordChangeRequest<'a> {
 }
 
 #[derive(Debug, Deserialize, Eq, PartialEq)]
+pub struct ProcessData<'a> {
+    pub id: i32,
+    pub name: Cow<'a, str>,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+pub struct ProcessDetails<'a> {
+    #[serde(flatten)]
+    pub process: VersionData<'a>,
+    pub slots: Vec<SlotSeating<'a>>,
+}
+
+#[derive(Serialize)]
+pub struct ProcessUpdate<'a> {
+    pub name: &'a str,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 pub struct RoleData<'a> {
     pub id: i32,
     pub name: Cow<'a, str>,
@@ -176,6 +207,20 @@ pub struct SessionData {
     pub expires: NaiveDateTime,
     pub is_elevated: bool,
     pub permissions: PermissionBits,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+pub struct SlotData<'a> {
+    pub id: i32,
+    pub name: Cow<'a, str>,
+    pub role: Option<i32>,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+pub struct SlotSeating<'a> {
+    #[serde(flatten)]
+    pub slot: SlotData<'a>,
+    pub user: Option<UserData<'a>>,
 }
 
 #[derive(Debug, Deserialize, Eq, PartialEq)]
@@ -223,6 +268,13 @@ pub enum Variant<Part> {
     Group {
         parts: Vec<Part>,
     },
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+pub struct VersionData<'a> {
+    pub id: i32,
+    pub name: Cow<'a, str>,
+    pub version: NaiveDateTime,
 }
 
 #[derive(Debug, Deserialize, Eq, PartialEq)]

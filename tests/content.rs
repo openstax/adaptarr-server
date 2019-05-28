@@ -156,6 +156,12 @@ fn setup_db(db: &Connection) -> Result<(), failure::Error> {
                 role: None,
                 autofill: false,
             },
+            structure::Slot {
+                id: 1,
+                name: "Another slot".into(),
+                role: None,
+                autofill: false,
+            },
         ],
         steps: vec![
             structure::Step {
@@ -165,6 +171,10 @@ fn setup_db(db: &Connection) -> Result<(), failure::Error> {
                     structure::StepSlot {
                         slot: 0,
                         permission: SlotPermission::Edit,
+                    },
+                    structure::StepSlot {
+                        slot: 1,
+                        permission: SlotPermission::View,
                     },
                 ],
                 links: vec![
@@ -485,6 +495,106 @@ fn api_list_of_books_containing_draft(mut client: Client) {
     assert_eq!(data, [*B1]);
 }
 
+#[adaptarr::test(session(r#for = "administrator@adaptarr.test", elevated = true))]
+fn api_details_of_drafts_process(mut client: Client) {
+    let mut data = client.get("/api/v1/drafts/22222222-2222-2222-2222-222222222222/process")
+        .send()
+        .assert_success()
+        .json::<ProcessDetails>();
+
+    data.slots.sort_by_key(|ss| ss.slot.id);
+
+    assert_eq!(data, ProcessDetails {
+        process: VersionData {
+            id: 1,
+            name: "Test process".into(),
+            version: data.process.version,
+        },
+        slots: vec![
+            SlotSeating {
+                slot: SlotData {
+                    id: 1,
+                    name: "Slot".into(),
+                    role: None,
+                },
+                user: Some(UserData {
+                    id: 1,
+                    name: "User".into(),
+                    is_super: false,
+                    language: "en".into(),
+                    permissions: None,
+                    role: None,
+                }),
+            },
+            SlotSeating {
+                slot: SlotData {
+                    id: 2,
+                    name: "Another slot".into(),
+                    role: None,
+                },
+                user: None,
+            },
+        ],
+    });
+}
+
+#[adaptarr::test(session(r#for = "administrator@adaptarr.test", elevated = true))]
+fn api_assign_user_to_slot_in_draft(mut client: Client) {
+    client.put("/api/v1/drafts/22222222-2222-2222-2222-222222222222/process/slots/1")
+        .json(2)
+        .assert_success();
+
+    client.put("/api/v1/drafts/22222222-2222-2222-2222-222222222222/process/slots/2")
+        .json(1)
+        .assert_success();
+
+    let mut data = client.get("/api/v1/drafts/22222222-2222-2222-2222-222222222222/process")
+        .send()
+        .assert_success()
+        .json::<ProcessDetails>();
+
+    data.slots.sort_by_key(|ss| ss.slot.id);
+
+    assert_eq!(data, ProcessDetails {
+        process: VersionData {
+            id: 1,
+            name: "Test process".into(),
+            version: data.process.version,
+        },
+        slots: vec![
+            SlotSeating {
+                slot: SlotData {
+                    id: 1,
+                    name: "Slot".into(),
+                    role: None,
+                },
+                user: Some(UserData {
+                    id: 2,
+                    name: "Administrator".into(),
+                    is_super: true,
+                    language: "en".into(),
+                    permissions: None,
+                    role: None,
+                }),
+            },
+            SlotSeating {
+                slot: SlotData {
+                    id: 2,
+                    name: "Another slot".into(),
+                    role: None,
+                },
+                user: Some(UserData {
+                    id: 1,
+                    name: "User".into(),
+                    is_super: false,
+                    language: "en".into(),
+                    permissions: None,
+                    role: None,
+                }),
+            },
+        ],
+    });
+}
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
 fn creating_module_requires_permission(mut client: Client) {
@@ -924,4 +1034,48 @@ fn delete_file_in_draft(mut client: Client) {
     client.get("/api/v1/drafts/22222222-2222-2222-2222-222222222222/files/new-file")
         .send()
         .assert_error(StatusCode::NOT_FOUND, "file:not-found");
+}
+
+#[adaptarr::test(session(r#for = "user@adaptarr.test"))]
+fn api_list_of_free_slots(mut client: Client) {
+    let data = client.get("/api/v1/processes/slots/free")
+        .send()
+        .assert_success()
+        .json::<Vec<FreeSlot>>();
+
+    assert_eq!(data, [
+        FreeSlot {
+            slot: SlotData {
+                id: 2,
+                name: "Another slot".into(),
+                role: None,
+            },
+            draft: DraftData {
+                module: *M2,
+                document: DocumentData {
+                    title: "Second test".into(),
+                    language: "pl".into(),
+                },
+                permissions: Vec::new(),
+                step: None,
+            },
+        },
+    ]);
+}
+
+#[adaptarr::test(session(r#for = "user@adaptarr.test"))]
+fn api_take_free_slot(mut client: Client) {
+    client.post("/api/v1/processes/slots")
+        .json(AssignToSlot {
+            draft: *M2,
+            slot: 2,
+        })
+        .assert_success();
+
+    let data = client.get("/api/v1/processes/slots/free")
+        .send()
+        .assert_success()
+        .json::<Vec<FreeSlot>>();
+
+    assert_eq!(data, []);
 }
