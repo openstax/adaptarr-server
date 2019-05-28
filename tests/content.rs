@@ -19,14 +19,12 @@ use adaptarr::{
 };
 use diesel::prelude::*;
 use failure::Fallible;
-use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use uuid::Uuid;
 use lazy_static::lazy_static;
 
 mod common;
 
-use self::common::{Client, Connection};
+use self::common::{Client, Connection, models::*};
 
 lazy_static! {
     static ref M1: Uuid = Uuid::from_bytes([0x11; 16]);
@@ -193,19 +191,6 @@ fn setup_db(db: &Connection) -> Result<(), failure::Error> {
     Ok(())
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct DocumentData<'a> {
-    title: Cow<'a, str>,
-    language: Cow<'a, str>,
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct ModuleData<'a> {
-    id: Uuid,
-    #[serde(flatten)]
-    document: DocumentData<'a>,
-}
-
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
 fn api_list_of_modules(mut client: Client) {
     let data = client.get("/api/v1/modules")
@@ -247,12 +232,6 @@ fn api_get_specific_module(mut client: Client) {
     });
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct FileInfo<'a> {
-    name: Cow<'a, str>,
-    mime: Cow<'a, str>,
-}
-
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
 fn api_get_list_of_modules_files(mut client: Client) {
     let data = client.get("api/v1/modules/22222222-2222-2222-2222-222222222222/files")
@@ -276,16 +255,6 @@ fn api_get_specific_module_file(mut client: Client) {
         .body();
 
     assert_eq!(data, b"Test file".as_ref());
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct XrefData<'a> {
-    id: Cow<'a, str>,
-    #[serde(rename = "type")]
-    type_: Cow<'a, str>,
-    description: Option<Cow<'a, str>>,
-    context: Option<Cow<'a, str>>,
-    counter: i32,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -338,12 +307,6 @@ fn api_get_list_of_books_containing_module(mut client: Client) {
     assert_eq!(data, [*B1]);
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct BookData<'a> {
-    id: Uuid,
-    title: Cow<'a, str>,
-}
-
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
 fn api_list_of_books(mut client: Client) {
     let data = client.get("/api/v1/books")
@@ -370,25 +333,6 @@ fn api_get_specific_book(mut client: Client) {
         id: *B1,
         title: "Test book".into(),
     });
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct Tree<'a> {
-    number: i32,
-    title: Cow<'a, str>,
-    #[serde(flatten)]
-    part: Variant<Tree<'a>>,
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-#[serde(tag = "kind", rename_all = "lowercase")]
-enum Variant<Part> {
-    Module {
-        id: Uuid,
-    },
-    Group {
-        parts: Vec<Part>,
-    },
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -430,14 +374,6 @@ fn api_get_books_parts(mut client: Client) {
     });
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct PartData<'a> {
-    number: i32,
-    title: Cow<'a, str>,
-    #[serde(flatten)]
-    part: Variant<i32>,
-}
-
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
 fn api_get_specific_book_part(mut client: Client) {
     let data = client.get("/api/v1/books/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/parts/2")
@@ -452,32 +388,6 @@ fn api_get_specific_book_part(mut client: Client) {
             parts: vec![3],
         },
     });
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct DraftData<'a> {
-    module: Uuid,
-    #[serde(flatten)]
-    document: DocumentData<'a>,
-    #[serde(default)]
-    permissions: Vec<SlotPermission>,
-    #[serde(default)]
-    step: Option<StepData<'a>>,
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct StepData<'a> {
-    id: i32,
-    process: [i32; 2],
-    name: Cow<'a, str>,
-    links: Vec<LinkData<'a>>,
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct LinkData<'a> {
-    name: Cow<'a, str>,
-    to: i32,
-    slot: i32,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -575,11 +485,6 @@ fn api_list_of_books_containing_draft(mut client: Client) {
     assert_eq!(data, [*B1]);
 }
 
-#[derive(Debug, Serialize)]
-struct NewModule<'a> {
-    title: &'a str,
-    language: &'a str,
-}
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
 fn creating_module_requires_permission(mut client: Client) {
@@ -622,10 +527,6 @@ fn creating_module_from_zip_requires_permission() {
     // TODO: write test
 }
 
-#[derive(Debug, Serialize)]
-pub struct ModuleUpdate {
-}
-
 // TODO: Module deletion is not yet implemented.
 #[adaptarr::test(session(r#for = "administrator@adaptarr.test", elevated = true))]
 #[ignore]
@@ -646,11 +547,6 @@ fn deleting_module_requires_permission(mut client: Client) {
     client.delete("/api/v1/modules/11111111-1111-1111-1111-111111111111")
         .send()
         .assert_error(StatusCode::FORBIDDEN, "user:insufficient-permissions");
-}
-
-#[derive(Debug, Serialize)]
-struct NewBook<'a> {
-    title: &'a str,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -686,11 +582,6 @@ fn create_empty_book(mut client: Client) {
 fn create_book_from_zip() -> Fallible<()> {
     // TODO: implement
     unimplemented!()
-}
-
-#[derive(Debug, Serialize)]
-struct BookChange<'a> {
-    title: &'a str,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -749,14 +640,6 @@ fn delete_book(mut client: Client) {
         .assert_error(StatusCode::NOT_FOUND, "book:not-found");
 }
 
-#[derive(Debug, Serialize)]
-struct NewTreeRoot {
-    #[serde(flatten)]
-    tree: NewTree,
-    parent: i32,
-    index: i32,
-}
-
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
 fn editing_book_structure_requires_permission(mut client: Client) {
     client.post("/api/v1/books/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/parts")
@@ -792,19 +675,6 @@ fn create_book_part(mut client: Client) {
             id: *M1,
         },
     });
-}
-
-#[derive(Debug, Serialize)]
-struct PartUpdate<'a> {
-    title: &'a str,
-    #[serde(flatten)]
-    location: PartLocation,
-}
-
-#[derive(Debug, Serialize)]
-struct PartLocation {
-    parent: i32,
-    index: i32,
 }
 
 #[adaptarr::test(session(r#for = "administrator@adaptarr.test", elevated = true, permissions = PermissionBits::EDIT_BOOK))]
@@ -884,12 +754,6 @@ fn delete_book_part(mut client: Client) {
     });
 }
 
-#[derive(Serialize)]
-struct BeginProcess {
-    process: i32,
-    slots: Vec<(i32, i32)>,
-}
-
 #[adaptarr::test(session(r#for = "administrator@adaptarr.test", elevated = true))]
 fn create_draft_of_module(mut client: Client) {
     let data = client.post("/api/v1/modules/11111111-1111-1111-1111-111111111111")
@@ -942,11 +806,6 @@ fn cannot_create_second_draft_of_module(mut client: Client) {
         .assert_error(StatusCode::BAD_REQUEST, "draft:create:exists");
 }
 
-#[derive(Debug, Serialize)]
-struct DraftUpdate<'a> {
-    title: &'a str,
-}
-
 #[adaptarr::test(session(r#for = "user@adaptarr.test", elevated = true))]
 fn update_draft_metadata(mut client: Client) {
     let data = client.put("/api/v1/drafts/22222222-2222-2222-2222-222222222222")
@@ -976,12 +835,6 @@ fn update_draft_metadata(mut client: Client) {
             ],
         }),
     });
-}
-
-#[derive(Serialize)]
-struct AdvanceDraft {
-    target: i32,
-    slot: i32,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]

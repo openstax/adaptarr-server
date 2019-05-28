@@ -4,6 +4,8 @@ mod mock;
 mod session;
 mod support;
 
+pub mod models;
+
 pub use self::{
     client::{CONFIG, Client},
     db::{Connection, Database, Pool, Pooled, setup_db},

@@ -3,14 +3,13 @@ use adaptarr::{
     models::{User, Role},
     permissions::PermissionBits,
 };
-use chrono::{Duration, Utc, NaiveDateTime};
+use chrono::{Duration, Utc};
 use diesel::prelude::*;
 use failure::Fallible;
-use serde::{Deserialize, Serialize};
 
 mod common;
 
-use self::common::{Client, Connection, Session, Pooled};
+use self::common::{Client, Connection, Session, Pooled, models::*};
 
 #[adaptarr::test_database]
 fn setup_db(db: &Connection) -> Fallible<()> {
@@ -53,13 +52,6 @@ fn setup_db(db: &Connection) -> Fallible<()> {
     Ok(())
 }
 
-#[derive(Serialize)]
-struct LoginCredentials<'a> {
-    email: &'a str,
-    password: &'a str,
-    next: Option<&'a str>,
-}
-
 /// Decode a session cookie.
 fn decode_sesid(cookie: &Cookie) -> Fallible<i32> {
     let mut data = base64::decode(cookie.value())?;
@@ -97,14 +89,6 @@ fn login_page_creates_session(db: Pooled, mut client: Client) -> Fallible<()> {
     assert!(session.permissions().is_empty(), "Session should have no permissions");
 
     Ok(())
-}
-
-#[derive(Serialize)]
-struct ElevateCredentials<'a> {
-    password: &'a str,
-    next: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    action: Option<adaptarr::api::pages::LoginAction>,
 }
 
 #[adaptarr::test]
@@ -213,13 +197,6 @@ fn session_expires(db: Pooled, mut client: Client, session: Session)
     Ok(())
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct SessionData {
-    expires: NaiveDateTime,
-    is_elevated: bool,
-    permissions: PermissionBits,
-}
-
 #[adaptarr::test(
     session(
         r#for = "administrator@adaptarr.test",
@@ -306,8 +283,8 @@ fn assigning_user_a_role_updates_session_permissions(
     db: Pooled,
     mut client: Client,
 ) -> Fallible<()> {
-        let role = Role::by_id(&*db, 1)?;
-        let mut user = User::by_email(&*db, "user@adaptarr.test")?;
+    let role = Role::by_id(&*db, 1)?;
+    let mut user = User::by_email(&*db, "user@adaptarr.test")?;
 
     let rsp = client.post("/elevate")
         .form(ElevateCredentials {

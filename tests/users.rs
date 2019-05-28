@@ -6,12 +6,10 @@ use adaptarr::{
     permissions::PermissionBits,
 };
 use failure::Fallible;
-use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 
 mod common;
 
-use self::common::{Client, Connection, Pooled};
+use self::common::{Client, Connection, Pooled, models::*};
 
 #[adaptarr::test_database]
 fn setup_db(db: &Connection) -> Fallible<()> {
@@ -58,23 +56,6 @@ fn setup_db(db: &Connection) -> Fallible<()> {
     )?;
 
     Ok(())
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct RoleData<'a> {
-    id: i32,
-    name: Cow<'a, str>,
-    permissions: Option<PermissionBits>,
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct UserData<'a> {
-    id: i32,
-    name: Cow<'a, str>,
-    is_super: bool,
-    language: Cow<'a, str>,
-    permissions: Option<PermissionBits>,
-    role: Option<RoleData<'a>>,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -202,12 +183,6 @@ fn api_current_user(mut client: Client) {
     });
 }
 
-#[derive(Serialize)]
-struct InviteParams<'a> {
-    email: &'a str,
-    language: &'a str,
-}
-
 #[adaptarr::test(
     session(
         r#for = "administrator@adaptarr.test",
@@ -232,16 +207,6 @@ fn invitation_can_only_be_created_with_permissions(mut client: Client) {
             language: "en",
         })
         .assert_error(StatusCode::FORBIDDEN, "user:insufficient-permissions");
-}
-
-#[derive(Serialize)]
-struct UserUpdate<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    language: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    permissions: Option<PermissionBits>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    role: Option<Option<i32>>,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -291,13 +256,6 @@ fn change_users_role_permissions(mut client: Client) {
             role: None,
         })
         .assert_success();
-}
-
-#[derive(Serialize)]
-struct PasswordChangeRequest<'a> {
-    current: &'a str,
-    new: &'a str,
-    new2: &'a str,
 }
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
@@ -412,13 +370,6 @@ fn api_get_specific_role_with_permissions(mut client: Client) {
     });
 }
 
-#[derive(Serialize)]
-struct NewRole<'a> {
-    name: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    permissions: Option<PermissionBits>
-}
-
 #[adaptarr::test(
     session(
         r#for = "administrator@adaptarr.test"
@@ -450,14 +401,6 @@ fn creating_role_requires_permission(mut client: Client) {
             permissions: Some(PermissionBits::EDIT_BOOK),
         })
         .assert_error(StatusCode::FORBIDDEN, "user:insufficient-permissions");
-}
-
-#[derive(Serialize)]
-struct RoleUpdate<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    permissions: Option<PermissionBits>,
 }
 
 #[adaptarr::test(
