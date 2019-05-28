@@ -487,7 +487,7 @@ fn api_get_specific_draft_file(mut client: Client) {
 
 #[adaptarr::test(session(r#for = "user@adaptarr.test"))]
 fn api_list_of_books_containing_draft(mut client: Client) {
-    let data = client.get("/api/v1/modules/11111111-1111-1111-1111-111111111111/books")
+    let data = client.get("/api/v1/drafts/22222222-2222-2222-2222-222222222222/books")
         .send()
         .assert_success()
         .json::<Vec<Uuid>>();
