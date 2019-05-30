@@ -5,6 +5,7 @@ use std::{borrow::Cow, cell::Cell, collections::HashMap};
 use serde::Serialize;
 
 use crate::{
+    api::error::Error,
     i18n::Locale,
     models::user::{PublicData as UserData},
 };
@@ -19,19 +20,19 @@ lazy_static! {
 
 pub trait LocalizedTera {
     fn render_i18n<T>(&self, name: &str, data: &T, locale: &'static Locale<'static>)
-    -> tera::Result<String>
+    -> Result<String, Error>
     where
         T: Serialize;
 }
 
 impl LocalizedTera for Tera {
     fn render_i18n<T>(&self, name: &str, data: &T, locale: &'static Locale<'static>)
-    -> tera::Result<String>
+    -> Result<String, Error>
     where
         T: Serialize,
     {
         LOCALE.with(|loc| loc.set(Some(locale)));
-        self.render(name, data)
+        self.render(name, data).map_err(From::from)
     }
 }
 

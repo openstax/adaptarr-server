@@ -13,6 +13,7 @@ use std::collections::HashMap;
 
 use crate::{
     i18n::{LanguageTag, Locale},
+    mail::Mailer,
     models::{
         Invite,
         PasswordResetToken,
@@ -382,9 +383,9 @@ pub fn do_reset(
 
             let user_locale = state.i18n.find_locale(&user.language())
                 .unwrap_or(locale);
-            state.mailer.send(
-                "reset",
+            Mailer::send(
                 email.as_str(),
+                "reset",
                 "mail-reset-subject",
                 &templates::ResetMailArgs {
                     user: user.get_public(UserFields::empty()),

@@ -142,9 +142,9 @@ pub fn invite(cfg: &Config, opts: InviteOpts) -> Result<()> {
         code,
     );
 
-    Mailer::from_config(cfg.mail.clone())?.send(
-        "invite",
+    Mailer::send(
         opts.email.as_str(),
+        "invite",
         "mail-invite-subject",
         &templates::InviteMailArgs {
             url: &url,

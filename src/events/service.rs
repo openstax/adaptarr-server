@@ -89,19 +89,17 @@ pub struct EventManager {
     config: Config,
     pool: Pool,
     i18n: I18n<'static>,
-    mail: Mailer,
     streams: HashMap<i32, Recipient<NewEvent>>,
     last_notify: NaiveDateTime,
 }
 
 impl EventManager {
-    pub fn new(config: Config, pool: Pool, i18n: I18n<'static>, mail: Mailer)
+    pub fn new(config: Config, pool: Pool, i18n: I18n<'static>)
     -> EventManager {
         EventManager {
             config,
             pool,
             i18n,
-            mail,
             streams: HashMap::new(),
             last_notify: Utc::now().naive_utc(),
         }
@@ -205,9 +203,9 @@ impl EventManager {
         let locale = self.i18n.find_locale(&user.language())
             .expect("user's preferred language to exist");
 
-        self.mail.send(
-            "notify",
+        Mailer::send(
             user.mailbox(),
+            "notify",
             "mail-notify-subject",
             &templates::NotifyMailArgs {
                 events: &groupped,

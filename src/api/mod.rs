@@ -13,7 +13,6 @@ use super::{
     events::{self as event_manager, EventManager},
     i18n::I18n,
     import::Importer,
-    mail::Mailer,
 };
 
 pub use self::error::{ApiError, Error};
@@ -63,8 +62,6 @@ pub struct State {
     pub config: Config,
     /// Database connection pool.
     pub db: db::Pool,
-    /// Mailer service.
-    pub mailer: Mailer,
     /// Event manager.
     pub events: Addr<EventManager>,
     /// Localization subsystem.
@@ -77,14 +74,11 @@ pub fn configure(cfg: Config) -> Result<State> {
     let i18n = I18n::load()?;
     let db = db::pool()?;
 
-    let mailer = Mailer::from_config(cfg.mail.clone())?;
-    let events = event_manager::start(
-        cfg.clone(), db.clone(), i18n.clone(), mailer.clone());
+    let events = event_manager::start(cfg.clone(), db.clone(), i18n.clone());
 
     Ok(State {
         config: cfg.clone(),
         db: db.clone(),
-        mailer,
         events,
         i18n,
         importer: Importer::start(db.clone(), cfg.storage.clone()),

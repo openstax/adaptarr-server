@@ -4,7 +4,7 @@ use actix::{Addr, Arbiter};
 use diesel::result::Error as DbError;
 use failure::Fail;
 
-use crate::{config::Config, db, i18n::I18n, mail::Mailer};
+use crate::{config::Config, db, i18n::I18n};
 
 mod events;
 mod service;
@@ -22,10 +22,9 @@ pub use self::{
 };
 
 /// Start an event manager instance.
-pub fn start(cfg: Config, pool: db::Pool, i18n: I18n<'static>, mail: Mailer)
+pub fn start(cfg: Config, pool: db::Pool, i18n: I18n<'static>)
 -> Addr<EventManager> {
-    Arbiter::start(move |_| EventManager::new(
-        cfg.clone(), pool.clone(), i18n, mail.clone()))
+    Arbiter::start(move |_| EventManager::new(cfg.clone(), pool.clone(), i18n))
 }
 
 #[derive(Debug, Fail)]

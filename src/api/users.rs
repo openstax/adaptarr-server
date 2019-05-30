@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize, de::Deserializer};
 use crate::{
     ApiError,
     i18n::LanguageTag,
+    mail::Mailer,
     models::{
         Invite,
         Role,
@@ -107,9 +108,9 @@ pub fn create_invitation(
         code,
     );
 
-    state.mailer.send(
-        "invite",
+    Mailer::send(
         params.email.as_str(),
+        "invite",
         "mail-invite-subject",
         &templates::InviteMailArgs {
             url: &url,
