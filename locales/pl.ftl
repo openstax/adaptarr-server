@@ -104,7 +104,8 @@ reset-error = { $code ->
 
 mail-logo-alt = Logo { -org-name }™
 
-mail-footer = Otrzymujesz tą wiadomość ponieważ jesteś członkiem { -brand-name }.
+mail-footer = Wiadomość została wygenerowana automatycznie, prosimy na nią
+    nie odpowiadać. Otrzymujesz ją, ponieważ posiadasz konto w { -brand-name }.
 
 
 
@@ -134,8 +135,9 @@ mail-invite-after-button =
     Albo skopiuj poniższy URL do paska przeglądarki:
     { -mail-url(url: $url, text: $url) }
 
-mail-invite-footer = Otrzymujesz tą wiadomość, ponieważ ktoś zaprosił { $email }
-    do dołączenia do { -brand-name }.
+mail-invite-footer = Powyższe zaproszenie dla { $email } do dołączenia do
+    aplikacji { -brand-name } zostało wysłane przez członka
+    zespołu { -org-name }.
 
 
 

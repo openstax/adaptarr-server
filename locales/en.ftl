@@ -104,8 +104,8 @@ reset-error = { $code ->
 
 mail-logo-alt = { -org-name }™ logo
 
-mail-footer =
-    You are receiving this email because you are a member of { -brand-name }.
+mail-footer = This message was auto-generated, please do not respond to it.
+    You are receiving it because you have an { -brand-name } account.
 
 
 
@@ -139,8 +139,8 @@ mail-invite-after-button =
 
 # Variables:
 # - $email (string): invitee's email address
-mail-invite-footer = You are receiving this message because someone has invited
-    { $email } to join { -brand-name }.
+mail-invite-footer = You are receiving this message because a member of
+    { -org-name } has invited { $email } to join { -brand-name }.
 
 
 
