@@ -27,7 +27,10 @@ use crate::{
     },
     templates,
 };
-use super::events::{Event, ExpandedEvent, ExpandedUser, ExpandedModule, expand_event};
+use super::{
+    Error,
+    events::{Event, ExpandedEvent, ExpandedUser, ExpandedModule, Kind, expand_event},
+};
 
 /// Interval between two notification emails.
 ///
@@ -189,22 +192,34 @@ impl EventManager {
         dbcon: &Connection,
         events: Vec<db::Event>,
     ) -> Result<(), Error> {
-        let events = events.into_iter()
-            .map(|event| expand_event(&self.config, dbcon, &event))
-            .collect::<Result<Vec<_>, _>>()?;
+        let groups = events
+            .into_iter()
+            .group_by(|event| Kind::from_str(&event.kind));
+
+        let mut groupped = Vec::new();
+
+        for (kind, group) in groups.into_iter() {
+            let evs = group.into_iter()
+                .map(|event| expand_event(&self.config, dbcon, &event))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            groupped.push((kind, evs));
+        }
 
         let locale = self.i18n.find_locale(&user.language())
             .expect("user's preferred language to exist");
 
-        let args = std::iter::once(
-            ("count", fluent::FluentValue::from(events.len() as isize))
-        ).collect();
-
         self.mail.send(
             "notify",
             user.mailbox(),
-            ("mail-notify-subject", &args),
-            &templates::NotifyMailArgs { events: &events },
+            "mail-notify-subject",
+            &templates::NotifyMailArgs {
+                events: &groupped,
+                urls: templates::NotifyMailArgsUrls {
+                    notification_centre: format!("https://{}/notifications",
+                        self.config.server.domain).into(),
+                },
+            },
             locale,
         );
 

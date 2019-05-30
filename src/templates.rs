@@ -1,6 +1,6 @@
 use fluent_bundle::types::FluentValue;
 use tera::{Tera, Value};
-use std::{cell::Cell, collections::HashMap};
+use std::{borrow::Cow, cell::Cell, collections::HashMap};
 use serde::Serialize;
 
 use crate::{
@@ -116,5 +116,12 @@ pub struct ResetMailArgs<'a> {
 #[derive(Serialize)]
 pub struct NotifyMailArgs<'a> {
     /// List of new events to include in the email.
-    pub events: &'a [crate::events::ExpandedEvent],
+    pub events: &'a [(crate::events::Kind, Vec<crate::events::ExpandedEvent>)],
+    // /// Various URLs which can be used in the email.
+    pub urls: NotifyMailArgsUrls<'a>,
+}
+
+#[derive(Serialize)]
+pub struct NotifyMailArgsUrls<'a> {
+    pub notification_centre: Cow<'a, str>,
 }

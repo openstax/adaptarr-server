@@ -56,6 +56,11 @@ impl Book {
             .map(|data| Book { data })
     }
 
+    /// Get underlying database models.
+    pub fn into_db(self) -> db::Book {
+        self.data
+    }
+
     /// Delete this book.
     ///
     /// This will delete only the book and its structure. Modules added to this

@@ -100,6 +100,8 @@ reset-error = { $code ->
 
 ## Mail template
 
+-mail-url = <a href="{ $url }" target="_blank" rel="noopener">{ $text }</a>
+
 mail-logo-alt = { -org-name }™ logo
 
 mail-footer =
@@ -133,7 +135,7 @@ mail-invite-register-button = Register here
 # - $url (string): registration URL
 mail-invite-after-button =
     Or copy the following URL into your address bar:
-    <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
+    { -mail-url(url: $url, text: $url) }
 
 # Variables:
 # - $email (string): invitee's email address
@@ -170,7 +172,7 @@ mail-reset-before-button =
 # - $url (string): password reset URL
 mail-reset-after-button =
     Or enter this URL into your browser's address bar:
-    <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
+    { -mail-url(url: $url, text: $url) }
 
     If you have not requested a password reset you don't have to
     do anything, your account is still secure.
@@ -178,26 +180,79 @@ mail-reset-after-button =
 
 
 ## Notification email
+#
+# Notification emails are divided into section. Each section begins with
+# mail-notify-group-header-KIND, where KIND is the type of events in this
+# section. Each section then contains a list of events, formatted with
+# mail-notify-event-KIND.
 
+mail-notify-subject = Information on progress of work
+
+mail-notify-footer =
+    Thank you for participating in out project.
+
+    Sincerely 
+    The { -org-name } team
+
+# Header displayed before notifications about module assignment.
+mail-notify-group-header-assigned = Information on assignment of modules:
+
+# Notification about a module being assigned to a user.
+#
 # Variables:
-# - $count (number): number of notifications
-mail-notify-subject = { $count ->
-    [one] One new notification
-   *[other] { $count } new notifications
-}
-
-mail-notify-before-events =
-    While you were gone:
-
-# Variables:
-# - $actorname (string): name of user who caused this event
-# - $actorurl (string): URL of profile of the user who caused this event
-# - $moduletitle (string): name of the module user was assigned to
-# - $moduleurl (string): URL of the module user was assigned to
+# - $actorname (string): name of the user who assigned the module
+# - $actorurl (string): URL to profile of the user who assigned the module
+# - $moduletitle (string): title of the module which was assigned
+# - $moduleurl (string): URL to the module which was assigned
+# - $bookcount (number): Number of books in which the module is used
+# - $booktitle (string): Title of one of books in which the module is used
+# - $bookurl (string): URL to the book $booktitle
 mail-notify-event-assigned-text =
-    { $actorname } assigned you to module “{ $moduletitle }”.
-    ({ $moduleurl })
+    { $actorname } assigned you the module “{ $moduletitle }” ({ $moduleurl }).
+    { $bookcount ->
+        [0] This module is not used in any books.
+        [1] This module is used in book “{ $booktitle }” ({ $bookurl }).
+       *[other] This module is used in { $bookcount } books, including
+            “{ $booktitle }” ({ $bookurl }).
+    }
 mail-notify-event-assigned =
-    <a href="{ $actorurl }" target="_blank" rel="noopener">{ $actorname }</a>
-    assigned you to module
-    <a href="{ $moduleurl }" target="_blank" rel="noopener">{ $moduletitle }</a>.
+    { -mail-url(url: $actorurl, text: $actorname) } assigned you the module
+    { -mail-url(url: $moduleurl, text: $moduletitle) }. { $bookcount ->
+        [0] This module is not used in any books.
+        [1] This module is used in book {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+       *[other] This module is used in { $bookcount } books, including
+            { -mail-url(url: $bookurl, text: $booktitle) }.
+    }
+
+-mail-notify-unknown =
+    You can see { $count ->
+        [1] it
+       *[other] them
+    } in the { -mail-url(url: $url, text: "notification centre") }.
+
+# Message displayed at the end of the email if in there were unknown
+# notifications in addition to normal notifications.
+#
+# Variables:
+# - $count (number): Number of unknown notifications
+# - $notification_centre_url (string): URL of the notifications centre
+mail-notify-also-unknown-events =
+    And { $count ->
+        [1] one other event
+       *[other] { $count } other events
+    } which we could not represent in this email.
+    { -mail-notify-unknown(count: $count, url: $notification_centre_url) }
+
+# Message displayed at the end of the email if in there were only unknown
+# notifications.
+#
+# Variables:
+# - $count (number): Number of unknown notifications
+# - $notification_centre_url (string): URL of the notifications centre
+mail-notify-only-unknown-events =
+    We want to inform you of { $count ->
+        [1] one new event
+       *[other] { $count } new events
+    } which we could not represent in this email.
+    { -mail-notify-unknown(count: $count, url: $notification_centre_url) }

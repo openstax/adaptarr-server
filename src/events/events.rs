@@ -7,6 +7,7 @@ use crate::{
         models as db,
     },
     models::{
+        book::{Book, FindBookError},
         user::{User, FindUserError},
         module::{Module, FindModuleError},
     },
@@ -39,6 +40,22 @@ impl_from! { for Event ;
     Assigned => |e| Event::Assigned(e),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    Assigned,
+    Other,
+}
+
+impl Kind {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "assigned" => Kind::Assigned,
+            _ => Kind::Other,
+        }
+    }
+}
+
 /// A version of [`Event`] expanded to include additional information.
 ///
 /// This enum is intended to be used where obtaining additional information
@@ -50,6 +67,7 @@ pub enum ExpandedEvent {
     Assigned {
         who: ExpandedUser,
         module: ExpandedModule,
+        book: ExpandedBooks,
     }
 }
 
@@ -67,6 +85,16 @@ pub struct ExpandedModule {
     pub title: String,
     /// Module's URL.
     pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExpandedBooks {
+    /// One book's title.
+    pub title: Option<String>,
+    /// One book's URL.
+    pub url: Option<String>,
+    /// Number of books.
+    pub count: usize,
 }
 
 pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
@@ -92,7 +120,30 @@ pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
                     "Inconsistent database: module doesn't exist \
                     but is referenced by an event",
                 ),
-            }.into_db();
+            };
+
+            let books = module.get_books(dbcon)?;
+            let (book_title, book_url) = match books.first() {
+                None => (None, None),
+                Some(id) => {
+                    let book = match Book::by_id(dbcon, *id){
+                        Ok(book) => book,
+                        Err(FindBookError::Database(err)) =>
+                            return Err(err.into()),
+                        Err(FindBookError::NotFound) => panic!(
+                            "Inconsistent database: book doesn't exist \
+                            but is referenced by an event"),
+                    }.into_db();
+
+                    (
+                        Some(book.title),
+                        Some(format!("https://{}/books/{}",
+                            config.server.domain, book.id)),
+                    )
+                }
+            };
+
+            let module = module.into_db();
 
             ExpandedEvent::Assigned {
                 who: ExpandedUser {
@@ -104,6 +155,11 @@ pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
                     title: module.1.title,
                     url: format!("https://{}/modules/{}",
                         config.server.domain, module.0.id),
+                },
+                book: ExpandedBooks {
+                    title: book_title,
+                    url: book_url,
+                    count: books.len(),
                 },
             }
         }
