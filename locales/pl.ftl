@@ -1,5 +1,9 @@
 locale-name = Polski
 
+-org-name = OpenStax Poland
+
+-brand-name = Adaptarr!
+
 
 
 ## Login page
@@ -96,9 +100,9 @@ reset-error = { $code ->
 
 ## Mail template
 
-mail-logo-alt = Logo OpenStax Polska™
+mail-logo-alt = Logo { -org-name }™
 
-mail-footer = Otrzymujesz tą wiadomość ponieważ jesteś członkiem Adaptarr!.
+mail-footer = Otrzymujesz tą wiadomość ponieważ jesteś członkiem { -brand-name }.
 
 
 
@@ -109,16 +113,16 @@ mail-invite-subject = Zaproszenie
 # Variables:
 # - $url (string): registration URL
 mail-invite-text =
-    Zostałeś/aś zaproszony/a do dołączenia do Adaptarr!, stworzonego przez
-    Katalyst Education systemu do tłumaczenia książek.
+    Zostałeś/aś zaproszony/a do dołączenia do { -brand-name }, stworzonego przez
+    { -org-name } systemu do tłumaczenia książek.
 
     Aby zarejestrować się przejdź pod poniższy adres URL
 
         { $url }
 
 mail-invite-before-button =
-    Zostałeś/aś zaproszony/a do dołączenia do Adaptarr!, stworzonego przez
-    Katalyst Education systemu do tłumaczenia książek.
+    Zostałeś/aś zaproszony/a do dołączenia do { -brand-name }, stworzonego przez
+    { -org-name } systemu do tłumaczenia książek.
 
     Aby zarejestrować się przejdź pod poniższy adres URL
 
@@ -129,7 +133,7 @@ mail-invite-after-button =
     <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
 
 mail-invite-footer = Otrzymujesz tą wiadomość, ponieważ ktoś zaprosił { $email }
-    do dołączenia do Adaptarr!.
+    do dołączenia do { -brand-name }.
 
 
 
