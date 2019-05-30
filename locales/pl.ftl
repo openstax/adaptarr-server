@@ -1,5 +1,11 @@
 locale-name = Polski
 
+-org-name = OpenStax Poland
+
+-brand-name = Adaptarr!
+
+
+
 ## Login page
 
 login-field-email = Adres e-mail
@@ -15,6 +21,8 @@ login-error = { $code ->
     ["user:authenticate:bad-password"] Nieprawidłowe hasło
    *[other] Wystąpił nieznany błąd: { $code }
 }
+
+
 
 ## Session elevation page
 
@@ -33,9 +41,13 @@ elevate-error = { $code ->
    *[other] Wystąpił nieznany błąd: { $code }
 }
 
+
+
 ## Logout page
 
 logout-message = <p>Został/aś wylogowany/a.</p>
+
+
 
 ## Registration page
 
@@ -58,6 +70,8 @@ register-error = { $code ->
     ["user:new:empty-password"] Hasło nie może być puste
    *[other] Wystąpił nieznany błąd: { $code }
 }
+
+
 
 ## Password reset page
 
@@ -86,11 +100,18 @@ reset-error = { $code ->
    *[other] Wystąpił nieznany błąd { $code }
 }
 
+
+
 ## Mail template
 
-mail-logo-alt = Logo OpenStax Polska™
+-mail-url = <a href="{ $url }" target="_blank" rel="noopener">{ $text }</a>
 
-mail-footer = Otrzymujesz tą wiadomość ponieważ jesteś członkiem Adaptarr!.
+mail-logo-alt = Logo { -org-name }™
+
+mail-footer = Wiadomość została wygenerowana automatycznie, prosimy na nią
+    nie odpowiadać. Otrzymujesz ją, ponieważ posiadasz konto w { -brand-name }.
+
+
 
 ## Invitation email
 
@@ -99,16 +120,16 @@ mail-invite-subject = Zaproszenie
 # Variables:
 # - $url (string): registration URL
 mail-invite-text =
-    Zostałeś/aś zaproszony/a do dołączenia do Adaptarr!, stworzonego przez
-    Katalyst Education systemu do tłumaczenia książek.
+    Zostałeś/aś zaproszony/a do dołączenia do { -brand-name }, stworzonego przez
+    { -org-name } systemu do tłumaczenia książek.
 
     Aby zarejestrować się przejdź pod poniższy adres URL
 
         { $url }
 
 mail-invite-before-button =
-    Zostałeś/aś zaproszony/a do dołączenia do Adaptarr!, stworzonego przez
-    Katalyst Education systemu do tłumaczenia książek.
+    Zostałeś/aś zaproszony/a do dołączenia do { -brand-name }, stworzonego przez
+    { -org-name } systemu do tłumaczenia książek.
 
     Aby zarejestrować się przejdź pod poniższy adres URL
 
@@ -116,10 +137,13 @@ mail-invite-register-button = Zarejestruj się
 
 mail-invite-after-button =
     Albo skopiuj poniższy URL do paska przeglądarki:
-    <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
+    { -mail-url(url: $url, text: $url) }
 
-mail-invite-footer = Otrzymujesz tą wiadomość, ponieważ ktoś zaprosił { $email }
-    do dołączenia do Adaptarr!.
+mail-invite-footer = Powyższe zaproszenie dla { $email } do dołączenia do
+    aplikacji { -brand-name } zostało wysłane przez członka
+    zespołu { -org-name }.
+
+
 
 ## Password reset email
 
@@ -151,7 +175,92 @@ mail-reset-button = Zresetuj hasło
 # - $url (string): password reset URL
 mail-reset-after-button =
     Albo skopiuj poniższy URL do paska przeglądarki
-    <a href="{ $url }" target="_blank" rel="noopener">{ $url }</a>
+    { -mail-url(url: $url, text: $url) }
 
     Jeżeli nie prosiłeś/aś o zresetowania hasła nie masz się czym martwić,
     twoje konto jest bezpieczne.
+
+
+
+## Notification email
+#
+# Notification emails are divided into section. Each section begins with
+# mail-notify-group-header-KIND, where KIND is the type of events in this
+# section. Each section then contains a list of events, formatted with
+# mail-notify-event-KIND.
+
+mail-notify-subject = Powiadomienie o postępie prac
+
+mail-notify-footer =
+    Dziękujemy za udział w naszym projekcie.
+
+    Pozdrawiamy, 
+    Zespół { -org-name }
+
+# Header displayed before notifications about module assignment.
+mail-notify-group-header-assigned =
+    Informacja o przydziale modułów do pracy:
+
+# Notification about a module being assigned to a user.
+#
+# Variables:
+# - $actorname (string): name of the user who assigned the module
+# - $actorurl (string): URL to profile of the user who assigned the module
+# - $moduletitle (string): title of the module which was assigned
+# - $moduleurl (string): URL to the module which was assigned
+# - $bookcount (number): Number of books in which the module is used
+# - $booktitle (string): Title of one of books in which the module is used
+# - $bookurl (string): URL to the book $booktitle
+mail-notify-event-assigned-text =
+    Moduł „{ $moduletitle }” ({ $moduleurl }) zostaje przekazany przez
+    użytkownika { $actorurl } do wykonania prac. { $bookcount ->
+        [0] Moduł nie jest wykorzystywany w żadnej książce.
+        [1] Moduł jest wykorzystywany w książce „{ $booktitle }” ({ $bookurl }).
+       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w
+            „{ $booktitle }” ({ $bookurl }).
+    }
+mail-notify-event-assigned =
+    Moduł {
+        -mail-url(url: $moduleurl, text: JOIN("„", $moduletitle, "”"))
+    } zostaje przekazany przez użytkownika {
+        -mail-url(url: $actorurl, text: $actorname)
+    } do wykonania prac. { $bookcount ->
+        [0] Moduł nie jest wykorzystywany w żadnej książce.
+        [1] Moduł jest wykorzystywany w książce {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+    }
+
+-mail-notify-unknown =
+    Możesz zapoznać się z { $count ->
+        [1] nim
+       *[other] nimi
+    } w { -mail-url(url: $url, text: "centrum powiadomień") }.
+
+# Message displayed at the end of the email if in there were unknown
+# notifications in addition to normal notifications.
+#
+# Variables:
+# - $count (number): Number of unknown notifications
+# - $notification_centre_url (string): URL of the notifications centre
+mail-notify-also-unknown-events =
+    Oraz { $count ->
+        [1] jedno inne zdarzenie którego
+        [few] { $count} inne zdarzenia których
+       *[many] { $count } innych zdarzeń których
+    } nie jesteśmy w stanie przedstawić w wiadomości e-mail.
+    { -mail-notify-unknown(count: $count, url: $notification_centre_url) }
+
+# Message displayed at the end of the email if in there were only unknown
+# notifications.
+#
+# Variables:
+# - $count (number): Number of unknown notifications
+# - $notification_centre_url (string): URL of the notifications centre
+mail-notify-only-unknown-events =
+    Chcemy Cię poinformować o { $count ->
+        [1] jednym zdarzeniu którego
+       *[other] { $count } zdarzeniach których
+    } nie jesteśmy w stanie przedstawić w wiadomości e-mail.
+    { -mail-notify-unknown(count: $count, url: $notification_centre_url) }

@@ -48,26 +48,20 @@ impl Mailer {
         })
     }
 
-    pub fn send<M, C>(
+    pub fn send<M, C, S>(
         &self,
         template: &str,
         to: M,
-        subject: &str,
+        subject: S,
         context: &C,
         locale: &'static Locale<'static>,
     )
     where
         M: Into<Mailbox>,
         C: Serialize,
+        S: IntoSubject,
     {
-        let subject = match locale.format(subject, &HashMap::new()) {
-            Some(subject) => subject,
-            None => {
-                error!("Message {} is missing from locale {}",
-                    subject, locale.code);
-                subject.to_string()
-            }
-        };
+        let subject = subject.into_subject(locale);
 
         let html = MAILS.render_i18n(
                 &format!("{}.html", template), context, locale)
@@ -156,5 +150,29 @@ impl<'de> serde::de::Visitor<'de> for MailboxVisitor {
 
         v.parse()
             .map_err(|_| E::invalid_value(Unexpected::Str(v), &"an email address"))
+    }
+}
+
+pub trait IntoSubject {
+    fn into_subject(self, locale: &Locale) -> String;
+}
+
+impl<'a> IntoSubject for &'a str {
+    fn into_subject(self, locale: &Locale) -> String {
+        IntoSubject::into_subject((self, &HashMap::new()), locale)
+    }
+}
+
+impl<'a> IntoSubject for (&'a str, &'a HashMap<&str, fluent::FluentValue>) {
+    fn into_subject(self, locale: &Locale) -> String {
+        let (key, args) = self;
+        match locale.format(key, args) {
+            Some(subject) => subject,
+            None => {
+                error!("Message {} is missing from locale {}",
+                    key, locale.code);
+                key.to_string()
+            }
+        }
     }
 }

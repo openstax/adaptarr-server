@@ -77,11 +77,15 @@ pub fn configure(cfg: Config) -> Result<State> {
     let i18n = I18n::load()?;
     let db = db::pool()?;
 
+    let mailer = Mailer::from_config(cfg.mail.clone())?;
+    let events = event_manager::start(
+        cfg.clone(), db.clone(), i18n.clone(), mailer.clone());
+
     Ok(State {
         config: cfg.clone(),
         db: db.clone(),
-        mailer: Mailer::from_config(cfg.mail.clone())?,
-        events: event_manager::start(db.clone()),
+        mailer,
+        events,
         i18n,
         importer: Importer::start(db.clone(), cfg.storage.clone()),
     })

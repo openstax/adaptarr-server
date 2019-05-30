@@ -63,6 +63,11 @@ impl Role {
             .map_err(Into::into)
     }
 
+    /// Get underlying database model.
+    pub fn into_db(self) -> db::Role {
+        self.data
+    }
+
     /// Delete this role.
     ///
     /// This will delete only this role. If there are any users assigned it,

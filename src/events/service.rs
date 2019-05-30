@@ -1,24 +1,41 @@
 //! Actix actor handling creation and delivery of events.
 
-use actix::{Actor, Addr, Context, Handler, Message, Recipient};
-use chrono::NaiveDateTime;
+use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, Recipient};
+use chrono::{NaiveDateTime, Utc};
 use diesel::{
+    Connection as _,
     prelude::*,
-    result::Error as DbError,
 };
-use failure::Fail;
+use itertools::Itertools;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use crate::{
+    config::Config,
     db::{
+        Connection,
         Pool,
         models as db,
         schema::events,
     },
-    models::User,
+    i18n::I18n,
+    mail::Mailer,
+    models::user::{User, FindUserError},
+    templates,
 };
-use super::events::Event;
+use super::{
+    Error,
+    events::{Event, Kind, expand_event},
+};
+
+/// Interval between two notification emails.
+///
+/// It's set to 30 minutes in production and one minute in development.
+#[cfg(any(not(debug_assertions), doc))]
+const NOTIFY_INTERVAL: Duration = Duration::from_secs(1800);
+
+#[cfg(all(debug_assertions, not(doc)))]
+const NOTIFY_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Notify a user of an event.
 ///
@@ -69,15 +86,24 @@ impl Message for UnregisterListener {
 
 /// Actix actor which manages persisting events and notifying users of them.
 pub struct EventManager {
+    config: Config,
     pool: Pool,
+    i18n: I18n<'static>,
+    mail: Mailer,
     streams: HashMap<i32, Recipient<NewEvent>>,
+    last_notify: NaiveDateTime,
 }
 
 impl EventManager {
-    pub fn new(pool: Pool) -> EventManager {
+    pub fn new(config: Config, pool: Pool, i18n: I18n<'static>, mail: Mailer)
+    -> EventManager {
         EventManager {
+            config,
             pool,
+            i18n,
+            mail,
             streams: HashMap::new(),
+            last_notify: Utc::now().naive_utc(),
         }
     }
 
@@ -112,10 +138,97 @@ impl EventManager {
 
         Ok(())
     }
+
+    fn on_interval(&mut self, _: &mut Context<Self>) {
+        match self.send_emails() {
+            Ok(()) => {}
+            Err(err) => error!("Error sending email notifications: {}", err),
+        }
+    }
+
+    /// Send email notifications for unread events.
+    fn send_emails(&mut self) -> Result<(), Error> {
+        let now = Utc::now().naive_utc();
+        let db = self.pool.get()?;
+        let dbcon = &*db;
+
+        dbcon.transaction::<_, Error, _>(|| {
+            let events = events::table
+                .filter(events::timestamp.ge(self.last_notify)
+                    .and(events::is_unread.eq(true)))
+                .order((events::user, events::timestamp.asc()))
+                .get_results::<db::Event>(&*db)?
+                .into_iter()
+                .group_by(|event| event.user);
+
+            for (user, events) in events.into_iter() {
+                let user = match User::by_id(dbcon, user) {
+                    Ok(user) => user,
+                    Err(FindUserError::Internal(err)) => return Err(err.into()),
+                    Err(FindUserError::NotFound) => panic!(
+                        "Inconsistent database: user doesn't exist but owns \
+                        an event",
+                    ),
+                };
+                self.notify_user_by_email(&user, dbcon, events.collect())?;
+            }
+
+            Ok(())
+        })?;
+
+        self.last_notify = now;
+
+        Ok(())
+    }
+
+    /// Send email notifications to a particular user.
+    fn notify_user_by_email(
+        &mut self,
+        user: &User,
+        dbcon: &Connection,
+        events: Vec<db::Event>,
+    ) -> Result<(), Error> {
+        let groups = events
+            .into_iter()
+            .group_by(|event| Kind::from_str(&event.kind));
+
+        let mut groupped = Vec::new();
+
+        for (kind, group) in groups.into_iter() {
+            let evs = group.into_iter()
+                .map(|event| expand_event(&self.config, dbcon, &event))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            groupped.push((kind, evs));
+        }
+
+        let locale = self.i18n.find_locale(&user.language())
+            .expect("user's preferred language to exist");
+
+        self.mail.send(
+            "notify",
+            user.mailbox(),
+            "mail-notify-subject",
+            &templates::NotifyMailArgs {
+                events: &groupped,
+                urls: templates::NotifyMailArgsUrls {
+                    notification_centre: format!("https://{}/notifications",
+                        self.config.server.domain).into(),
+                },
+            },
+            locale,
+        );
+
+        Ok(())
+    }
 }
 
 impl Actor for EventManager {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        ctx.run_interval(NOTIFY_INTERVAL, Self::on_interval);
+    }
 }
 
 impl Handler<Notify> for EventManager {
@@ -147,22 +260,6 @@ impl Handler<UnregisterListener> for EventManager {
         let UnregisterListener { user, .. } = msg;
         self.streams.remove(&user);
     }
-}
-
-#[derive(Debug, Fail)]
-pub enum Error {
-    #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] DbError),
-    #[fail(display = "Error obtaining database connection: {}", _0)]
-    DatabasePool(#[cause] r2d2::Error),
-    #[fail(display = "Error serializing event data: {}", _0)]
-    Serialize(#[cause] rmps::encode::Error),
-}
-
-impl_from! { for Error ;
-    DbError => |e| Error::Database(e),
-    r2d2::Error => |e| Error::DatabasePool(e),
-    rmps::encode::Error => |e| Error::Serialize(e),
 }
 
 pub trait EventManagerAddrExt {
