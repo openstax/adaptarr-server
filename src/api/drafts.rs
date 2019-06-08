@@ -421,5 +421,5 @@ pub fn assign_slot(
 
 #[derive(ApiError, Debug, Fail)]
 #[fail(display = "Missing required slot permission '{}'", _0)]
-#[api(code = "draft:process:insufficient-permission", code = "FORBIDDEN")]
+#[api(code = "draft:process:insufficient-permission", status = "FORBIDDEN")]
 struct InsufficientSlotPermission(SlotPermission);
