@@ -6,6 +6,7 @@ use actix::{
     Handler,
     Running,
     StreamHandler,
+    SystemService,
     WrapFuture,
 };
 use actix_web::{
@@ -134,8 +135,7 @@ impl Actor for Listener {
     fn started(&mut self, ctx: &mut Self::Context) {
         let session = Session::<Normal>::extract(ctx.request()).unwrap();
 
-        ctx.state()
-            .events
+        events::EventManager::from_registry()
             .send(events::RegisterListener {
                 user: session.user,
                 addr: ctx.address().recipient(),
@@ -152,8 +152,7 @@ impl Actor for Listener {
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
         let session = Session::<Normal>::extract(ctx.request()).unwrap();
 
-        ctx.state()
-            .events
+        events::EventManager::from_registry()
             .do_send(events::UnregisterListener {
                 user: session.user,
                 addr: ctx.address().recipient(),

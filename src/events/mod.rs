@@ -1,10 +1,7 @@
 //! Handling of events and notifications.
 
-use actix::{Addr, Arbiter};
 use diesel::result::Error as DbError;
 use failure::Fail;
-
-use crate::{config::Config, db, i18n::I18n};
 
 mod events;
 mod service;
@@ -13,19 +10,12 @@ pub use self::{
     events::*,
     service::{
         EventManager,
-        EventManagerAddrExt,
         NewEvent,
         Notify,
         RegisterListener,
         UnregisterListener,
     },
 };
-
-/// Start an event manager instance.
-pub fn start(cfg: Config, pool: db::Pool, i18n: I18n<'static>)
--> Addr<EventManager> {
-    Arbiter::start(move |_| EventManager::new(cfg.clone(), pool.clone(), i18n))
-}
 
 #[derive(Debug, Fail)]
 pub enum Error {

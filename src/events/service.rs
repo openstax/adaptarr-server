@@ -1,6 +1,15 @@
 //! Actix actor handling creation and delivery of events.
 
-use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, Recipient};
+use actix::{
+    Actor,
+    AsyncContext,
+    Context,
+    Handler,
+    Message,
+    Recipient,
+    Supervised,
+    SystemService,
+};
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
     Connection as _,
@@ -11,14 +20,14 @@ use serde::Serialize;
 use std::{collections::HashMap, time::Duration};
 
 use crate::{
-    config::Config,
+    config::{self, Config},
     db::{
         Connection,
         Pool,
         models as db,
         schema::events,
     },
-    i18n::I18n,
+    i18n::{self, I18n},
     mail::Mailer,
     models::user::{User, FindUserError},
     templates,
@@ -86,7 +95,7 @@ impl Message for UnregisterListener {
 
 /// Actix actor which manages persisting events and notifying users of them.
 pub struct EventManager {
-    config: Config,
+    config: &'static Config,
     pool: Pool,
     i18n: I18n<'static>,
     streams: HashMap<i32, Recipient<NewEvent>>,
@@ -94,14 +103,21 @@ pub struct EventManager {
 }
 
 impl EventManager {
-    pub fn new(config: Config, pool: Pool, i18n: I18n<'static>)
-    -> EventManager {
-        EventManager {
-            config,
-            pool,
-            i18n,
-            streams: HashMap::new(),
-            last_notify: Utc::now().naive_utc(),
+    /// Emit an event.
+    ///
+    /// Errors will be logged, but otherwise ignored.
+    pub fn notify<E>(user: User, event: E)
+    where
+        Event: From<E>,
+    {
+        let manager = EventManager::from_registry();
+        let message = Notify {
+            user,
+            event: Event::from(event),
+        };
+
+        if let Err(err) = manager.try_send(message) {
+            error!("Could not dispatch event notification: {}", err);
         }
     }
 
@@ -110,7 +126,7 @@ impl EventManager {
     /// This method will create a new database entry and notify event listeners.
     /// It will not however send out email notifications, as this is done
     /// periodically, not immediately after an event is created.
-    fn notify(&mut self, msg: Notify) -> Result<(), Error> {
+    fn do_notify(&mut self, msg: Notify) -> Result<(), Error> {
         let Notify { user, event } = msg;
 
         let db = self.pool.get()?;
@@ -221,6 +237,20 @@ impl EventManager {
     }
 }
 
+impl Default for EventManager {
+    fn default() -> Self {
+        Self {
+            config: config::load().expect("Configuration is not loaded"),
+            pool: crate::db::pool().expect("Database is not initialized"),
+            i18n: i18n::load()
+                .expect("Internationalization subsystem is not loaded")
+                .clone(),
+            streams: HashMap::new(),
+            last_notify: Utc::now().naive_utc(),
+        }
+    }
+}
+
 impl Actor for EventManager {
     type Context = Context<Self>;
 
@@ -229,11 +259,17 @@ impl Actor for EventManager {
     }
 }
 
+impl Supervised for EventManager {
+}
+
+impl SystemService for EventManager {
+}
+
 impl Handler<Notify> for EventManager {
     type Result = ();
 
     fn handle(&mut self, msg: Notify, _: &mut Context<Self>) {
-        match self.notify(msg) {
+        match self.do_notify(msg) {
             Ok(()) => (),
             Err(err) => {
                 eprint!("error sending notification: {}", err);
@@ -257,24 +293,5 @@ impl Handler<UnregisterListener> for EventManager {
     fn handle(&mut self, msg: UnregisterListener, _: &mut Self::Context) {
         let UnregisterListener { user, .. } = msg;
         self.streams.remove(&user);
-    }
-}
-
-pub trait EventManagerAddrExt {
-    fn notify<E>(&self, user: User, event: E)
-    where
-        Event: From<E>;
-}
-
-impl EventManagerAddrExt for Addr<EventManager> {
-    /// Emit an event.
-    fn notify<E>(&self, user: User, event: E)
-    where
-        Event: From<E>,
-    {
-        self.do_send(Notify {
-            user,
-            event: Event::from(event),
-        })
     }
 }

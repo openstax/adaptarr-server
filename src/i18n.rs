@@ -11,7 +11,13 @@ use std::{
     str::FromStr,
 };
 
-use crate::Result;
+use crate::{Result, utils::SingleInit};
+
+static LOCALES: SingleInit<I18n> = SingleInit::uninit();
+
+pub fn load() -> crate::Result<&'static I18n<'static>> {
+    LOCALES.get_or_try_init(I18n::load)
+}
 
 /// Internationalisation subsystem.
 #[derive(Clone)]

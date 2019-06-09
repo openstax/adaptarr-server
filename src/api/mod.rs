@@ -10,8 +10,7 @@ use super::{
     Result,
     config::Config,
     db,
-    events::{self as event_manager, EventManager},
-    i18n::I18n,
+    i18n::{self, I18n},
     import::Importer,
 };
 
@@ -62,24 +61,19 @@ pub struct State {
     pub config: Config,
     /// Database connection pool.
     pub db: db::Pool,
-    /// Event manager.
-    pub events: Addr<EventManager>,
     /// Localization subsystem.
-    pub i18n: I18n<'static>,
+    pub i18n: &'static I18n<'static>,
     /// ZIP importer.
     pub importer: Addr<Importer>,
 }
 
 pub fn configure(cfg: Config) -> Result<State> {
-    let i18n = I18n::load()?;
+    let i18n = i18n::load()?;
     let db = db::pool()?;
-
-    let events = event_manager::start(cfg.clone(), db.clone(), i18n.clone());
 
     Ok(State {
         config: cfg.clone(),
         db: db.clone(),
-        events,
         i18n,
         importer: Importer::start(db.clone(), cfg.storage.clone()),
     })
