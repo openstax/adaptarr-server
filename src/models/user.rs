@@ -5,6 +5,7 @@ use diesel::{
     result::{DatabaseErrorKind, Error as DbError},
 };
 use failure::Fail;
+use lettre_email::Mailbox;
 use rand::RngCore;
 use serde::Serialize;
 
@@ -160,6 +161,11 @@ impl User {
         })
     }
 
+    /// Get underlying database models.
+    pub fn into_db(self) -> (db::User, Option<db::Role>) {
+        (self.data, self.role.map(Role::into_db))
+    }
+
     /// Find an user for given email and try to authenticate as them.
     pub fn authenticate(dbcon: &Connection, email: &str, password: &str)
     -> Result<User, UserAuthenticateError> {
@@ -220,6 +226,10 @@ impl User {
             PermissionBits::empty()
         };
         PermissionBits::from_bits_truncate(self.data.permissions) | role
+    }
+
+    pub fn mailbox(&self) -> Mailbox {
+        Mailbox::new(self.data.email.clone())
     }
 
     /// Change user's password.

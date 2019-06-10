@@ -1,10 +1,11 @@
 use fluent_bundle::types::FluentValue;
 use lazy_static::lazy_static;
 use tera::{Tera, Value, compile_templates};
-use std::{cell::Cell, collections::HashMap};
+use std::{borrow::Cow, cell::Cell, collections::HashMap};
 use serde::Serialize;
 
 use crate::{
+    api::error::Error,
     i18n::Locale,
     models::user::{PublicData as UserData},
 };
@@ -19,19 +20,19 @@ lazy_static! {
 
 pub trait LocalizedTera {
     fn render_i18n<T>(&self, name: &str, data: &T, locale: &'static Locale<'static>)
-    -> tera::Result<String>
+    -> Result<String, Error>
     where
         T: Serialize;
 }
 
 impl LocalizedTera for Tera {
     fn render_i18n<T>(&self, name: &str, data: &T, locale: &'static Locale<'static>)
-    -> tera::Result<String>
+    -> Result<String, Error>
     where
         T: Serialize,
     {
         LOCALE.with(|loc| loc.set(Some(locale)));
-        self.render(name, data)
+        self.render(name, data).map_err(From::from)
     }
 }
 
@@ -111,4 +112,18 @@ pub struct ResetMailArgs<'a> {
     pub user: UserData,
     /// Password reset URL.
     pub url: &'a str,
+}
+
+/// Arguments for `mail/notify`.
+#[derive(Serialize)]
+pub struct NotifyMailArgs<'a> {
+    /// List of new events to include in the email.
+    pub events: &'a [(crate::events::Kind, Vec<crate::events::ExpandedEvent>)],
+    // /// Various URLs which can be used in the email.
+    pub urls: NotifyMailArgsUrls<'a>,
+}
+
+#[derive(Serialize)]
+pub struct NotifyMailArgsUrls<'a> {
+    pub notification_centre: Cow<'a, str>,
 }

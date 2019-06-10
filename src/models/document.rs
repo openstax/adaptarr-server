@@ -72,15 +72,15 @@ impl Document {
         })
     }
 
+    /// Get underlying database model.
+    pub fn into_db(self) -> db::Document {
+        self.data
+    }
+
     /// Delete this document.
     pub(super) fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
         diesel::delete(&self.data).execute(dbconn)?;
         Ok(())
-    }
-
-    /// Unpack database data.
-    pub fn into_db(self) -> db::Document {
-        self.data
     }
 
     /// Get the public portion of this document's data.

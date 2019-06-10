@@ -1,7 +1,8 @@
+use actix::System;
 use std::{env, mem};
 use structopt::StructOpt;
 
-use crate::Result;
+use crate::{Result, config::Config};
 
 mod document;
 mod role;
@@ -39,13 +40,13 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Command::Start => server::start(config),
-        Command::Document(opts) => document::main(config, opts),
-        Command::Role(opts) => role::main(config, opts),
-        Command::User(opts) => user::main(config, opts),
+        Command::Document(opts) => with_system(document::main, config, opts),
+        Command::Role(opts) => with_system(role::main, config, opts),
+        Command::User(opts) => with_system(user::main, config, opts),
     }
 }
 
-fn setup_sentry(config: &crate::config::Config) -> Result<()> {
+fn setup_sentry(config: &Config) -> Result<()> {
     if let Some(ref sentry) = config.sentry {
         env::set_var("RUST_BACKTRACE", "1");
         mem::forget(sentry::init((sentry.dsn.as_str(), sentry::ClientOptions {
@@ -74,4 +75,22 @@ fn setup_logging(config: &crate::config::Logging) -> Result<()> {
 
     builder.try_init()?;
     Ok(())
+}
+
+/// Run a function in a context of an Actix system.
+fn with_system<F, O, R>(f: F, config: &Config, opts: O) -> R
+where
+    F: FnOnce(&Config, O) -> R,
+{
+    let system = System::new("adaptarr::cli");
+
+    let r = f(config, opts);
+
+    // Send stop signal to the system. Without this system.run() will hang
+    // forever.
+    System::current().stop();
+    // Process all pending messages.
+    system.run();
+
+    r
 }

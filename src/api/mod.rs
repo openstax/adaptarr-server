@@ -10,10 +10,8 @@ use super::{
     Result,
     config::Config,
     db,
-    events::{self as event_manager, EventManager},
-    i18n::I18n,
+    i18n::{self, I18n},
     import::Importer,
-    mail::Mailer,
 };
 
 pub use self::error::{ApiError, Error};
@@ -63,25 +61,19 @@ pub struct State {
     pub config: Config,
     /// Database connection pool.
     pub db: db::Pool,
-    /// Mailer service.
-    pub mailer: Mailer,
-    /// Event manager.
-    pub events: Addr<EventManager>,
     /// Localization subsystem.
-    pub i18n: I18n<'static>,
+    pub i18n: &'static I18n<'static>,
     /// ZIP importer.
     pub importer: Addr<Importer>,
 }
 
 pub fn configure(cfg: Config) -> Result<State> {
-    let i18n = I18n::load()?;
+    let i18n = i18n::load()?;
     let db = db::pool()?;
 
     Ok(State {
         config: cfg.clone(),
         db: db.clone(),
-        mailer: Mailer::from_config(cfg.mail.clone())?,
-        events: event_manager::start(db.clone()),
         i18n,
         importer: Importer::start(db.clone(), cfg.storage.clone()),
     })

@@ -1,0 +1,15 @@
+{% filter translate(key="mail-notify-before-events") %}
+While you were gone:
+{% endfilter %}
+
+{%- for event in events %}
+{% if event.kind == 'assigned' %}
+{{ _(
+    key="mail-notify-event-assigned-text",
+    actorname=event.who.name,
+    actorurl=event.who.url,
+    moduletitle=event.module.title,
+    moduleurl=event.module.url
+) }}
+{%- endif %}
+{%- endfor %}

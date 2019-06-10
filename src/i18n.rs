@@ -11,7 +11,13 @@ use std::{
     str::FromStr,
 };
 
-use crate::Result;
+use crate::{Result, utils::SingleInit};
+
+static LOCALES: SingleInit<I18n> = SingleInit::uninit();
+
+pub fn load() -> crate::Result<&'static I18n<'static>> {
+    LOCALES.get_or_try_init(I18n::load)
+}
 
 /// Internationalisation subsystem.
 #[derive(Clone)]
@@ -79,6 +85,7 @@ impl I18n<'static> {
 
         for (code, resource) in locale_codes.into_iter().zip(resources.iter()) {
             let mut bundle = FluentBundle::new(&[&code]);
+            bundle.add_function("JOIN", join_fun)?;
 
             if let Err(errors) = bundle.add_resource(&resource) {
                 error!("Errors loading locale {}:{}",
@@ -364,6 +371,18 @@ fn format_errors(errors: &[FluentError]) -> String {
     }
 
     result
+}
+
+fn join_fun(positional: &[Option<FluentValue>], _: &HashMap<&str, FluentValue>)
+-> Option<FluentValue> {
+    let r = positional.iter()
+        .filter_map(|v| match v {
+            Some(FluentValue::String(ref s)) | Some(FluentValue::Number(ref s)) =>
+                Some(s.as_str()),
+            None => None,
+        })
+        .collect();
+    Some(FluentValue::String(r))
 }
 
 #[cfg(test)]
