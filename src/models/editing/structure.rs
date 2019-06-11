@@ -208,19 +208,19 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
             });
         }
 
-        if has_propose && !has_accept {
-            return Err(MissingRequiredPermission {
+        if has_editing && has_accept {
+            return Err(ConflictingPermissions {
                 step: stepid,
-                requirer: SlotPermission::ProposeChanges,
-                requiree: SlotPermission::AcceptChanges,
+                permission_a: SlotPermission::Edit,
+                permission_b: SlotPermission::AcceptChanges,
             });
         }
 
-        if has_accept && !has_propose {
-            return Err(MissingRequiredPermission {
+        if has_propose && has_accept {
+            return Err(ConflictingPermissions {
                 step: stepid,
-                requirer: SlotPermission::AcceptChanges,
-                requiree: SlotPermission::ProposeChanges,
+                permission_a: SlotPermission::ProposeChanges,
+                permission_b: SlotPermission::AcceptChanges,
             });
         }
     }
