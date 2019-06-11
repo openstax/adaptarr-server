@@ -11,6 +11,7 @@ mod user;
 mod util;
 
 #[derive(StructOpt)]
+#[structopt(raw(version = r#"env!("VERSION")"#))]
 struct Opts {
     #[structopt(subcommand)]
     command: Command,
