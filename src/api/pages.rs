@@ -8,6 +8,7 @@ use actix_web::{
     middleware::Logger,
     pred,
 };
+use sentry_actix::SentryMiddleware;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -37,6 +38,7 @@ pub fn app(state: State) -> App<State> {
     );
 
     App::with_state(state)
+        .middleware(SentryMiddleware::new())
         .middleware(Logger::default())
         .middleware(sessions)
         .resource("/login", |r| {
