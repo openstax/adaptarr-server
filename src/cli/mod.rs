@@ -1,5 +1,6 @@
 use actix::System;
-use std::{env, mem};
+use sentry::protocol::Event;
+use std::{env, mem, sync::Arc};
 use structopt::StructOpt;
 
 use crate::{Result, config::Config};
@@ -54,6 +55,7 @@ fn setup_sentry(config: &Config) -> Result<()> {
             trim_backtraces: true,
             release: Some(env!("CARGO_PKG_VERSION").into()),
             server_name: Some(config.server.domain.clone().into()),
+            before_send: Some(Arc::new(Box::new(before_send_event_to_sentry))),
             .. Default::default()
         })));
         sentry::integrations::panic::register_panic_handler();
@@ -94,4 +96,11 @@ where
     system.run();
 
     r
+}
+
+fn before_send_event_to_sentry(mut ev: Event<'static>) -> Option<Event<'static>> {
+    if let Some(ref mut request) = ev.request {
+        request.headers.remove("cookie");
+    }
+    Some(ev)
 }
