@@ -41,7 +41,6 @@ rand = "0.6.1"
 ring = "0.13.5"
 rmps = { version = "0.13.7", package = "rmp-serde" }
 rust-argon2 = "0.4.0"
-sentry = "0.15.4"
 sentry-actix = "0.15.4"
 serde = "1.0.80"
 serde_derive = "1.0.80"
@@ -74,6 +73,10 @@ features = ["serde"]
 [dependencies.uuid]
 version = "0.7.0"
 features = ["serde"]
+
+[dependencies.sentry]
+version = "0.15.4"
+features = ["with_debug_to_log"]
 
 [patch.crates-io]
 fluent = { git = "https://github.com/katalysteducation/fluent-rs.git" }

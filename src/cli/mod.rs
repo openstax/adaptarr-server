@@ -53,6 +53,7 @@ fn setup_sentry(config: &Config) -> Result<()> {
         env::set_var("RUST_BACKTRACE", "1");
         mem::forget(sentry::init((sentry.dsn.as_str(), sentry::ClientOptions {
             trim_backtraces: true,
+            debug: cfg!(debug_assertions),
             release: Some(env!("CARGO_PKG_VERSION").into()),
             server_name: Some(config.server.domain.clone().into()),
             before_send: Some(Arc::new(Box::new(before_send_event_to_sentry))),

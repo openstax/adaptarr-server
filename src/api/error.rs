@@ -28,13 +28,29 @@ pub trait ApiError: Fail {
     fn code(&self) -> Option<&str>;
 }
 
+/// This implementation is required to make `#[cause]` on a `Box<dyn ApiError>`
+/// work.
+impl Fail for Box<dyn ApiError> {
+    fn name(&self) -> Option<&str> {
+        (**self).name()
+    }
+
+    fn cause(&self) -> Option<&dyn Fail> {
+        (**self).cause()
+    }
+
+    fn backtrace(&self) -> Option<&failure::Backtrace> {
+        (**self).backtrace()
+    }
+}
+
 /// A wrapper around many types of errors, including user-facing [`ApiError`]s
 /// as well as many other errors that should not be reported to the user, such
 /// as database connection errors.
 #[derive(Debug, Fail)]
 pub enum Error {
     #[fail(display = "{}", _0)]
-    Api(Box<dyn ApiError>),
+    Api(#[cause] Box<dyn ApiError>),
     /// Generic system error.
     #[fail(display = "{}", _0)]
     System(#[cause] std::io::Error),
@@ -125,8 +141,6 @@ impl<R: Responder> Responder for ApiResult<R> {
             ApiResult::Error(e) => e,
         };
 
-        capture_error(req, &err);
-
         match err {
             Error::Api(err) => Ok(AsyncResult::ok({
                 if let Some(code) = err.code() {
@@ -136,13 +150,16 @@ impl<R: Responder> Responder for ApiResult<R> {
                             raw: err.to_string(),
                         })
                 } else {
-                    error!("{}", err);
+                    capture_error(req, &err);
                     HttpResponse::new(err.status())
                 }
             })),
-            Error::Payload(e) => Err(e.into()),
+            Error::Payload(err) => {
+                capture_error(req, &err);
+                Err(err.into())
+            }
             _ => Ok(AsyncResult::ok({
-                error!("{}", err);
+                capture_error(req, &err);
                 HttpResponse::InternalServerError()
                     .finish()
             })),
@@ -350,7 +367,7 @@ where
 }
 
 /// Capture an error and report it to Sentry.io.
-fn capture_error<S>(req: &HttpRequest<S>, error: &Error) {
-    Hub::from_request(req)
-        .capture_event(event_from_fail(error));
+fn capture_error<S, F: Fail>(req: &HttpRequest<S>, error: &F) {
+    error!("{}", error);
+    Hub::from_request(req).capture_event(event_from_fail(error));
 }
