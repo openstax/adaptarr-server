@@ -2,6 +2,7 @@
 
 pub mod book;
 pub mod bookpart;
+pub mod conversation;
 pub mod document;
 pub mod draft;
 pub mod editing;
