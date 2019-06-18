@@ -2,7 +2,18 @@ use actix::prelude::*;
 use actix_web::ws::{self, CloseCode, WebsocketContext};
 use std::time::Duration;
 
-use super::protocol::{CookieGenerator, Flags, Kind, Message};
+use super::{
+    broker::{self, Broker, Connect, Disconnect, Event, NewMessageError},
+    protocol::{
+        CookieGenerator,
+        Flags,
+        Kind,
+        Message,
+        MessageInvalid,
+        MessageReceived,
+        NewMessage,
+    },
+};
 
 /// Structure representing a remote client to the conversation protocol.
 ///
@@ -23,20 +34,64 @@ impl Client {
             cookie: CookieGenerator::default(),
         }
     }
+
+    /// Handle request for adding a new message to the conversation.
+    fn send_message(&mut self, msg: Message, ctx: &mut <Self as Actor>::Context) {
+        let flags = msg.flags;
+
+        Broker::from_registry()
+            .send(broker::NewMessage {
+                conversation: self.conversation,
+                user: self.user,
+                message: msg.body.clone(),
+            })
+            .into_actor(self)
+            .then(success_or_disconnect)
+            .map(|r, _, ctx| ctx.binary(match r {
+                Ok(id) => Message::build(msg.cookie, MessageReceived { id }),
+                Err(NewMessageError::Validation(err)) =>
+                    Message::build(msg.cookie, MessageInvalid {
+                        message: Some(err.to_string()),
+                    }),
+            }))
+            .maybe_suspend(flags, ctx);
+    }
 }
 
 impl Actor for Client {
     type Context = WebsocketContext<Self, crate::api::State>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        // TODO: register client with message broker.
+        Broker::from_registry()
+            .send(Connect {
+                conversation: self.conversation,
+                user: self.user,
+                addr: ctx.address().recipient(),
+            })
+            .into_actor(self)
+            .then(success_or_disconnect)
+            .map(|_, actor, ctx| {
+                ctx.binary(Message::header(
+                    actor.cookie.next(),
+                    Kind::Connected,
+                    Flags::empty(),
+                ).to_bytes());
+            })
+            .wait(ctx);
 
         // Ping client every 30 seconds to keep connection open.
         ctx.run_interval(Duration::from_secs(30), |_, ctx| ctx.ping(""));
     }
 
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
-        // TODO: unregister client from message broker.
+        Broker::from_registry()
+            .send(Disconnect {
+                conversation: self.conversation,
+                addr: ctx.address().recipient(),
+            })
+            .into_actor(self)
+            .drop_err()
+            .wait(ctx);
 
         Running::Stop
     }
@@ -63,7 +118,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for Client {
 
         match Kind::from_u16(msg.kind) {
             // Client wants to send a message.
-            Some(Kind::SendMessage) => unimplemented!("send message"),
+            Some(Kind::SendMessage) => self.send_message(msg, ctx),
             // Client did not understand an event we sent them. We must handle
             // this response since it might be mandated by the event, and we
             // need to mark it as received.
@@ -80,5 +135,57 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for Client {
                 Flags::empty(),
             ).to_bytes()),
         };
+    }
+}
+
+impl Handler<Event> for Client {
+    type Result = ();
+
+    fn handle(&mut self, ev: Event, ctx: &mut Self::Context) {
+        let Event { id, user, timestamp, message, .. } = ev;
+
+        let msg = NewMessage { id, timestamp, user, message };
+
+        ctx.binary(Message::build(self.cookie.next(), msg));
+    }
+}
+
+/// Convert an Actix mailbox error into an empty error, closing the connection
+/// if it occurred.
+fn success_or_disconnect<R>(
+    r: Result<R, MailboxError>,
+    _: &mut Client,
+    ctx: &mut <Client as Actor>::Context,
+) -> impl ActorFuture<Item = R, Error = (), Actor = Client> {
+    match r {
+        Ok(r) => actix::fut::ok(r),
+        Err(e) => {
+            error!("Could not deliver message to the conversation broker: {}", e);
+            ctx.close(Some(CloseCode::Error.into()));
+            actix::fut::err(())
+        }
+    }
+}
+
+trait MaybeSuspend<A: Actor> {
+    fn maybe_suspend(self, flags: Flags, ctx: &mut A::Context);
+}
+
+impl<A, T> MaybeSuspend<A> for T
+where
+    A: Actor,
+    T: ContextFutureSpawner<A>,
+    <A as Actor>::Context: AsyncContext<A>,
+{
+    fn maybe_suspend(self, flags: Flags, ctx: &mut A::Context) {
+        if flags.contains(Flags::RESPONSE_REQUIRED) {
+            // Response is required for this message; suspend processing of
+            // incoming messages until we handle this one.
+            self.wait(ctx)
+        } else {
+            // Response is not required; we can safely continue accepting new
+            // messages while we process this one.
+            self.spawn(ctx)
+        }
     }
 }
