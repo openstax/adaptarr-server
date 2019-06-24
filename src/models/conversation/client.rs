@@ -47,13 +47,18 @@ impl Client {
             })
             .into_actor(self)
             .then(success_or_disconnect)
-            .map(|r, _, ctx| ctx.binary(match r {
-                Ok(id) => Message::build(msg.cookie, MessageReceived { id }),
+            .map(|r, _, ctx| match r {
+                Ok(id) => ctx.binary(Message::build(
+                    msg.cookie, MessageReceived { id })),
                 Err(NewMessageError::Validation(err)) =>
-                    Message::build(msg.cookie, MessageInvalid {
+                    ctx.binary(Message::build(msg.cookie, MessageInvalid {
                         message: Some(err.to_string()),
-                    }),
-            }))
+                    })),
+                Err(err) => {
+                    error!("Could not deliver new message: {}", err);
+                    ctx.close(Some(CloseCode::Error.into()));
+                }
+            })
             .maybe_suspend(flags, ctx);
     }
 }

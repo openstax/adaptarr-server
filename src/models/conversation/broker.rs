@@ -1,17 +1,33 @@
 use actix::prelude::*;
 use bytes::Bytes;
-use chrono::{Utc, NaiveDateTime};
+use chrono::NaiveDateTime;
+use diesel::{prelude::*, result::Error as DbError};
 use failure::Fail;
 use std::collections::hash_map::{Entry, HashMap};
 
-use crate::models::conversation::format::{self, ValidationError};
+use crate::{
+    db::{Pool, models as db, schema::conversation_events},
+    models::conversation::{
+        event::Event as EventModel,
+        format::{self, ValidationError},
+    },
+};
 
 /// Broker messages and events to users.
-#[derive(Default)]
 pub struct Broker {
     /// Mapping from conversation ID to a list of listeners for that
     /// conversation.
     listeners: HashMap<i32, Vec<Listener>>,
+    pool: Pool,
+}
+
+impl Default for Broker {
+    fn default() -> Self {
+        Self {
+            listeners: HashMap::new(),
+            pool: crate::db::pool().expect("database should be initialized"),
+        }
+    }
 }
 
 struct Listener {
@@ -101,10 +117,16 @@ pub struct NewMessage {
 pub enum NewMessageError {
     #[fail(display = "malformed message: {}", _0)]
     Validation(#[cause] ValidationError),
+    #[fail(display = "internal error")]
+    Database(#[cause] DbError),
+    #[fail(display = "internal error")]
+    DbPool(#[cause] r2d2::Error),
 }
 
 impl_from! { for NewMessageError ;
     ValidationError => |e| NewMessageError::Validation(e),
+    DbError => |e| NewMessageError::Database(e),
+    r2d2::Error => |e| NewMessageError::DbPool(e),
 }
 
 impl Message for NewMessage {
@@ -114,16 +136,21 @@ impl Message for NewMessage {
 impl Handler<NewMessage> for Broker {
     type Result = Result<i32, NewMessageError>;
 
-    fn handle(&mut self, msg: NewMessage, _: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: NewMessage, ctx: &mut Self::Context) -> Self::Result {
         let NewMessage { conversation, user, message } = msg;
 
-        let ctx = format::validate(&message)?;
-        let id = 0; // TODO: write message to database
+        let validation = format::validate(&message)?;
+
+        let db = self.pool.get()?;
+        let event = EventModel::new_message_in(
+            &*db, conversation, user, &validation)?;
+        let db::ConversationEvent {
+            id, timestamp, data, ..
+        } = event.into_db();
 
         let event = Event {
-            conversation, id, user,
-            timestamp: Utc::now().naive_utc(),
-            message,
+            id, conversation, user, timestamp,
+            message: Bytes::from(data),
         };
 
         for listener in self.listeners.get(&conversation).into_iter().flatten() {
@@ -139,7 +166,7 @@ impl Handler<NewMessage> for Broker {
             // TODO: notify users who aren't currently connected to conversation
         }
 
-        Ok(id)
+        Ok(event.id)
     }
 }
 
