@@ -485,3 +485,43 @@ pub struct NewEditProcessLink<'a> {
     pub name: &'a str,
     pub slot: i32,
 }
+
+#[derive(Clone, Copy, Debug, Identifiable, Queryable)]
+pub struct Conversation {
+    /// Conversation's ID.
+    pub id: i32,
+}
+
+#[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(conversation, user)]
+pub struct ConversationMember {
+    /// Conversation's ID.
+    pub conversation: i32,
+    /// User's ID.
+    pub user: i32,
+}
+
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct ConversationEvent {
+    /// Event's ID.
+    pub id: i32,
+    /// Conversation's ID.
+    pub conversation: i32,
+    /// Event's kind.
+    pub kind: String,
+    /// Date and time when this event occurred.
+    pub timestamp: NaiveDateTime,
+    /// Author's ID, if this event was a result of a user's action.
+    pub author: Option<i32>,
+    /// Event's data.
+    pub data: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "conversation_events"]
+pub struct NewConversationEvent<'a> {
+    pub conversation: i32,
+    pub kind: &'a str,
+    pub author: Option<i32>,
+    pub data: &'a [u8],
+}
