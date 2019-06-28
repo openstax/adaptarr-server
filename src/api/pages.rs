@@ -32,15 +32,10 @@ use super::{
 };
 
 pub fn app(state: State) -> App<State> {
-    let sessions = SessionManager::new(
-        state.config.server.secret.clone(),
-        state.db.clone(),
-    );
-
     App::with_state(state)
         .middleware(SentryMiddleware::new())
         .middleware(Logger::default())
-        .middleware(sessions)
+        .middleware(SessionManager::new())
         .resource("/login", |r| {
             r.get().api_with(login);
             r.post().api_with(do_login);

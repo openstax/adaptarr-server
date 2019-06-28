@@ -80,15 +80,10 @@ pub fn configure(cfg: Config) -> Result<State> {
 }
 
 pub fn new_app(state: State) -> App<State> {
-    let sessions = session::SessionManager::new(
-        state.config.server.secret.clone(),
-        state.db.clone(),
-    );
-
     App::with_state(state)
         .middleware(SentryMiddleware::new())
         .middleware(Logger::default())
-        .middleware(sessions)
+        .middleware(session::SessionManager::new())
         .prefix("/api/v1")
         .configure(books::routes)
         .configure(conversations::routes)
