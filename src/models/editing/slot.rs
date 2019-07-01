@@ -5,7 +5,6 @@ use diesel::{
 use failure::Fail;
 use serde::Serialize;
 use std::ops::Deref;
-use uuid::Uuid;
 
 use crate::{
     ApiError,
@@ -115,10 +114,10 @@ impl Slot {
     }
 
     /// Get current occupant of this slot in a draft.
-    pub fn get_occupant(&self, dbcon: &Connection, draft: Uuid)
+    pub fn get_occupant(&self, dbcon: &Connection, draft: &Draft)
     -> Result<Option<User>, DbError> {
         draft_slots::table
-            .filter(draft_slots::draft.eq(draft)
+            .filter(draft_slots::draft.eq(draft.module_id())
                 .and(draft_slots::slot.eq(self.data.id)))
             .get_result::<db::DraftSlot>(dbcon)
             .optional()?
@@ -131,7 +130,7 @@ impl Slot {
     }
 
     /// Fill this slot with an auto-selected user for a particular draft.
-    pub fn fill(&self, dbcon: &Connection, draft: Uuid)
+    pub fn fill(&self, dbcon: &Connection, draft: &Draft)
     -> Result<Option<i32>, FillSlotError> {
         if !self.data.autofill {
             return Ok(None);
@@ -153,7 +152,7 @@ impl Slot {
     }
 
     /// Fill this slot with a user for a particular draft.
-    pub fn fill_with(&self, dbcon: &Connection, draft: Uuid, user: &db::User)
+    pub fn fill_with(&self, dbcon: &Connection, draft: &Draft, user: &db::User)
     -> Result<(), FillSlotError> {
         if let Some(role) = self.data.role {
             if !user.role.map_or(false, |r| r == role) {
@@ -165,7 +164,7 @@ impl Slot {
 
         diesel::insert_into(draft_slots::table)
             .values(db::DraftSlot {
-                draft,
+                draft: draft.module_id(),
                 slot: self.data.id,
                 user: user.id,
             })

@@ -384,7 +384,7 @@ pub fn get_process_details(
         .into_iter()
         .map(|slot| Ok(SlotSeating {
             slot: slot.get_public(),
-            user: slot.get_occupant(&*db, draft.module_id())?
+            user: slot.get_occupant(&*db, &draft)?
                 .map(|user| user.get_public(Fields::empty())),
         }))
         .collect::<Result<Vec<_>>>()?;
@@ -414,7 +414,7 @@ pub fn assign_slot(
     let slot = Slot::by_id(&*db, slot)?;
     let user = User::by_id(&*db, *user)?;
 
-    slot.fill_with(&*db, draft.module_id(), &user)?;
+    slot.fill_with(&*db, &draft, &user)?;
 
     Ok(HttpResponse::Ok().finish())
 }

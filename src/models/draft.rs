@@ -333,7 +333,7 @@ impl Draft {
 
             for (slot, _, seating) in slots {
                 if seating.is_none() {
-                    slot.fill(dbconn, self.data.module)
+                    slot.fill(dbconn, &self)
                         .map_err(|e| AdvanceDraftError::FillSlot(slot.id, e))?;
                     // TODO: send notifications
                 }

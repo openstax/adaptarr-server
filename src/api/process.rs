@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     models::{
-        draft::PublicData as DraftData,
+        draft::{Draft, PublicData as DraftData},
         editing::{
             Process,
             ProcessData,
@@ -113,10 +113,11 @@ pub fn assign_to_slot(
 ) -> Result<HttpResponse> {
     let db = state.db.get()?;
     let data = data.into_inner();
+    let draft = Draft::by_id(&*db, data.draft)?;
     let user = session.user(&*db)?;
 
     Slot::by_id(&*db, data.slot)?
-        .fill_with(&*db, data.draft, &user)?;
+        .fill_with(&*db, &draft, &user)?;
 
     Ok(HttpResponse::Ok().finish())
 }
