@@ -9,8 +9,9 @@ use crate::{
     },
     models::{
         book::{Book, FindBookError},
-        user::{User, FindUserError},
+        editing::slot::{Slot, FindSlotError},
         module::{Module, FindModuleError},
+        user::{User, FindUserError},
     },
 };
 use super::Error;
@@ -20,6 +21,7 @@ use super::Error;
 pub enum Event {
     Assigned(Assigned),
     ProcessEnded(ProcessEnded),
+    SlotFilled(SlotFilled),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -40,11 +42,23 @@ pub struct ProcessEnded {
     pub version: i32,
 }
 
+/// A slot was filled with a user.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SlotFilled {
+    /// Slot which was filled.
+    pub slot: i32,
+    /// Draft in which the slot was filled.
+    pub module: Uuid,
+    /// Version of the draft when the slot was filled.
+    pub document: i32,
+}
+
 impl Event {
     pub fn kind(&self) -> &'static str {
         match *self {
             Event::Assigned(_) => "assigned",
             Event::ProcessEnded(_) => "process-ended",
+            Event::SlotFilled(_) => "slot-filled",
         }
     }
 }
@@ -52,6 +66,7 @@ impl Event {
 impl_from! { for Event ;
     Assigned => |e| Event::Assigned(e),
     ProcessEnded => |e| Event::ProcessEnded(e),
+    SlotFilled => |e| Event::SlotFilled(e),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -59,6 +74,7 @@ impl_from! { for Event ;
 pub enum Kind {
     Assigned,
     ProcessEnded,
+    SlotFilled,
     Other,
 }
 
@@ -67,6 +83,7 @@ impl Kind {
         match s {
             "assigned" => Kind::Assigned,
             "process-ended" => Kind::ProcessEnded,
+            "slot-filled" => Kind::SlotFilled,
             _ => Kind::Other,
         }
     }
@@ -89,6 +106,11 @@ pub enum ExpandedEvent {
     ProcessEnded {
         module: ExpandedModule,
         version: i32,
+    },
+    #[serde(rename = "slot-filled")]
+    SlotFilled {
+        module: ExpandedModule,
+        slot: ExpandedSlot,
     },
 }
 
@@ -118,6 +140,12 @@ pub struct ExpandedBooks {
     pub count: usize,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ExpandedSlot {
+    /// Slot's name.
+    pub name: String,
+}
+
 pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
 -> Result<ExpandedEvent, Error> {
     let data = rmps::from_slice(&event.data)?;
@@ -125,6 +153,7 @@ pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
     match data {
         Event::Assigned(ref ev) => expand_assigned(config, dbcon, ev),
         Event::ProcessEnded(ref ev) => expand_process_ended(config, dbcon, ev),
+        Event::SlotFilled(ref ev) => expand_slot_filled(config, dbcon, ev),
     }
 }
 
@@ -210,5 +239,39 @@ fn expand_process_ended(config: &Config, dbcon: &Connection, ev: &ProcessEnded)
                 config.server.domain, module.0.id),
         },
         version: ev.version,
+    })
+}
+
+fn expand_slot_filled(config: &Config, dbcon: &Connection, ev: &SlotFilled)
+-> Result<ExpandedEvent, Error> {
+    let module = match Module::by_id(dbcon, ev.module) {
+        Ok(module) => module,
+        Err(FindModuleError::Database(err)) =>
+            return Err(err.into()),
+        Err(FindModuleError::NotFound) => panic!(
+            "Inconsistent database: module doesn't exist \
+            but is referenced by an event",
+        ),
+    }.into_db();
+
+    let slot = match Slot::by_id(dbcon, ev.slot) {
+        Ok(module) => module,
+        Err(FindSlotError::Database(err)) =>
+            return Err(err.into()),
+        Err(FindSlotError::NotFound) => panic!(
+            "Inconsistent database: slot doesn't exist \
+            but is referenced by an event",
+        ),
+    }.into_db();
+
+    Ok(ExpandedEvent::SlotFilled {
+        module: ExpandedModule {
+            title: module.1.title,
+            url: format!("https://{}/modules/{}",
+                config.server.domain, module.0.id),
+        },
+        slot: ExpandedSlot {
+            name: slot.name,
+        },
     })
 }

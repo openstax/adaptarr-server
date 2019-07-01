@@ -11,6 +11,8 @@
     {%- set header = "mail-notify-group-header-assigned" -%}
 {%- elif group == "process-ended" -%}
     {%- set header = "mail-notify-group-header-process-ended" -%}
+{%- elif group == "slot-filled" -%}
+    {%- set header = "mail-notify-group-header-slot-filled" -%}
 {%- else -%}
     {%- set_global num_unknown = num_unknown + count -%}
     {%- continue -%}
@@ -42,6 +44,14 @@
     key="mail-notify-event-process-ended-text",
     moduletitle=event.module.title,
     moduleurl=event.module.url
+) }}
+{%- elif event.kind == "slot-filled" %}
+
+{{ _(
+    key="mail-notify-event-slot-filled-text",
+    moduletitle=event.module.title,
+    moduleurl=event.module.url,
+    slotname=event.slot.name
 ) }}
 {%- endif -%}
 

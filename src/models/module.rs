@@ -24,6 +24,7 @@ use crate::{
             xref_targets,
         },
     },
+    events::{EventManager, SlotFilled},
     processing::TargetProcessor,
 };
 use super::{
@@ -222,12 +223,20 @@ impl Module {
                 .get_result::<db::Draft>(dbconn)?;
 
             diesel::insert_into(draft_slots::table)
-                .values(slots)
+                .values(&slots)
                 .execute(dbconn)?;
 
             let document = documents::table
                 .filter(documents::id.eq(draft.document))
                 .get_result::<db::Document>(dbconn)?;
+
+            for slot in slots {
+                EventManager::notify(slot.user, SlotFilled {
+                    slot: slot.slot,
+                    module: self.data.id,
+                    document: document.id,
+                });
+            }
 
             Ok(Draft::from_db(draft, Document::from_db(document)))
         })

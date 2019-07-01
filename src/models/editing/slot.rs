@@ -21,6 +21,7 @@ use crate::{
         },
         functions::count_distinct,
     },
+    events::{self, EventManager},
     models::{Document, Draft, user::{User, FindUserError}},
 };
 
@@ -102,6 +103,11 @@ impl Slot {
             .collect())
     }
 
+    /// Unpack database data.
+    pub fn into_db(self) -> db::EditProcessSlot {
+        self.data
+    }
+
     /// Get the public portion of this slot's data.
     pub fn get_public(&self) -> PublicData {
         let db::EditProcessSlot { id, ref name, role, .. } = self.data;
@@ -172,6 +178,12 @@ impl Slot {
             .do_update()
             .set(draft_slots::user.eq(user.id))
             .execute(dbcon)?;
+
+        EventManager::notify(user, events::SlotFilled {
+            slot: self.data.id,
+            module: draft.module_id(),
+            document: draft.id,
+        });
 
         Ok(())
     }

@@ -335,7 +335,6 @@ impl Draft {
                 if seating.is_none() {
                     slot.fill(dbconn, &self)
                         .map_err(|e| AdvanceDraftError::FillSlot(slot.id, e))?;
-                    // TODO: send notifications
                 }
             }
 

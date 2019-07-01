@@ -250,6 +250,25 @@ mail-notify-event-process-ended =
     Z radością informujemy, że kończymy prace redakcyjne nad modułem {
     -mail-url(url: $moduleurl, text: $moduletitle) }.
 
+# Header displayed before notifications about user being assigned to a slot in
+# an editing process.
+mail-notify-group-header-slot-filled =
+    Informacja o przydzieleniu zadań:
+
+# Notification about user being assigned to a slot (or slots) in an editing
+# process for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module in which the user was assigned
+# - $moduleurl (string): URL to the module $moduletitle
+# - $slotname (string): name of the slot to which the user was assigned
+mail-notify-event-slot-filled-text =
+    Została przydzielona Ci rola { $slotname } modułu „{ $moduletitle }” ({
+    $moduleurl }).
+mail-notify-event-slot-filled =
+    Została przydzielona Ci rola { $slotname } modułu {
+    -mail-url(url: $moduleurl, text: $moduletitle) }.
+
 -mail-notify-unknown-text =
     Możesz zapoznać się z { $count ->
         [1] nim

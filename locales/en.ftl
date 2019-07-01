@@ -249,6 +249,25 @@ mail-notify-event-process-ended =
         -mail-url(url: $moduleurl, text: $moduletitle)
     } has successfully concluded.
 
+# Header displayed before notifications about user being assigned to a slot in
+# an editing process.
+mail-notify-group-header-slot-filled =
+    Information on assignment of work:
+
+# Notification about user being assigned to a slot (or slots) in an editing
+# process for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module in which the user was assigned
+# - $moduleurl (string): URL to the module $moduletitle
+# - $slotname (string): name of the slot to which the user was assigned
+mail-notify-event-slot-filled-text =
+    You have been assigned the role of { $slotname } for module “{ $moduletitle
+    }” ({ $moduleurl }).
+mail-notify-event-slot-filled =
+    You have been assigned the role of { $slotname } for module {
+    -mail-url(url: $moduleurl, text: $moduletitle) }.
+
 -mail-notify-unknown-text =
     You can see { $count ->
         [1] it
