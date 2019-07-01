@@ -51,7 +51,7 @@ const NOTIFY_INTERVAL: Duration = Duration::from_secs(60);
 /// After receiving this message the event manager will persist `event` in
 /// the database, and attempt to notify the user.
 pub struct Notify {
-    pub user: User,
+    pub user: i32,
     pub event: Event,
 }
 
@@ -106,13 +106,13 @@ impl EventManager {
     /// Emit an event.
     ///
     /// Errors will be logged, but otherwise ignored.
-    pub fn notify<E>(user: User, event: E)
+    pub fn notify<E>(user: &db::User, event: E)
     where
         Event: From<E>,
     {
         let manager = EventManager::from_registry();
         let message = Notify {
-            user,
+            user: user.id,
             event: Event::from(event),
         };
 
@@ -136,13 +136,13 @@ impl EventManager {
 
         let ev = diesel::insert_into(events::table)
             .values(&db::NewEvent {
-                user: user.id,
+                user,
                 kind: event.kind(),
                 data: &data,
             })
             .get_result::<db::Event>(&*db)?;
 
-        if let Some(stream) = self.streams.get(&user.id) {
+        if let Some(stream) = self.streams.get(&user) {
             let _ = stream.do_send(NewEvent {
                 id: ev.id,
                 timestamp: ev.timestamp,
