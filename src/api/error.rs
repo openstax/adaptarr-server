@@ -93,7 +93,16 @@ impl_from! { for Error ;
     std::io::Error => |e| Error::System(e),
     diesel::result::Error => |e| Error::Db(e),
     r2d2::Error => |e| Error::DbPool(e),
-    tera::Error => |e| Error::Template(e.to_string()),
+    tera::Error => |e| {
+        let mut msg = String::new();
+        for (inx, err) in e.iter().enumerate() {
+            if inx > 0 {
+                msg.push_str(": ");
+            }
+            msg.push_str(&err.to_string());
+        }
+        Error::Template(msg)
+    },
     actix::MailboxError => |e| Error::ActixMailbox(e),
     actix_web::error::PayloadError => |e| Error::Payload(e),
 }
