@@ -168,6 +168,12 @@ impl Slot {
 
         debug!("Assigning {:?} to {:?}", user, self.data);
 
+        let old = draft_slots::table
+            .filter(draft_slots::draft.eq(draft.module_id())
+                .and(draft_slots::slot.eq(self.data.id)))
+            .select(draft_slots::user.nullable())
+            .get_result::<Option<i32>>(dbcon)?;
+
         diesel::insert_into(draft_slots::table)
             .values(db::DraftSlot {
                 draft: draft.module_id(),
@@ -184,6 +190,14 @@ impl Slot {
             module: draft.module_id(),
             document: draft.id,
         });
+
+        if let Some(old) = old {
+            EventManager::notify(old, events::SlotVacated {
+                slot: self.data.id,
+                module: draft.module_id(),
+                document: draft.id,
+            });
+        }
 
         Ok(())
     }

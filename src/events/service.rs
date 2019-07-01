@@ -228,7 +228,7 @@ impl EventManager {
     ) -> Result<(), Error> {
         let groups = events
             .into_iter()
-            .group_by(|event| Kind::from_str(&event.kind));
+            .group_by(|event| Kind::from_str(&event.kind).group());
 
         let mut groupped = Vec::new();
 

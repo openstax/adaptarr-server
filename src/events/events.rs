@@ -22,6 +22,7 @@ pub enum Event {
     Assigned(Assigned),
     ProcessEnded(ProcessEnded),
     SlotFilled(SlotFilled),
+    SlotVacated(SlotVacated),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -53,12 +54,24 @@ pub struct SlotFilled {
     pub document: i32,
 }
 
+/// User vacated a slot.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SlotVacated {
+    /// Slot which was vacated.
+    pub slot: i32,
+    /// Draft in which the slot was vacated.
+    pub module: Uuid,
+    /// Version of the draft when the slot was vacated.
+    pub document: i32,
+}
+
 impl Event {
     pub fn kind(&self) -> &'static str {
         match *self {
             Event::Assigned(_) => "assigned",
             Event::ProcessEnded(_) => "process-ended",
             Event::SlotFilled(_) => "slot-filled",
+            Event::SlotVacated(_) => "slot-vacated",
         }
     }
 }
@@ -67,14 +80,25 @@ impl_from! { for Event ;
     Assigned => |e| Event::Assigned(e),
     ProcessEnded => |e| Event::ProcessEnded(e),
     SlotFilled => |e| Event::SlotFilled(e),
+    SlotVacated => |e| Event::SlotVacated(e),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
+pub enum Group {
+    Assigned,
+    ProcessEnded,
+    SlotAssignment,
+    Other,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Kind {
     Assigned,
     ProcessEnded,
     SlotFilled,
+    SlotVacated,
     Other,
 }
 
@@ -84,7 +108,17 @@ impl Kind {
             "assigned" => Kind::Assigned,
             "process-ended" => Kind::ProcessEnded,
             "slot-filled" => Kind::SlotFilled,
+            "slot-vacated" => Kind::SlotVacated,
             _ => Kind::Other,
+        }
+    }
+
+    pub fn group(&self) -> Group {
+        match *self {
+            Kind::Assigned => Group::Assigned,
+            Kind::ProcessEnded => Group::ProcessEnded,
+            Kind::SlotFilled | Kind::SlotVacated => Group::SlotAssignment,
+            Kind::Other => Group::Other,
         }
     }
 }
@@ -109,6 +143,11 @@ pub enum ExpandedEvent {
     },
     #[serde(rename = "slot-filled")]
     SlotFilled {
+        module: ExpandedModule,
+        slot: ExpandedSlot,
+    },
+    #[serde(rename = "slot-vacated")]
+    SlotVacated {
         module: ExpandedModule,
         slot: ExpandedSlot,
     },
@@ -154,6 +193,7 @@ pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
         Event::Assigned(ref ev) => expand_assigned(config, dbcon, ev),
         Event::ProcessEnded(ref ev) => expand_process_ended(config, dbcon, ev),
         Event::SlotFilled(ref ev) => expand_slot_filled(config, dbcon, ev),
+        Event::SlotVacated(ref ev) => expand_slot_vacated(config, dbcon, ev),
     }
 }
 
@@ -265,6 +305,40 @@ fn expand_slot_filled(config: &Config, dbcon: &Connection, ev: &SlotFilled)
     }.into_db();
 
     Ok(ExpandedEvent::SlotFilled {
+        module: ExpandedModule {
+            title: module.1.title,
+            url: format!("https://{}/modules/{}",
+                config.server.domain, module.0.id),
+        },
+        slot: ExpandedSlot {
+            name: slot.name,
+        },
+    })
+}
+
+fn expand_slot_vacated(config: &Config, dbcon: &Connection, ev: &SlotVacated)
+-> Result<ExpandedEvent, Error> {
+    let module = match Module::by_id(dbcon, ev.module) {
+        Ok(module) => module,
+        Err(FindModuleError::Database(err)) =>
+            return Err(err.into()),
+        Err(FindModuleError::NotFound) => panic!(
+            "Inconsistent database: module doesn't exist \
+            but is referenced by an event",
+        ),
+    }.into_db();
+
+    let slot = match Slot::by_id(dbcon, ev.slot) {
+        Ok(module) => module,
+        Err(FindSlotError::Database(err)) =>
+            return Err(err.into()),
+        Err(FindSlotError::NotFound) => panic!(
+            "Inconsistent database: slot doesn't exist \
+            but is referenced by an event",
+        ),
+    }.into_db();
+
+    Ok(ExpandedEvent::SlotVacated {
         module: ExpandedModule {
             title: module.1.title,
             url: format!("https://{}/modules/{}",
