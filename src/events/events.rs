@@ -19,6 +19,7 @@ use super::Error;
 #[serde(untagged)]
 pub enum Event {
     Assigned(Assigned),
+    ProcessEnded(ProcessEnded),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -29,22 +30,35 @@ pub struct Assigned {
     pub module: Uuid,
 }
 
+/// A draft has reached the final step of an editing process and become a new
+/// version of a module.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProcessEnded {
+    /// Module of which the draft become a new version.
+    pub module: Uuid,
+    /// Version which the draft become.
+    pub version: i32,
+}
+
 impl Event {
     pub fn kind(&self) -> &'static str {
         match *self {
             Event::Assigned(_) => "assigned",
+            Event::ProcessEnded(_) => "process-ended",
         }
     }
 }
 
 impl_from! { for Event ;
     Assigned => |e| Event::Assigned(e),
+    ProcessEnded => |e| Event::ProcessEnded(e),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     Assigned,
+    ProcessEnded,
     Other,
 }
 
@@ -52,6 +66,7 @@ impl Kind {
     pub fn from_str(s: &str) -> Self {
         match s {
             "assigned" => Kind::Assigned,
+            "process-ended" => Kind::ProcessEnded,
             _ => Kind::Other,
         }
     }
@@ -69,7 +84,12 @@ pub enum ExpandedEvent {
         who: ExpandedUser,
         module: ExpandedModule,
         book: ExpandedBooks,
-    }
+    },
+    #[serde(rename = "process-ended")]
+    ProcessEnded {
+        module: ExpandedModule,
+        version: i32,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -104,6 +124,7 @@ pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
 
     match data {
         Event::Assigned(ref ev) => expand_assigned(config, dbcon, ev),
+        Event::ProcessEnded(ref ev) => expand_process_ended(config, dbcon, ev),
     }
 }
 
@@ -167,5 +188,27 @@ fn expand_assigned(config: &Config, dbcon: &Connection, ev: &Assigned)
             url: book_url,
             count: books.len(),
         },
+    })
+}
+
+fn expand_process_ended(config: &Config, dbcon: &Connection, ev: &ProcessEnded)
+-> Result<ExpandedEvent, Error> {
+    let module = match Module::by_id(dbcon, ev.module) {
+        Ok(module) => module,
+        Err(FindModuleError::Database(err)) =>
+            return Err(err.into()),
+        Err(FindModuleError::NotFound) => panic!(
+            "Inconsistent database: module doesn't exist \
+            but is referenced by an event",
+        ),
+    }.into_db();
+
+    Ok(ExpandedEvent::ProcessEnded {
+        module: ExpandedModule {
+            title: module.1.title,
+            url: format!("https://{}/modules/{}",
+                config.server.domain, module.0.id),
+        },
+        version: ev.version,
     })
 }

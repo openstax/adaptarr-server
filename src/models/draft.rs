@@ -25,6 +25,7 @@ use crate::{
         },
         types::SlotPermission,
     },
+    events::{EventManager, ProcessEnded},
     permissions::PermissionBits,
     processing::{ProcessDocument, TargetProcessor},
 };
@@ -296,6 +297,11 @@ impl Draft {
             // ending the editing process.
 
             if next.is_final(dbconn)? {
+                let members = draft_slots::table
+                    .filter(draft_slots::draft.eq(self.data.module))
+                    .select(draft_slots::user)
+                    .get_results::<i32>(dbconn)?;
+
                 diesel::update(
                     modules::table
                         .filter(modules::id.eq(self.data.module)))
@@ -310,6 +316,11 @@ impl Draft {
                 let module = modules::table
                     .filter(modules::id.eq(self.data.module))
                     .get_result::<db::Module>(dbconn)?;
+
+                EventManager::notify(members, ProcessEnded {
+                    module: self.data.module,
+                    version: self.data.document,
+                });
 
                 return Ok(AdvanceResult::Finished(
                     Module::from_db(module, self.document)));

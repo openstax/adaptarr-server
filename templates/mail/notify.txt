@@ -9,6 +9,8 @@
 
 {%- if group == "assigned" -%}
     {%- set header = "mail-notify-group-header-assigned" -%}
+{%- elif group == "process-ended" -%}
+    {%- set header = "mail-notify-group-header-process-ended" -%}
 {%- else -%}
     {%- set_global num_unknown = num_unknown + count -%}
     {%- continue -%}
@@ -33,6 +35,13 @@
     booktitle=event.book.title,
     bookurl=event.book.url,
     bookcount=event.book.count
+) }}
+{%- elif event.kind == "process-ended" %}
+
+{{ _(
+    key="mail-notify-event-process-ended-text",
+    moduletitle=event.module.title,
+    moduleurl=event.module.url
 ) }}
 {%- endif -%}
 

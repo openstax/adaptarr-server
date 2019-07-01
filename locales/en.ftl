@@ -231,6 +231,24 @@ mail-notify-event-assigned =
             { -mail-url(url: $bookurl, text: $booktitle) }.
     }
 
+# Header displayed before notifications about editing process finishing for
+# drafts.
+mail-notify-group-header-process-ended =
+    Information on conclusion of editing works:
+
+# Notification about an editing process being finished for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module for whose draft the process ended
+# - $moduleurl (string): URL to the module $moduletitle
+mail-notify-event-process-ended-text =
+    We are happy to inform that work on module “{ $moduletitle }” ({
+    $moduleurl }) has successfully concluded.
+mail-notify-event-process-ended =
+    We are happy to inform that work on module {
+        -mail-url(url: $moduleurl, text: $moduletitle)
+    } has successfully concluded.
+
 -mail-notify-unknown-text =
     You can see { $count ->
         [1] it
