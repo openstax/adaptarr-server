@@ -176,7 +176,7 @@ impl Handler<events::NewEvent> for Listener {
             id,
             kind: event.kind(),
             timestamp,
-            data: event,
+            data: (*event).clone(),
         }).unwrap());
     }
 }
