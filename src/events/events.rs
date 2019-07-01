@@ -102,67 +102,70 @@ pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
 -> Result<ExpandedEvent, Error> {
     let data = rmps::from_slice(&event.data)?;
 
-    Ok(match data {
-        Event::Assigned(ev) => {
-            let who = match User::by_id(dbcon, ev.who) {
-                Ok(user) => user,
-                Err(FindUserError::Internal(err)) =>
+    match data {
+        Event::Assigned(ref ev) => expand_assigned(config, dbcon, ev),
+    }
+}
+
+fn expand_assigned(config: &Config, dbcon: &Connection, ev: &Assigned)
+-> Result<ExpandedEvent, Error> {
+    let who = match User::by_id(dbcon, ev.who) {
+        Ok(user) => user,
+        Err(FindUserError::Internal(err)) =>
+            return Err(err.into()),
+        Err(FindUserError::NotFound) => panic!(
+            "Inconsistent database: user doesn't exist \
+            but is referenced by an event",
+        ),
+    }.into_db();
+    let module = match Module::by_id(dbcon, ev.module) {
+        Ok(module) => module,
+        Err(FindModuleError::Database(err)) =>
+            return Err(err.into()),
+        Err(FindModuleError::NotFound) => panic!(
+            "Inconsistent database: module doesn't exist \
+            but is referenced by an event",
+        ),
+    };
+
+    let books = module.get_books(dbcon)?;
+    let (book_title, book_url) = match books.first() {
+        None => (None, None),
+        Some(id) => {
+            let book = match Book::by_id(dbcon, *id){
+                Ok(book) => book,
+                Err(FindBookError::Database(err)) =>
                     return Err(err.into()),
-                Err(FindUserError::NotFound) => panic!(
-                    "Inconsistent database: user doesn't exist \
-                    but is referenced by an event",
-                ),
+                Err(FindBookError::NotFound) => panic!(
+                    "Inconsistent database: book doesn't exist \
+                    but is referenced by an event"),
             }.into_db();
-            let module = match Module::by_id(dbcon, ev.module) {
-                Ok(module) => module,
-                Err(FindModuleError::Database(err)) =>
-                    return Err(err.into()),
-                Err(FindModuleError::NotFound) => panic!(
-                    "Inconsistent database: module doesn't exist \
-                    but is referenced by an event",
-                ),
-            };
 
-            let books = module.get_books(dbcon)?;
-            let (book_title, book_url) = match books.first() {
-                None => (None, None),
-                Some(id) => {
-                    let book = match Book::by_id(dbcon, *id){
-                        Ok(book) => book,
-                        Err(FindBookError::Database(err)) =>
-                            return Err(err.into()),
-                        Err(FindBookError::NotFound) => panic!(
-                            "Inconsistent database: book doesn't exist \
-                            but is referenced by an event"),
-                    }.into_db();
-
-                    (
-                        Some(book.title),
-                        Some(format!("https://{}/books/{}",
-                            config.server.domain, book.id)),
-                    )
-                }
-            };
-
-            let module = module.into_db();
-
-            ExpandedEvent::Assigned {
-                who: ExpandedUser {
-                    name: who.0.name,
-                    url: format!("https://{}/users/{}",
-                        config.server.domain, who.0.id),
-                },
-                module: ExpandedModule {
-                    title: module.1.title,
-                    url: format!("https://{}/modules/{}",
-                        config.server.domain, module.0.id),
-                },
-                book: ExpandedBooks {
-                    title: book_title,
-                    url: book_url,
-                    count: books.len(),
-                },
-            }
+            (
+                Some(book.title),
+                Some(format!("https://{}/books/{}",
+                    config.server.domain, book.id)),
+            )
         }
+    };
+
+    let module = module.into_db();
+
+    Ok(ExpandedEvent::Assigned {
+        who: ExpandedUser {
+            name: who.0.name,
+            url: format!("https://{}/users/{}",
+                config.server.domain, who.0.id),
+        },
+        module: ExpandedModule {
+            title: module.1.title,
+            url: format!("https://{}/modules/{}",
+                config.server.domain, module.0.id),
+        },
+        book: ExpandedBooks {
+            title: book_title,
+            url: book_url,
+            count: books.len(),
+        },
     })
 }
