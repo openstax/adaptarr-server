@@ -1,15 +1,59 @@
-{% filter translate(key="mail-notify-before-events") %}
-While you were gone:
-{% endfilter %}
+{%- set_global num_total = 0 -%}
+{%- set_global num_unknown = 0 -%}
 
-{%- for event in events %}
-{% if event.kind == 'assigned' %}
+{%- for item in events -%}
+{%- set group = item[0] -%}
+{%- set events = item[1] -%}
+{%- set count = events | length -%}
+{%- set_global num_total = num_total + count -%}
+
+{%- if group == "assigned" -%}
+    {%- set header = "mail-notify-group-header-assigned" -%}
+{%- else -%}
+    {%- set_global num_unknown = num_unknown + count -%}
+    {%- continue -%}
+{%- endif -%}
+
+{%- if not loop.first %}
+
+{% endif -%}
+
+{{ _(key=header, kind=group) }}
+
+{%- for event in events -%}
+
+{%- if event.kind == "assigned" -%}
+
 {{ _(
     key="mail-notify-event-assigned-text",
     actorname=event.who.name,
     actorurl=event.who.url,
     moduletitle=event.module.title,
-    moduleurl=event.module.url
+    moduleurl=event.module.url,
+    booktitle=event.book.title,
+    bookurl=event.book.url,
+    bookcount=event.book.count
 ) }}
+{%- endif -%}
+
+{%- endfor -%}
+{%- endfor -%}
+
+{%- if num_unknown > 0 -%}
+{%- if num_total > num_unknown %}
+
+{{ _(
+    key="mail-notify-also-unknown-events-text",
+    count=num_unknown,
+    notification_centre_url=urls.notification_centre
+) }}
+{%- else -%}
+{{ _(
+    key="mail-notify-only-unknown-events-text",
+    count=num_unknown,
+    notification_centre_url=urls.notification_centre
+) }}
+{%- endif -%}
 {%- endif %}
-{%- endfor %}
+
+{{ _(key="mail-notify-footer") }}

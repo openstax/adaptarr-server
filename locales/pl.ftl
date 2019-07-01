@@ -212,12 +212,13 @@ mail-notify-group-header-assigned =
 # - $booktitle (string): Title of one of books in which the module is used
 # - $bookurl (string): URL to the book $booktitle
 mail-notify-event-assigned-text =
-    Moduł „{ $moduletitle }” ({ $moduleurl }) zostaje przekazany przez
-    użytkownika { $actorurl } do wykonania prac. { $bookcount ->
+    Moduł „{ $moduletitle }” ({ $moduleurl
+    }) zostaje przekazany przez użytkownika { $actorname
+    } do wykonania prac. { $bookcount ->
         [0] Moduł nie jest wykorzystywany w żadnej książce.
         [1] Moduł jest wykorzystywany w książce „{ $booktitle }” ({ $bookurl }).
-       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w
-            „{ $booktitle }” ({ $bookurl }).
+       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w „{
+            $booktitle }” ({ $bookurl }).
     }
 mail-notify-event-assigned =
     Moduł {
@@ -232,6 +233,11 @@ mail-notify-event-assigned =
             -mail-url(url: $bookurl, text: $booktitle) }.
     }
 
+-mail-notify-unknown-text =
+    Możesz zapoznać się z { $count ->
+        [1] nim
+       *[other] nimi
+    } w centrum powiadomień ({ $url }).
 -mail-notify-unknown =
     Możesz zapoznać się z { $count ->
         [1] nim
@@ -244,6 +250,13 @@ mail-notify-event-assigned =
 # Variables:
 # - $count (number): Number of unknown notifications
 # - $notification_centre_url (string): URL of the notifications centre
+mail-notify-also-unknown-events-text =
+    Oraz { $count ->
+        [1] jedno inne zdarzenie którego
+        [few] { $count} inne zdarzenia których
+       *[many] { $count } innych zdarzeń których
+    } nie jesteśmy w stanie przedstawić w wiadomości e-mail. {
+        -mail-notify-unknown-text(count: $count, url: $notification_centre_url) }
 mail-notify-also-unknown-events =
     Oraz { $count ->
         [1] jedno inne zdarzenie którego
@@ -258,6 +271,12 @@ mail-notify-also-unknown-events =
 # Variables:
 # - $count (number): Number of unknown notifications
 # - $notification_centre_url (string): URL of the notifications centre
+mail-notify-only-unknown-events-text =
+    Chcemy Cię poinformować o { $count ->
+        [1] jednym zdarzeniu którego
+       *[other] { $count } zdarzeniach których
+    } nie jesteśmy w stanie przedstawić w wiadomości e-mail. {
+        -mail-notify-unknown-text(count: $count, url: $notification_centre_url) }
 mail-notify-only-unknown-events =
     Chcemy Cię poinformować o { $count ->
         [1] jednym zdarzeniu którego

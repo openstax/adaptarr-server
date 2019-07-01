@@ -14,8 +14,6 @@
 
         {% if group == "assigned" %}
             {% set header = "mail-notify-group-header-assigned" %}
-        {% elif group == "new-resource" %}
-            {% set header = "mail-notify-group-header-new-resource" %}
         {% else %}
             {% set_global num_unknown = num_unknown + count %}
             {% continue %}
@@ -38,14 +36,6 @@
                     booktitle=event.book.title,
                     bookurl=event.book.url,
                     bookcount=event.book.count
-                ) %}
-            {% elif event.kind == "new-resource" %}
-                {% set message = _(
-                    key="mail-notify-event-new-resource",
-                    actorname=event.who.name,
-                    actorurl=event.who.url,
-                    resourcename=event.resource.name,
-                    resourceurl=event.resource.url
                 ) %}
             {% endif %}
 
