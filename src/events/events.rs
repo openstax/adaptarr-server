@@ -218,14 +218,18 @@ pub struct ExpandedStep {
 
 pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
 -> Result<ExpandedEvent, Error> {
-    let data = rmps::from_slice(&event.data)?;
-
-    match data {
-        Event::Assigned(ref ev) => expand_assigned(config, dbcon, ev),
-        Event::ProcessEnded(ref ev) => expand_process_ended(config, dbcon, ev),
-        Event::SlotFilled(ref ev) => expand_slot_filled(config, dbcon, ev),
-        Event::SlotVacated(ref ev) => expand_slot_vacated(config, dbcon, ev),
-        Event::DraftAdvanced(ref ev) => expand_draft_advanced(config, dbcon, ev),
+    match Kind::from_str(&event.kind) {
+        Kind::Assigned =>
+            expand_assigned(config, dbcon, rmps::from_slice(&event.data)?),
+        Kind::ProcessEnded =>
+            expand_process_ended(config, dbcon, rmps::from_slice(&event.data)?),
+        Kind::SlotFilled =>
+            expand_slot_filled(config, dbcon, rmps::from_slice(&event.data)?),
+        Kind::SlotVacated =>
+            expand_slot_vacated(config, dbcon, rmps::from_slice(&event.data)?),
+        Kind::DraftAdvanced =>
+            expand_draft_advanced(config, dbcon, rmps::from_slice(&event.data)?),
+        Kind::Other => Err(Error::UnknownEvent(event.kind.clone())),
     }
 }
 
@@ -259,7 +263,7 @@ fn expand_books_containing(config: &Config, dbcon: &Connection, module: &Module)
     })
 }
 
-fn expand_assigned(config: &Config, dbcon: &Connection, ev: &Assigned)
+fn expand_assigned(config: &Config, dbcon: &Connection, ev: Assigned)
 -> Result<ExpandedEvent, Error> {
     let who = match User::by_id(dbcon, ev.who) {
         Ok(user) => user,
@@ -298,7 +302,7 @@ fn expand_assigned(config: &Config, dbcon: &Connection, ev: &Assigned)
     })
 }
 
-fn expand_process_ended(config: &Config, dbcon: &Connection, ev: &ProcessEnded)
+fn expand_process_ended(config: &Config, dbcon: &Connection, ev: ProcessEnded)
 -> Result<ExpandedEvent, Error> {
     let module = match Module::by_id(dbcon, ev.module) {
         Ok(module) => module,
@@ -320,7 +324,7 @@ fn expand_process_ended(config: &Config, dbcon: &Connection, ev: &ProcessEnded)
     })
 }
 
-fn expand_slot_filled(config: &Config, dbcon: &Connection, ev: &SlotFilled)
+fn expand_slot_filled(config: &Config, dbcon: &Connection, ev: SlotFilled)
 -> Result<ExpandedEvent, Error> {
     let module = match Module::by_id(dbcon, ev.module) {
         Ok(module) => module,
@@ -354,7 +358,7 @@ fn expand_slot_filled(config: &Config, dbcon: &Connection, ev: &SlotFilled)
     })
 }
 
-fn expand_slot_vacated(config: &Config, dbcon: &Connection, ev: &SlotVacated)
+fn expand_slot_vacated(config: &Config, dbcon: &Connection, ev: SlotVacated)
 -> Result<ExpandedEvent, Error> {
     let module = match Module::by_id(dbcon, ev.module) {
         Ok(module) => module,
@@ -388,7 +392,7 @@ fn expand_slot_vacated(config: &Config, dbcon: &Connection, ev: &SlotVacated)
     })
 }
 
-fn expand_draft_advanced(config: &Config, dbcon: &Connection, ev: &DraftAdvanced)
+fn expand_draft_advanced(config: &Config, dbcon: &Connection, ev: DraftAdvanced)
 -> Result<ExpandedEvent, Error> {
     let module = match Module::by_id(dbcon, ev.module) {
         Ok(module) => module,

@@ -25,6 +25,8 @@ pub enum Error {
     DatabasePool(#[cause] r2d2::Error),
     #[fail(display = "Error serializing event data: {}", _0)]
     Serialize(#[cause] rmps::encode::Error),
+    #[fail(display = "Unknown event type: {:?}", _0)]
+    UnknownEvent(String),
     #[fail(display = "Error deserializing event data: {}", _0)]
     Deserialize(#[cause] rmps::decode::Error),
 }
