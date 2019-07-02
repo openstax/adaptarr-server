@@ -6,10 +6,14 @@ use crate::{
     db::{
         Connection,
         models as db,
+        types::SlotPermission,
     },
     models::{
         book::{Book, FindBookError},
-        editing::slot::{Slot, FindSlotError},
+        editing::{
+            Step,
+            slot::{Slot, FindSlotError},
+        },
         module::{Module, FindModuleError},
         user::{User, FindUserError},
     },
@@ -23,6 +27,7 @@ pub enum Event {
     ProcessEnded(ProcessEnded),
     SlotFilled(SlotFilled),
     SlotVacated(SlotVacated),
+    DraftAdvanced(DraftAdvanced),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -65,6 +70,19 @@ pub struct SlotVacated {
     pub document: i32,
 }
 
+/// Draft was advanced to a next step.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DraftAdvanced {
+    /// Draft in which the slot was vacated.
+    pub module: Uuid,
+    /// Version of the draft when the slot was vacated.
+    pub document: i32,
+    /// Step to which the draft was advanced.
+    pub step: i32,
+    /// User's permissions at this step.
+    pub permissions: Vec<SlotPermission>,
+}
+
 impl Event {
     pub fn kind(&self) -> &'static str {
         match *self {
@@ -72,6 +90,7 @@ impl Event {
             Event::ProcessEnded(_) => "process-ended",
             Event::SlotFilled(_) => "slot-filled",
             Event::SlotVacated(_) => "slot-vacated",
+            Event::DraftAdvanced(_) => "draft-advanced",
         }
     }
 }
@@ -81,6 +100,7 @@ impl_from! { for Event ;
     ProcessEnded => |e| Event::ProcessEnded(e),
     SlotFilled => |e| Event::SlotFilled(e),
     SlotVacated => |e| Event::SlotVacated(e),
+    DraftAdvanced => |e| Event::DraftAdvanced(e),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -89,6 +109,7 @@ pub enum Group {
     Assigned,
     ProcessEnded,
     SlotAssignment,
+    DraftAdvanced,
     Other,
 }
 
@@ -99,6 +120,7 @@ pub enum Kind {
     ProcessEnded,
     SlotFilled,
     SlotVacated,
+    DraftAdvanced,
     Other,
 }
 
@@ -109,6 +131,7 @@ impl Kind {
             "process-ended" => Kind::ProcessEnded,
             "slot-filled" => Kind::SlotFilled,
             "slot-vacated" => Kind::SlotVacated,
+            "draft-advanced" => Kind::DraftAdvanced,
             _ => Kind::Other,
         }
     }
@@ -118,6 +141,7 @@ impl Kind {
             Kind::Assigned => Group::Assigned,
             Kind::ProcessEnded => Group::ProcessEnded,
             Kind::SlotFilled | Kind::SlotVacated => Group::SlotAssignment,
+            Kind::DraftAdvanced => Group::DraftAdvanced,
             Kind::Other => Group::Other,
         }
     }
@@ -128,28 +152,29 @@ impl Kind {
 /// This enum is intended to be used where obtaining additional information
 /// about an event would be difficult, for example inside an email template.
 #[derive(Debug, Serialize)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum ExpandedEvent {
-    #[serde(rename = "assigned")]
     Assigned {
         who: ExpandedUser,
         module: ExpandedModule,
         book: ExpandedBooks,
     },
-    #[serde(rename = "process-ended")]
     ProcessEnded {
         module: ExpandedModule,
         version: i32,
     },
-    #[serde(rename = "slot-filled")]
     SlotFilled {
         module: ExpandedModule,
         slot: ExpandedSlot,
     },
-    #[serde(rename = "slot-vacated")]
     SlotVacated {
         module: ExpandedModule,
         slot: ExpandedSlot,
+    },
+    DraftAdvanced {
+        module: ExpandedModule,
+        step: ExpandedStep,
+        book: ExpandedBooks,
     },
 }
 
@@ -185,6 +210,12 @@ pub struct ExpandedSlot {
     pub name: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ExpandedStep {
+    /// Step's name.
+    pub name: String,
+}
+
 pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
 -> Result<ExpandedEvent, Error> {
     let data = rmps::from_slice(&event.data)?;
@@ -194,7 +225,38 @@ pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
         Event::ProcessEnded(ref ev) => expand_process_ended(config, dbcon, ev),
         Event::SlotFilled(ref ev) => expand_slot_filled(config, dbcon, ev),
         Event::SlotVacated(ref ev) => expand_slot_vacated(config, dbcon, ev),
+        Event::DraftAdvanced(ref ev) => expand_draft_advanced(config, dbcon, ev),
     }
+}
+
+fn expand_books_containing(config: &Config, dbcon: &Connection, module: &Module)
+-> Result<ExpandedBooks, Error> {
+    let books = module.get_books(dbcon)?;
+    let (title, url) = match books.first() {
+        None => (None, None),
+        Some(id) => {
+            let book = match Book::by_id(dbcon, *id){
+                Ok(book) => book,
+                Err(FindBookError::Database(err)) =>
+                    return Err(err.into()),
+                Err(FindBookError::NotFound) => panic!(
+                    "Inconsistent database: book doesn't exist \
+                    but is referenced by an event"),
+            }.into_db();
+
+            (
+                Some(book.title),
+                Some(format!("https://{}/books/{}",
+                    config.server.domain, book.id)),
+            )
+        }
+    };
+
+    Ok(ExpandedBooks {
+        title,
+        url,
+        count: books.len(),
+    })
 }
 
 fn expand_assigned(config: &Config, dbcon: &Connection, ev: &Assigned)
@@ -218,27 +280,7 @@ fn expand_assigned(config: &Config, dbcon: &Connection, ev: &Assigned)
         ),
     };
 
-    let books = module.get_books(dbcon)?;
-    let (book_title, book_url) = match books.first() {
-        None => (None, None),
-        Some(id) => {
-            let book = match Book::by_id(dbcon, *id){
-                Ok(book) => book,
-                Err(FindBookError::Database(err)) =>
-                    return Err(err.into()),
-                Err(FindBookError::NotFound) => panic!(
-                    "Inconsistent database: book doesn't exist \
-                    but is referenced by an event"),
-            }.into_db();
-
-            (
-                Some(book.title),
-                Some(format!("https://{}/books/{}",
-                    config.server.domain, book.id)),
-            )
-        }
-    };
-
+    let book = expand_books_containing(config, dbcon, &module)?;
     let module = module.into_db();
 
     Ok(ExpandedEvent::Assigned {
@@ -252,11 +294,7 @@ fn expand_assigned(config: &Config, dbcon: &Connection, ev: &Assigned)
             url: format!("https://{}/modules/{}",
                 config.server.domain, module.0.id),
         },
-        book: ExpandedBooks {
-            title: book_title,
-            url: book_url,
-            count: books.len(),
-        },
+        book,
     })
 }
 
@@ -347,5 +385,34 @@ fn expand_slot_vacated(config: &Config, dbcon: &Connection, ev: &SlotVacated)
         slot: ExpandedSlot {
             name: slot.name,
         },
+    })
+}
+
+fn expand_draft_advanced(config: &Config, dbcon: &Connection, ev: &DraftAdvanced)
+-> Result<ExpandedEvent, Error> {
+    let module = match Module::by_id(dbcon, ev.module) {
+        Ok(module) => module,
+        Err(FindModuleError::Database(err)) =>
+            return Err(err.into()),
+        Err(FindModuleError::NotFound) => panic!(
+            "Inconsistent database: module doesn't exist \
+            but is referenced by an event",
+        ),
+    };
+
+    let book = expand_books_containing(config, dbcon, &module)?;
+    let module = module.into_db();
+    let step = Step::by_id(dbcon, ev.step)?.into_db();
+
+    Ok(ExpandedEvent::DraftAdvanced {
+        module: ExpandedModule {
+            title: module.1.title,
+            url: format!("https://{}/modules/{}",
+                config.server.domain, module.0.id),
+        },
+        step: ExpandedStep {
+            name: step.name,
+        },
+        book,
     })
 }

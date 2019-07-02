@@ -13,6 +13,8 @@
     {%- set header = "mail-notify-group-header-process-ended" -%}
 {%- elif group == "slot-assignment" -%}
     {%- set header = "mail-notify-group-header-slot-assignment" -%}
+{%- elif group == "draft-advanced" -%}
+    {%- set header = "mail-notify-group-header-draft-advanced" -%}
 {%- else -%}
     {%- set_global num_unknown = num_unknown + count -%}
     {%- continue -%}
@@ -60,6 +62,17 @@
     moduletitle=event.module.title,
     moduleurl=event.module.url,
     slotname=event.slot.name
+) }}
+{%- elif event.kind == "draft-advanced" %}
+
+{{ _(
+    key="mail-notify-event-draft-advanced-text",
+    moduletitle=event.module.title,
+    moduleurl=event.module.url,
+    stepname=event.step.name,
+    booktitle=event.book.title,
+    bookurl=event.book.url,
+    bookcount=event.book.count
 ) }}
 {%- endif -%}
 

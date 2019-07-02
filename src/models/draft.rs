@@ -5,6 +5,7 @@ use diesel::{
     result::Error as DbError,
 };
 use failure::Fail;
+use itertools::Itertools;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -25,7 +26,7 @@ use crate::{
         },
         types::SlotPermission,
     },
-    events::{EventManager, ProcessEnded},
+    events::{DraftAdvanced, EventManager, ProcessEnded},
     permissions::PermissionBits,
     processing::{ProcessDocument, TargetProcessor},
 };
@@ -326,8 +327,21 @@ impl Draft {
                     Module::from_db(module, self.document)));
             }
 
-            // Otherwise we are advancing normally. First fill in all empty
-            // slots:
+            // Otherwise we are advancing normally.
+
+            // Get users' permissions in the next step. We do it before filling
+            // slots to avoid sending two notifications to newly assigned users.
+            let permissions = draft_slots::table
+                .inner_join(edit_process_step_slots::table
+                    .on(draft_slots::slot.eq(edit_process_step_slots::slot)))
+                .filter(draft_slots::draft.eq(self.data.module)
+                    .and(edit_process_step_slots::step.eq(next.id)))
+                .order_by(draft_slots::user)
+                .get_results::<(db::DraftSlot, db::EditProcessStepSlot)>(dbconn)?
+                .into_iter()
+                .group_by(|(slot, _)| slot.user);
+
+            // First fill in all empty slots:
 
             let slots = next.get_slot_seating(dbconn, self.data.module)?;
 
@@ -343,6 +357,20 @@ impl Draft {
             self.data = diesel::update(&self.data)
                 .set(drafts::step.eq(next.id))
                 .get_result(dbconn)?;
+
+            for (user, permissions) in permissions.into_iter() {
+                let permissions = permissions.into_iter()
+                    .map(|(_, p)| p.permission)
+                    .collect();
+
+                EventManager::notify(user, DraftAdvanced {
+                    module: self.data.module,
+                    document: self.document.id,
+                    step: next.id,
+                    permissions,
+                });
+            }
+
 
             Ok(AdvanceResult::Advanced(self))
         })

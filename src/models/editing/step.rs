@@ -60,6 +60,11 @@ impl Step {
             .map(Step::from_db)
     }
 
+    /// Unpack database data.
+    pub fn into_db(self) -> db::EditProcessStep {
+        self.data
+    }
+
     /// Check whether this is a final step.
     pub fn is_final(&self, dbcon: &Connection) -> Result<bool, DbError> {
         edit_process_links::table

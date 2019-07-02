@@ -283,6 +283,37 @@ mail-notify-event-slot-vacated =
         -mail-url(url: $moduleurl, text: $moduletitle)
     } has been assigned to another user.
 
+# Header displayed before notifications about drafts moving between steps.
+mail-notify-group-header-draft-advanced =
+    Information on progress of documents through editing processes:
+
+# Notification about a draft moving between steps.
+#
+# Variable:
+# - $moduletitle (string): title of the module in which the user was assigned
+# - $moduleurl (string): URL to the module $moduletitle
+# - $stepname (string): name of the step to which draft has moved
+# - $bookcount (number): number of books in which the module is used
+# - $booktitle (string): title of one of books in which the module is used
+# - $bookurl (string): URL to the book $booktitle
+mail-notify-event-draft-advanced-text =
+    You are asked to perform the the work of { $stepname } on module “{
+    $moduletitle }” ({ $moduleurl }). { $bookcount ->
+        [0] This module is not used in any books.
+        [1] This module is used in book “{ $booktitle }” ({ $bookurl }).
+       *[other] This module is used in { $bookcount } books, including “{
+            $booktitle }” ({ $bookurl }).
+    }
+mail-notify-event-draft-advanced =
+    You are asked to perform the work of { $stepname } on module {
+        -mail-url(url: $moduleurl, text: $moduletitle)
+    }. { $bookcount ->
+        [0] This module is not used in any books.
+        [1] This module is used in book {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+       *[other] This module is used in { $bookcount } books, including
+            { -mail-url(url: $bookurl, text: $booktitle) }.
+    }
 -mail-notify-unknown-text =
     You can see { $count ->
         [1] it

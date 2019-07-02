@@ -285,6 +285,39 @@ mail-notify-event-slot-vacated =
         -mail-url(url: $moduleurl, text: $moduletitle)
     } została przekazana innemu użytkownikowi.
 
+# Header displayed before notifications about drafts moving between steps.
+mail-notify-group-header-draft-advanced =
+    Informacja o przepływie dokumentów w procesach redakcyjnych:
+
+# Notification about a draft moving between steps.
+#
+# Variable:
+# - $moduletitle (string): title of the module in which the user was assigned
+# - $moduleurl (string): URL to the module $moduletitle
+# - $stepname (string): name of the step to which draft has moved
+# - $bookcount (number): number of books in which the module is used
+# - $booktitle (string): title of one of books in which the module is used
+# - $bookurl (string): URL to the book $booktitle
+mail-notify-event-draft-advanced-text =
+    Moduł „{ $moduletitle }” ({ $moduleurl
+    }) zostaje przekazany z prośbą o wykonanie prac w zakresie: { $stepname
+    }. { $bookcount ->
+        [0] Moduł nie jest wykorzystywany w żadnej książce.
+        [1] Moduł jest wykorzystywany w książce „{ $booktitle }” ({ $bookurl }).
+       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w „{
+            $booktitle }” ({ $bookurl }).
+    }
+mail-notify-event-draft-advanced =
+    Moduł { -mail-url(url: $moduleurl, text: $moduletitle)
+    } zostaje przekazany z prośbą o wykonanie prac w zakresie: { $stepname
+    }. { $bookcount ->
+        [0] Moduł nie jest wykorzystywany w żadnej książce.
+        [1] Moduł jest wykorzystywany w książce {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+    }
+
 -mail-notify-unknown-text =
     Możesz zapoznać się z { $count ->
         [1] nim

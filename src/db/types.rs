@@ -27,6 +27,17 @@ pub enum SlotPermission {
     AcceptChanges
 }
 
+impl SlotPermission {
+    /// Does this permission allow editing documents?
+    pub fn allows_editing(&self) -> bool {
+        match *self {
+            SlotPermission::Edit | SlotPermission::ProposeChanges |
+            SlotPermission::AcceptChanges => true,
+            _ => false,
+        }
+    }
+}
+
 impl fmt::Display for SlotPermission {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.write_str(match *self {
