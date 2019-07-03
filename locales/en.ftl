@@ -195,8 +195,6 @@ mail-reset-after-button =
 mail-notify-subject = Information on progress of work
 
 mail-notify-footer =
-    Thank you for participating in out project.
-
     Sincerely 
     The { -org-name } team
 
