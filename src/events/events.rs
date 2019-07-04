@@ -1,3 +1,4 @@
+use failure::Fail;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -28,6 +29,36 @@ pub enum Event {
     SlotFilled(SlotFilled),
     SlotVacated(SlotVacated),
     DraftAdvanced(DraftAdvanced),
+}
+
+impl Event {
+    pub fn load(kind: &str, data: &[u8]) -> Result<Event, LoadEventError> {
+        match Kind::from_str(&kind) {
+            Kind::Assigned =>
+                Ok(Event::Assigned(rmps::from_slice(&data)?)),
+            Kind::ProcessEnded =>
+                Ok(Event::ProcessEnded(rmps::from_slice(&data)?)),
+            Kind::SlotFilled =>
+                Ok(Event::SlotFilled(rmps::from_slice(&data)?)),
+            Kind::SlotVacated =>
+                Ok(Event::SlotVacated(rmps::from_slice(&data)?)),
+            Kind::DraftAdvanced =>
+                Ok(Event::DraftAdvanced(rmps::from_slice(&data)?)),
+            Kind::Other => Err(LoadEventError::UnknownEvent(kind.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Fail)]
+pub enum LoadEventError {
+    #[fail(display = "unknown event type: {}", _0)]
+    UnknownEvent(String),
+    #[fail(display = "error deserializing event data: {}", _0)]
+    Deserialize(#[cause] rmps::decode::Error),
+}
+
+impl_from! { for LoadEventError ;
+    rmps::decode::Error => |e| LoadEventError::Deserialize(e),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
