@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     ApiError,
-    db::types::SlotPermission,
+    db::{Connection, types::SlotPermission},
     models::{
         File,
         user::{User, Fields, PublicData as UserData},
@@ -282,7 +282,7 @@ pub fn update_file(
         Err(err) => return Box::new(future::err(err.into())),
     };
 
-    match draft.check_permission(&*db, session.user_id(), SlotPermission::Edit) {
+    match check_upload_permissions(&*db, &draft, session.user_id(), &name) {
         Ok(true) => (),
         Ok(false) => return Box::new(future::err(
             InsufficientSlotPermission(SlotPermission::Edit).into())),
@@ -299,6 +299,24 @@ pub fn update_file(
                 .map_err(Into::into)
                 .map(|_| HttpResponse::Ok().finish())
         }))
+}
+
+fn check_upload_permissions(db: &Connection, draft: &Draft, user: i32, file: &str)
+-> Result<bool, Error> {
+    if draft.check_permission(db, user, SlotPermission::Edit)? {
+        return Ok(true);
+    }
+
+    if file == "index.cnxml" {
+        if draft.check_permission(db, user, SlotPermission::ProposeChanges)? {
+            return Ok(true);
+        }
+        if draft.check_permission(db, user, SlotPermission::AcceptChanges)? {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 /// Delete a file from a draft.

@@ -208,19 +208,19 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
             });
         }
 
-        if has_propose && !has_accept {
-            return Err(MissingRequiredPermission {
+        if has_editing && has_accept {
+            return Err(ConflictingPermissions {
                 step: stepid,
-                requirer: SlotPermission::ProposeChanges,
-                requiree: SlotPermission::AcceptChanges,
+                permission_a: SlotPermission::Edit,
+                permission_b: SlotPermission::AcceptChanges,
             });
         }
 
-        if has_accept && !has_propose {
-            return Err(MissingRequiredPermission {
+        if has_propose && has_accept {
+            return Err(ConflictingPermissions {
                 step: stepid,
-                requirer: SlotPermission::AcceptChanges,
-                requiree: SlotPermission::ProposeChanges,
+                permission_a: SlotPermission::ProposeChanges,
+                permission_b: SlotPermission::AcceptChanges,
             });
         }
     }
@@ -282,6 +282,58 @@ pub fn validate(process: &Process) -> Result<Validation, ValidateStructureError>
 
     if let Some(node) = reachable.iter().position(|reachable| !reachable) {
         return Err(IsolatedStep(node));
+    }
+
+    // Verify that each propose-changes step is followed by an accept-changes
+    // step.
+
+    let mut incoming = vec![(0, 0); process.steps.len()];
+
+    for (stepid, step) in process.steps.iter().enumerate() {
+        let has_propose = step.slots.iter()
+            .any(|s| s.permission == SlotPermission::ProposeChanges);
+
+        for link in &step.links {
+            if has_propose {
+                incoming[link.to].0 += 1;
+            } else {
+                incoming[link.to].1 += 1;
+            }
+        }
+
+        if !has_propose {
+            continue;
+        }
+
+        let has_accept = step.links.iter()
+            .flat_map(|link| process.steps[link.to].slots.iter())
+            .any(|slot| slot.permission == SlotPermission::AcceptChanges);
+
+        if !has_accept {
+            return Err(ChangesProposeNoAccept(stepid));
+        }
+    }
+
+    // Verify that each accept-changes step is preceded only by propose-changes
+    // steps.
+
+    for (stepid, step) in process.steps.iter().enumerate() {
+        let has_accept = step.slots.iter()
+            .any(|s| s.permission == SlotPermission::AcceptChanges);
+
+        if !has_accept {
+            continue;
+        }
+
+        let (propose, other) = incoming[stepid];
+
+        if propose == 0 {
+            return Err(ChangesAcceptNoPropose(stepid));
+        }
+
+        if other != 0 {
+            return Err(ChangesAcceptNotOnlyPropose(stepid));
+        }
     }
 
     Ok(Validation {})
@@ -469,6 +521,30 @@ pub enum ValidateStructureError {
     /// The initial step is also a final step.
     #[fail(display = "Start step cannot also be a final step")]
     StartIsFinal,
+    /// Step grants propose changes permission, but is not followed by one that
+    /// grants accept changes.
+    #[fail(
+        display = "Step {} grants propose changes permission, but is not \
+            followed by accept changes",
+        _0,
+    )]
+    ChangesProposeNoAccept(usize),
+    /// Step grants accept changes permission, but is not preceded by one that
+    /// grants propose changes.
+    #[fail(
+        display = "Step {} grants accept changes permission, but is not \
+            preceded by propose changes",
+        _0,
+    )]
+    ChangesAcceptNoPropose(usize),
+    /// Step grants accept changes permission and is preceded by one that
+    /// doesn't grants propose changes.
+    #[fail(
+        display = "Step {} grants accept changes permission and is preceded by
+            one which doesn't grant propose changes",
+        _0,
+    )]
+    ChangesAcceptNotOnlyPropose(usize),
 }
 
 #[cfg(test)]
@@ -661,11 +737,63 @@ mod tests {
 
         let mut test = good.clone();
         test.steps[0].slots[0].permission = SlotPermission::AcceptChanges;
-        assert_eq!(validate(&test), Err(ValidateStructureError::MissingRequiredPermission {
-            step: 0,
-            requirer: SlotPermission::AcceptChanges,
-            requiree: SlotPermission::ProposeChanges,
-        }));
+        assert_eq!(validate(&test), Err(ValidateStructureError::ChangesAcceptNoPropose(0)));
+
+        let mut test = good.clone();
+        test.steps[0].links.push(Link {
+            name: "To propose".into(),
+            slot: 0,
+            to: 2,
+        });
+        test.steps.push(Step {
+            id: 2,
+            name: "Propose changes".into(),
+            slots: vec![
+                StepSlot {
+                    slot: 0,
+                    permission: SlotPermission::ProposeChanges,
+                },
+            ],
+            links: vec![
+                Link {
+                    name: "Link".into(),
+                    slot: 0,
+                    to: 1,
+                },
+            ],
+        });
+        assert_eq!(validate(&test), Err(ValidateStructureError::ChangesProposeNoAccept(2)));
+
+        test.steps[2].links.push(Link {
+            name: "To accept".into(),
+            slot: 0,
+            to: 3,
+        });
+        test.steps.push(Step {
+            id: 3,
+            name: "Accept changes".into(),
+            slots: vec![
+                StepSlot {
+                    slot: 0,
+                    permission: SlotPermission::AcceptChanges,
+                },
+            ],
+            links: vec![
+                Link {
+                    name: "Link".into(),
+                    slot: 0,
+                    to: 1,
+                },
+            ],
+        });
+        assert_eq!(validate(&test), Ok(Validation {}));
+
+        test.steps[0].links.push(Link {
+            name: "To accept".into(),
+            slot: 0,
+            to: 3,
+        });
+        assert_eq!(validate(&test), Err(ValidateStructureError::ChangesAcceptNotOnlyPropose(3)));
 
         let mut test = good.clone();
         test.steps.push(Step {
