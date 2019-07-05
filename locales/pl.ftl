@@ -8,6 +8,8 @@ locale-name = Polski
 
 ## Login page
 
+login-title = Witaj w { -brand-name }
+
 login-field-email = Adres e-mail
 
 login-field-password = Hasło
@@ -51,13 +53,15 @@ logout-message = <p>Został/aś wylogowany/a.</p>
 
 ## Registration page
 
+register-title = Utwórz konto
+
 register-field-name = Imię
 
 register-field-password = Hasło
 
 register-field-repeat-password = Hasło
 
-register-submit = Zarejestruj
+register-submit = Utwórz
 
 # Variables:
 # - $code (string): error code

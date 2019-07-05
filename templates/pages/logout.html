@@ -3,7 +3,9 @@
     <meta http-equiv="refresh" content="5;url=/">
 {% endblock %}
 {% block body %}
+    <div class="rounded-bg">
     {% filter translate(key = "logout-message") %}
         <p>You have been logged out.</p>
     {% endfilter %}
+    </div>
 {% endblock body %}

@@ -8,6 +8,8 @@ locale-name = English
 
 ## Login page
 
+login-title = Welcome to { -brand-name }
+
 login-field-email = E-Mail address
 
 login-field-password = Password
@@ -51,13 +53,15 @@ logout-message = <p>You have been logged out.</p>
 
 ## Registration page
 
+register-title = Create account
+
 register-field-name = Name
 
 register-field-password = Password
 
 register-field-repeat-password = Password
 
-register-submit = Register
+register-submit = Create
 
 # Variables:
 # - $code (string): error code
