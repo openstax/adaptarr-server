@@ -7,10 +7,14 @@ domain = "example.com"
 # :optional: Secret key, used e.g. to sign session cookies. Must be at least 32
 # bytes long.
 #
+# Value can be specified either as a base64-encoded string (in which case it
+# must be prefixed with "base64:"), or as path to a file containing the value
+# (in which it must be prefixed with "file:").
+#
 # If omitted a random secret will be generated each time the server is started.
 #
 # You can generate a new secure secret with
-# $ openssl rand 32 -base64
+# $ echo base64:`openssl rand -base64 32`
 secret = "..."
 
 # :optional: Database configuration.
