@@ -243,7 +243,7 @@ impl EventManager {
         let locale = self.i18n.find_locale(&user.language())
             .expect("user's preferred language to exist");
 
-        Mailer::send(
+        Mailer::do_send(
             user.mailbox(),
             "notify",
             "mail-notify-subject",

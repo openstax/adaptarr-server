@@ -1,4 +1,5 @@
-use actix::{Actor, Context, Handler, Supervised, SystemService};
+use actix::{Actor, Context, Handler, Supervised, SystemService, dev::Request};
+use futures::future::{self, Either, Future, IntoFuture};
 use serde::Serialize;
 use std::collections::HashMap;
 use lettre_email::Mailbox;
@@ -14,7 +15,7 @@ impl Mailer {
     /// Try to send an email message.
     ///
     /// Errors will be logged, but otherwise ignored.
-    pub fn send<M, S, C>(
+    pub fn do_send<M, S, C>(
         to: M,
         template: &str,
         subject: S,
@@ -23,8 +24,8 @@ impl Mailer {
     )
     where
         M: Into<Mailbox>,
-        S: IntoSubject + Send,
-        C: Serialize + Send,
+        S: IntoSubject,
+        C: Serialize,
     {
         let mailer = Mailer::from_registry();
         let message = match format_message(to, template, subject, context, locale) {
@@ -38,6 +39,57 @@ impl Mailer {
         if let Err(err) = mailer.try_send(message) {
             error!("Could not send mail: {}", err);
         }
+    }
+
+    /// Send an email message.
+    // NOTE: This method cannot use a generic return type (impl IntoFuture<...>)
+    // as this messes up lifetime inference requiring all parameters to
+    // be 'static.
+    pub fn send<M, S, C>(
+        to: M,
+        template: &str,
+        subject: S,
+        context: C,
+        locale: &'static Locale<'static>,
+    ) -> SendFuture
+    where
+        M: Into<Mailbox>,
+        S: IntoSubject,
+        C: Serialize,
+    {
+        let mailer = Mailer::from_registry();
+        let message = match format_message(to, template, subject, context, locale) {
+            Ok(message) => message,
+            Err(err) => return SendFuture(Either::A(future::err(err))),
+        };
+
+        SendFuture(Either::B(mailer.send(message).map_err(From::from)))
+    }
+}
+
+pub struct SendFuture(
+    Either<
+        future::FutureResult<(), failure::Error>,
+        future::MapErr<
+            Request<Mailer, Message>,
+            fn(actix::dev::MailboxError) -> failure::Error,
+        >,
+    >
+);
+
+impl IntoFuture for SendFuture {
+    type Future = Either<
+        future::FutureResult<(), failure::Error>,
+        future::MapErr<
+            Request<Mailer, Message>,
+            fn(actix::dev::MailboxError) -> failure::Error,
+        >,
+    >;
+    type Item = ();
+    type Error = failure::Error;
+
+    fn into_future(self) -> Self::Future {
+        self.0
     }
 }
 
