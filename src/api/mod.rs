@@ -40,10 +40,10 @@ pub fn start(cfg: &Config) -> Result<()> {
         pages::app(state.clone()),
     ]);
 
-    let server = if let Some(fd) = listenfd::ListenFd::from_env().take_tcp_listener(0).unwrap() {
+    let server = if let Some(fd) = listenfd::ListenFd::from_env().take_tcp_listener(0)? {
         server.listen(fd)
     } else {
-        server.bind(cfg.server.address).unwrap()
+        server.bind(cfg.server.address)?
     };
 
     server
