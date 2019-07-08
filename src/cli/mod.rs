@@ -1,4 +1,6 @@
 use actix::System;
+use failure::Error;
+use futures::IntoFuture;
 use sentry::protocol::Event;
 use std::{env, mem, sync::Arc};
 use structopt::StructOpt;
@@ -82,21 +84,17 @@ fn setup_logging(config: &crate::config::Logging) -> Result<()> {
 }
 
 /// Run a function in a context of an Actix system.
-fn with_system<F, O, R>(f: F, config: &Config, opts: O) -> R
+fn with_system<F, O, I>(f: F, config: &Config, opts: O)
+-> Result<I::Item, Error>
 where
-    F: FnOnce(&Config, O) -> R,
+    F: FnOnce(&Config, O) -> I,
+    I: IntoFuture,
+    I::Error: Send + Sync,
+    Error: From<I::Error>,
 {
-    let system = System::new("adaptarr::cli");
-
-    let r = f(config, opts);
-
-    // Send stop signal to the system. Without this system.run() will hang
-    // forever.
-    System::current().stop();
-    // Process all pending messages.
-    system.run();
-
-    r
+    System::new("adaptarr::cli")
+        .block_on(f(config, opts).into_future())
+        .map_err(From::from)
 }
 
 fn before_send_event_to_sentry(mut ev: Event<'static>) -> Option<Event<'static>> {
