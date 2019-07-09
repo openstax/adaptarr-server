@@ -1,4 +1,4 @@
-use failure::Error;
+use failure::{Error, Fail};
 use lettre::{
     sendmail::SendmailTransport,
     smtp::{
@@ -6,10 +6,12 @@ use lettre::{
         ClientSecurity,
         SmtpClient,
         client::net::{DEFAULT_TLS_PROTOCOLS, ClientTlsParameters},
+        error::Error as SmtpError,
     },
 };
 use lettre_email::{EmailBuilder, Mailbox};
 use native_tls::TlsConnector;
+use std::{error::Error as StdError, fmt};
 
 use super::config::{Config, SmtpConfig, Transports};
 
@@ -17,7 +19,7 @@ pub fn from_config(config: &Config) -> Result<Box<dyn Transport>, Error> {
     match config.transport {
         Transports::Log => Ok(Box::new(Logger)),
         Transports::Sendmail => Ok(Box::new(
-            Lettre::new(config, SendmailTransport::new()))),
+            Lettre::new(config, SendmailTransport::new(), From::from))),
         Transports::Smtp(ref cfg) => build_smtp_transport(config, cfg),
     }
 }
@@ -55,24 +57,26 @@ impl Transport for Logger {
 }
 
 /// Type implementing [`Transport`] for a wrapped [`lettre::Transport`].
-struct Lettre<T> {
+struct Lettre<T, H> {
     sender: Mailbox,
     transport: T,
+    error_handler: H,
 }
 
-impl<T> Lettre<T> {
-    fn new(config: &Config, inner: T) -> Self {
+impl<T, H> Lettre<T, H> {
+    fn new(config: &Config, inner: T, error_handler: H) -> Self {
         Self {
             sender: config.sender.clone(),
             transport: inner,
+            error_handler,
         }
     }
 }
 
-impl<T, R, E> Transport for Lettre<T>
+impl<T, R, E, H> Transport for Lettre<T, H>
 where
     T: for<'a> lettre::Transport<'a, Result = Result<R, E>>,
-    Error: From<E>,
+    H: Fn(E) -> Error + Copy,
 {
     fn send(&mut self, message: Message) -> Result<(), Error> {
         let mail = message.into_lettre()
@@ -82,7 +86,7 @@ where
 
         self.transport.send(mail)
             .map(|_| ())
-            .map_err(From::from)
+            .map_err(self.error_handler)
     }
 }
 
@@ -112,5 +116,24 @@ fn build_smtp_transport(config: &Config, cfg: &SmtpConfig)
         .smtp_utf8(true)
         .transport();
 
-    Ok(Box::new(Lettre::new(config, smtp)))
+    Ok(Box::new(Lettre::new(config, smtp, map_smtp_error)))
+}
+
+#[allow(deprecated)] // SmtpError doesn't implement Error::source()
+fn map_smtp_error(err: SmtpError) -> Error {
+    if StdError::cause(&err).is_some() {
+        Error::from(DescribedSmtpError(err))
+    } else {
+        Error::from(err)
+    }
+}
+
+#[derive(Debug, Fail)]
+struct DescribedSmtpError(SmtpError);
+
+impl fmt::Display for DescribedSmtpError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        #[allow(deprecated)] // SmtpError doesn't implement Error::source()
+        fmt::Display::fmt(StdError::cause(&self.0).unwrap(), fmt)
+    }
 }
