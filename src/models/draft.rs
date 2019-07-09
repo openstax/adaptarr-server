@@ -53,6 +53,8 @@ pub struct PublicData {
     pub permissions: Option<Vec<SlotPermission>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub step: Option<StepData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub books: Option<Vec<Uuid>>,
 }
 
 impl Draft {
@@ -161,6 +163,7 @@ impl Draft {
             step: self.get_step(dbconn)?
                 .get_public(dbconn, Some((self.data.module, user)))
                 .map(Some)?,
+            books: self.get_books(dbconn).map(Some)?,
         })
     }
 
@@ -172,6 +175,7 @@ impl Draft {
             document: self.document.get_public(),
             permissions: None,
             step: None,
+            books: None,
         }
     }
 
