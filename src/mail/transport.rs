@@ -13,7 +13,7 @@ use lettre_email::{EmailBuilder, Mailbox};
 use native_tls::TlsConnector;
 use std::{error::Error as StdError, fmt};
 
-use super::config::{Config, SmtpConfig, Transports};
+use super::config::{Config, SmtpConfig, Transports, UseTls};
 
 pub fn from_config(config: &Config) -> Result<Box<dyn Transport>, Error> {
     match config.transport {
@@ -98,15 +98,15 @@ fn build_smtp_transport(config: &Config, cfg: &SmtpConfig)
     let tls = ClientTlsParameters::new(
         cfg.host.clone(), tls_builder.build().unwrap());
 
-    let sec = if cfg.use_tls {
-        ClientSecurity::Wrapper(tls)
-    } else {
-        ClientSecurity::Opportunistic(tls)
+    let sec = match cfg.use_tls {
+        UseTls::No => ClientSecurity::None,
+        UseTls::Yes => ClientSecurity::Opportunistic(tls),
+        UseTls::Strict => ClientSecurity::Wrapper(tls),
     };
 
     let port = match cfg.port {
         Some(port) => port,
-        None if cfg.use_tls => smtp::SUBMISSIONS_PORT,
+        None if cfg.use_tls == UseTls::Strict => smtp::SUBMISSIONS_PORT,
         None => smtp::SMTP_PORT,
     };
 

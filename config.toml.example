@@ -44,9 +44,10 @@ transport = "log"
 host = "mail.example.com"
 # :optional: Port to connect to. Defaults to 25.
 port = 25
-# :optional: Only connect using TLS. If set to false the client will still try
-# to connect using TLS, but will accept unencrypted connections. Defaults
-# to true.
+# :optional: TLS configuration. Possible values are:
+# - false: never use TLS
+# - true: use TLS when available, otherwise fall back to unencrypted
+# - "strict" or "always": always use TLS, don't allow unencrypted connections
 use-tls = true
 
 # :required: Backing storage for files.
