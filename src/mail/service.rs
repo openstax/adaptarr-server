@@ -123,7 +123,9 @@ impl Default for Mailer {
         let config = crate::config::load()
             .expect("Configuration should be ready when mailer is started");
 
-        let transport = transport::from_config(&config.mail);
+        let transport = transport::from_config(&config.mail)
+            .expect("Transport configuration should already be validated when \
+                mailer is started");
 
         Self { transport }
     }

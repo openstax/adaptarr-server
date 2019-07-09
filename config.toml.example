@@ -35,7 +35,19 @@ sender = "Name <noreply@example.com>"
 # :required: What method to use to send mails. Possible values are
 # - "log" to log emails to standard error for debugging,
 # - "sendmail" to use the sendmail(1) command,
+# - "smtp" to use SMTP
 transport = "log"
+
+# Following options are only available for SMTP transport.
+
+# :required: Name of the SMTP host server to connect to.
+host = "mail.example.com"
+# :optional: Port to connect to. Defaults to 25.
+port = 25
+# :optional: Only connect using TLS. If set to false the client will still try
+# to connect using TLS, but will accept unencrypted connections. Defaults
+# to true.
+use-tls = true
 
 # :required: Backing storage for files.
 [storage]

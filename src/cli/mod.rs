@@ -42,6 +42,10 @@ pub fn main() -> Result<()> {
     setup_sentry(&config)?;
     setup_logging(&config.logging)?;
 
+    // Run validation after sentry and logging setup so that they can catch bugs
+    // in validation.
+    config.validate()?;
+
     match opts.command {
         Command::Start => server::start(config),
         Command::Document(opts) => with_system(document::main, config, opts),

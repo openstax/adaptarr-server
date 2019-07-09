@@ -12,6 +12,14 @@ pub struct Config {
     pub transport: Transports,
 }
 
+impl Config {
+    /// Validate configuration correctness.
+    pub fn validate(&self) -> Result<(), failure::Error> {
+        super::transport::from_config(self)?;
+        Ok(())
+    }
+}
+
 /// Mail transport configuration.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "transport", rename_all = "lowercase")]
@@ -20,6 +28,22 @@ pub enum Transports {
     Log,
     /// Use the `sendmail(1)` command.
     Sendmail,
+    /// Use SMTP
+    Smtp(SmtpConfig),
+}
+
+/// SMTP configuration.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SmtpConfig {
+    /// The host name to connect to.
+    pub host: String,
+    #[serde(default)]
+    /// The port to connect to.
+    pub port: Option<u16>,
+    /// Should we force TLS?
+    #[serde(default = "true_value")]
+    pub use_tls: bool,
 }
 
 fn de_mailbox<'de, D>(d: D) -> std::result::Result<Mailbox, D::Error>
@@ -47,4 +71,8 @@ impl<'de> serde::de::Visitor<'de> for MailboxVisitor {
         v.parse()
             .map_err(|_| E::invalid_value(Unexpected::Str(v), &"an email address"))
     }
+}
+
+fn true_value() -> bool {
+    true
 }

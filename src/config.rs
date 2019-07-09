@@ -27,6 +27,15 @@ pub struct Config {
     pub sentry: Option<Sentry>,
 }
 
+impl Config {
+    /// Validate configuration correctness.
+    pub fn validate(&self) -> Result<(), failure::Error> {
+        self.mail.validate()?;
+
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Server {
     /// Address on which to listen.

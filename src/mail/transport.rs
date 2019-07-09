@@ -1,14 +1,24 @@
 use failure::Error;
-use lettre::sendmail::SendmailTransport;
+use lettre::{
+    sendmail::SendmailTransport,
+    smtp::{
+        self,
+        ClientSecurity,
+        SmtpClient,
+        client::net::{DEFAULT_TLS_PROTOCOLS, ClientTlsParameters},
+    },
+};
 use lettre_email::{EmailBuilder, Mailbox};
+use native_tls::TlsConnector;
 
-use super::config::{Config, Transports};
+use super::config::{Config, SmtpConfig, Transports};
 
-pub fn from_config(config: &Config) -> Box<dyn Transport> {
+pub fn from_config(config: &Config) -> Result<Box<dyn Transport>, Error> {
     match config.transport {
-        Transports::Log => Box::new(Logger),
-        Transports::Sendmail => Box::new(
-            Lettre::new(config, SendmailTransport::new())),
+        Transports::Log => Ok(Box::new(Logger)),
+        Transports::Sendmail => Ok(Box::new(
+            Lettre::new(config, SendmailTransport::new()))),
+        Transports::Smtp(ref cfg) => build_smtp_transport(config, cfg),
     }
 }
 
@@ -59,9 +69,9 @@ impl<T> Lettre<T> {
     }
 }
 
-impl<T, E> Transport for Lettre<T>
+impl<T, R, E> Transport for Lettre<T>
 where
-    T: for<'a> lettre::Transport<'a, Result = Result<(), E>>,
+    T: for<'a> lettre::Transport<'a, Result = Result<R, E>>,
     Error: From<E>,
 {
     fn send(&mut self, message: Message) -> Result<(), Error> {
@@ -70,6 +80,37 @@ where
             .build()?
             .into();
 
-        self.transport.send(mail).map_err(From::from)
+        self.transport.send(mail)
+            .map(|_| ())
+            .map_err(From::from)
     }
+}
+
+fn build_smtp_transport(config: &Config, cfg: &SmtpConfig)
+-> Result<Box<dyn Transport>, failure::Error> {
+    let mut tls_builder = TlsConnector::builder();
+    tls_builder.min_protocol_version(Some(DEFAULT_TLS_PROTOCOLS[0]));
+
+    let tls = ClientTlsParameters::new(
+        cfg.host.clone(), tls_builder.build().unwrap());
+
+    let sec = if cfg.use_tls {
+        ClientSecurity::Wrapper(tls)
+    } else {
+        ClientSecurity::Opportunistic(tls)
+    };
+
+    let port = match cfg.port {
+        Some(port) => port,
+        None if cfg.use_tls => smtp::SUBMISSIONS_PORT,
+        None => smtp::SMTP_PORT,
+    };
+
+    let addr = (cfg.host.as_str(), port);
+
+    let smtp = SmtpClient::new(addr, sec)?
+        .smtp_utf8(true)
+        .transport();
+
+    Ok(Box::new(Lettre::new(config, smtp)))
 }
