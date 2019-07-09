@@ -70,6 +70,7 @@ pub struct Logging {
     /// Actix-web logging level.
     pub network: Option<LevelFilter>,
     /// Custom filters.
+    #[serde(default)]
     pub filters: HashMap<String, LevelFilter>,
 }
 
