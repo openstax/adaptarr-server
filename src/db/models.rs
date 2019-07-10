@@ -485,3 +485,38 @@ pub struct NewEditProcessLink<'a> {
     pub name: &'a str,
     pub slot: i32,
 }
+
+#[derive(Clone, Debug, Queryable)]
+pub struct AuditLog {
+    /// Event's ID.
+    pub id: i32,
+    /// Date and time when this event was logged.
+    pub timestamp: NaiveDateTime,
+    /// User who caused this event, or `None` for automated actions carried by
+    /// the system or CLI.
+    pub actor: Option<i32>,
+    /// Context in which this event occurred.
+    ///
+    /// This field is primarily used to identify the kind of resource pointed
+    /// to by either `context_id` or `context_uuid`.
+    pub context: String,
+    /// ID of the context of this event, if it is an integer.
+    pub context_id: Option<i32>,
+    /// ID of the context of this event, if it is a UUID.
+    pub context_uuid: Option<Uuid>,
+    /// What kind of event is this?
+    pub kind: String,
+    /// Data associated with this event.
+    pub data: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "audit_log"]
+pub struct NewAuditLog<'a> {
+    pub actor: Option<i32>,
+    pub context: &'a str,
+    pub context_id: Option<i32>,
+    pub context_uuid: Option<Uuid>,
+    pub kind: &'a str,
+    pub data: &'a [u8],
+}

@@ -1,4 +1,17 @@
 table! {
+    audit_log (id) {
+        id -> Int4,
+        timestamp -> Timestamp,
+        actor -> Nullable<Int4>,
+        context -> Varchar,
+        context_id -> Nullable<Int4>,
+        context_uuid -> Nullable<Uuid>,
+        kind -> Varchar,
+        data -> Bytea,
+    }
+}
+
+table! {
     book_parts (book, id) {
         book -> Uuid,
         id -> Int4,
@@ -198,6 +211,7 @@ table! {
     }
 }
 
+joinable!(audit_log -> users (actor));
 joinable!(book_parts -> books (book));
 joinable!(book_parts -> modules (module));
 joinable!(document_files -> documents (document));
@@ -225,6 +239,7 @@ joinable!(users -> roles (role));
 joinable!(xref_targets -> documents (document));
 
 allow_tables_to_appear_in_same_query!(
+    audit_log,
     book_parts,
     books,
     document_files,
