@@ -1,11 +1,11 @@
 use actix::System;
 use failure::Error;
-use futures::IntoFuture;
+use futures::{IntoFuture, future};
 use sentry::protocol::Event;
 use std::{env, mem, sync::Arc};
 use structopt::StructOpt;
 
-use crate::{Result, config::Config};
+use crate::{Result, audit, config::Config};
 
 mod document;
 mod role;
@@ -97,7 +97,10 @@ where
     Error: From<I::Error>,
 {
     System::new("adaptarr::cli")
-        .block_on(f(config, opts).into_future())
+        .block_on(future::lazy(|| {
+            audit::set_actor(audit::Actor::System);
+            f(config, opts)
+        }))
         .map_err(From::from)
 }
 

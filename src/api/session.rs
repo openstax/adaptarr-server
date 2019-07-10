@@ -16,6 +16,7 @@ use std::marker::PhantomData;
 
 use crate::{
     ApiError,
+    audit,
     config,
     db::{
         self,
@@ -212,6 +213,7 @@ impl<S> Middleware<S> for SessionManager {
                 new: None,
                 destroy: false,
             });
+            audit::set_actor(audit::Actor::User(session.user));
         }
 
         Ok(Started::Done)
@@ -219,6 +221,8 @@ impl<S> Middleware<S> for SessionManager {
 
     fn response(&self, req: &HttpRequest<S>, mut rsp: HttpResponse) -> Result<Response> {
         if let Some(session) = req.extensions().get::<SessionData>() {
+            audit::set_actor(None);
+
             let now = Utc::now().naive_utc();
             let db = self.db.get()
                 .map_err(|e| ErrorInternalServerError(e.to_string()))?;
