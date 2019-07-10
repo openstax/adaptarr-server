@@ -380,7 +380,7 @@ pub fn do_reset(
 
             let user_locale = state.i18n.find_locale(&user.language())
                 .unwrap_or(locale);
-            Mailer::send(
+            Mailer::do_send(
                 email.as_str(),
                 "reset",
                 "mail-reset-subject",

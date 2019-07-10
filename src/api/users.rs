@@ -108,7 +108,7 @@ pub fn create_invitation(
         code,
     );
 
-    Mailer::send(
+    Mailer::do_send(
         params.email.as_str(),
         "invite",
         "mail-invite-subject",
