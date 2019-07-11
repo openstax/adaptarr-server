@@ -49,6 +49,7 @@ pub fn routes(app: App<State>) -> App<State> {
 pub struct InviteParams {
     email: String,
     language: LanguageTag,
+    role: Option<i32>,
 }
 
 /// Get list of all users.
@@ -98,7 +99,11 @@ pub fn create_invitation(
         .ok_or(NoSuchLocaleError)?;
 
     let db = state.db.get()?;
-    let invite = Invite::create(&*db, &params.email)?;
+    let role = match params.role {
+        None => None,
+        Some(id) => Role::by_id(&*db, id).map(Some)?,
+    };
+    let invite = Invite::create(&*db, &params.email, role.as_ref())?;
 
     let code = invite.get_code(&state.config);
     // TODO: get URL from Actix.

@@ -16,7 +16,10 @@ use crate::{
         models as db,
         schema::{invites, users},
     },
-    models::user::{User, CreateUserError},
+    models::{
+        role::{Role, FindRoleError},
+        user::{User, CreateUserError},
+    },
     permissions::PermissionBits,
     utils,
 };
@@ -29,7 +32,8 @@ pub struct Invite {
 
 impl Invite {
     /// Create a new invitation for a given email address.
-    pub fn create(dbcon: &Connection, email: &str) -> Result<Invite, CreateInviteError> {
+    pub fn create(dbcon: &Connection, email: &str, role: Option<&Role>)
+    -> Result<Invite, CreateInviteError> {
         dbcon.transaction(|| {
             let user = users::table
                 .filter(users::email.eq(email))
@@ -44,12 +48,14 @@ impl Invite {
                 .values(db::NewInvite {
                     email,
                     expires: Utc::now().naive_utc() + Duration::days(7),
+                    role: role.map(|r| r.id),
                 })
                 .get_result::<db::Invite>(dbcon)?;
 
             audit::log_db(dbcon, "invites", data.id, "create", LogNewInvite {
                 email,
                 expires: data.expires,
+                role: data.role,
             });
 
             Ok(Invite { data })
@@ -93,6 +99,17 @@ impl Invite {
         password: &str,
         language: &str,
     ) -> Result<User, CreateUserError> {
+        let role = match self.data.role {
+            None => None,
+            Some(id) => match Role::by_id(dbconn, id) {
+                Ok(role) => Some(role),
+                Err(FindRoleError::Database(db))=>
+                    return Err(CreateUserError::Internal(db)),
+                Err(FindRoleError::NotFound) =>
+                    panic!("database inconsistency: no role for invite"),
+            },
+        };
+
         let user = User::create(
             dbconn,
             None,
@@ -102,6 +119,7 @@ impl Invite {
             false,
             language,
             PermissionBits::normal(),
+            role.as_ref(),
         )?;
 
         audit::log_db_actor(dbconn, user.id, "invites", self.id, "fulfil", ());
@@ -164,4 +182,5 @@ impl_from! { for FromCodeError ;
 struct LogNewInvite<'a> {
    email: &'a str,
    expires: NaiveDateTime,
+   role: Option<i32>,
 }

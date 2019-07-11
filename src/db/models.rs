@@ -35,6 +35,7 @@ pub struct NewUser<'a> {
     pub is_super: bool,
     pub language: &'a str,
     pub permissions: i32,
+    pub role: Option<i32>,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug)]
@@ -91,6 +92,7 @@ pub struct Invite {
     pub email: String,
     /// Date by which this invitation becomes unusable.
     pub expires: NaiveDateTime,
+    pub role: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -98,6 +100,7 @@ pub struct Invite {
 pub struct NewInvite<'s> {
     pub email: &'s str,
     pub expires: NaiveDateTime,
+    pub role: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Identifiable, Queryable)]

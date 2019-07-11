@@ -140,6 +140,7 @@ table! {
         id -> Int4,
         email -> Varchar,
         expires -> Timestamp,
+        role -> Nullable<Int4>,
     }
 }
 
@@ -230,6 +231,7 @@ joinable!(edit_process_step_slots -> edit_process_slots (slot));
 joinable!(edit_process_step_slots -> edit_process_steps (step));
 joinable!(edit_process_versions -> edit_processes (process));
 joinable!(events -> users (user));
+joinable!(invites -> roles (role));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
 joinable!(modules -> documents (document));

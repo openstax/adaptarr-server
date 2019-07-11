@@ -117,6 +117,7 @@ impl User {
         is_super: bool,
         language: &str,
         permissions: PermissionBits,
+        role: Option<&Role>,
     ) -> Result<User, CreateUserError> {
         if name.is_empty() {
             return Err(CreateUserError::EmptyName);
@@ -156,6 +157,7 @@ impl User {
                     } else {
                         permissions.bits()
                     },
+                    role: role.map(|r| r.id),
                 })
                 .get_result::<db::User>(dbcon)?;
 

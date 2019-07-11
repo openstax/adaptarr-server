@@ -94,10 +94,14 @@ pub struct AddOpts {
     /// User's preferred language.
     #[structopt(long = "language", default_value = "en")]
     language: LanguageTag,
+    /// User's role.
+    #[structopt(long = "role")]
+    role: Option<RoleArg>,
 }
 
 pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
+    let role = opts.role.map(|r| r.get(&db)).transpose()?.and_then(std::convert::identity);
     let user = User::create(
         &db,
         None,
@@ -107,6 +111,7 @@ pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
         opts.is_super,
         opts.language.as_str(),
         PermissionBits::normal(),
+        role.as_ref(),
     )?;
 
     println!("Created user {}", user.id);
@@ -121,6 +126,9 @@ pub struct InviteOpts {
     /// Language in which to send invitation
     #[structopt(long = "lang")]
     language: LanguageTag,
+    /// User's role.
+    #[structopt(long = "role")]
+    role: Option<RoleArg>,
 }
 
 pub fn invite(cfg: &Config, opts: InviteOpts)
@@ -131,7 +139,8 @@ pub fn invite(cfg: &Config, opts: InviteOpts)
         None => return Err(InviteError::NoSuchLocale(opts.language).into()),
     };
     let db = db::connect(&cfg)?;
-    let invite = Invite::create(&db, &opts.email)?;
+    let role = opts.role.map(|r| r.get(&db)).transpose()?.and_then(std::convert::identity);
+    let invite = Invite::create(&db, &opts.email, role.as_ref())?;
     let code = invite.get_code(&cfg);
 
     println!("Invitation code: {}", code);
