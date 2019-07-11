@@ -135,6 +135,10 @@ impl ser::Serialize for PermissionBits {
     where
         S: ser::Serializer,
     {
+        if !ser.is_human_readable() {
+            return ser.serialize_i32(self.bits());
+        }
+
         let mut seq = ser.serialize_seq(Some(self.bits().count_ones() as usize))?;
         if self.contains(PermissionBits::INVITE_USER) {
             seq.serialize_element("user:invite")?;
@@ -175,7 +179,11 @@ impl<'de> de::Deserialize<'de> for PermissionBits {
     where
         D: de::Deserializer<'de>,
     {
-        de.deserialize_any(BitsVisitor)
+        if !de.is_human_readable() {
+            de.deserialize_i32(BitsVisitor)
+        } else {
+            de.deserialize_any(BitsVisitor)
+        }
     }
 }
 
