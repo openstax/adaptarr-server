@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -90,6 +91,10 @@ impl BookPart {
         }
 
         diesel::delete(&self.data).execute(dbconn)?;
+
+        audit::log_db(
+            dbconn, "books", self.data.book, "delete-part", self.data.id);
+
         Ok(())
     }
 
@@ -162,6 +167,9 @@ impl BookPart {
                 .and(book_parts::parent.eq(self.data.id))
                 .and(book_parts::id.ne(0))))
             .execute(dbconn)?;
+
+        audit::log_db(dbconn, "books", self.data.book, "clear-part", self.data.id);
+
         Ok(())
     }
 
@@ -209,7 +217,7 @@ impl BookPart {
                 .set(book_parts::index.eq(book_parts::index + 1))
                 .execute(dbconn)?;
 
-            diesel::insert_into(book_parts::table)
+            let data = diesel::insert_into(book_parts::table)
                 .values(&db::NewBookPart {
                     book: self.data.book,
                     title,
@@ -217,9 +225,18 @@ impl BookPart {
                     parent: self.data.id,
                     index,
                 })
-                .get_result::<db::BookPart>(dbconn)
-                .map_err(Into::into)
-                .map(|data| BookPart { data })
+                .get_result::<db::BookPart>(dbconn)?;
+
+            audit::log_db(dbconn, "books", self.data.book, "create-part",
+                LogCreate {
+                    part: data.id,
+                    parent: self.data.id,
+                    index,
+                    title,
+                    module: module.map(|m| m.id()),
+                });
+
+            Ok(BookPart { data })
         })
     }
 
@@ -280,6 +297,9 @@ impl BookPart {
             .set(book_parts::title.eq(title))
             .execute(dbconn)?;
 
+        audit::log_db(dbconn, "books", self.data.book, "set-part-title",
+            LogSetTitle { part: self.data.id, title });
+
         self.data.title = title.to_owned();
 
         Ok(())
@@ -323,6 +343,13 @@ impl BookPart {
             diesel::update(siblings)
                 .set(book_parts::index.eq(book_parts::index - 1))
                 .execute(dbconn)?;
+
+            audit::log_db(dbconn, "books", self.data.book, "reparent-part",
+                LogReparent {
+                    part: self.data.id,
+                    parent: new.id,
+                    index,
+                });
 
             Ok(data)
         })?;
@@ -442,4 +469,26 @@ pub enum ReparentPartError {
 
 impl_from! { for ReparentPartError ;
     DbError => |e| ReparentPartError::Database(e),
+}
+
+#[derive(Serialize)]
+struct LogSetTitle<'a> {
+    part: i32,
+    title: &'a str,
+}
+
+#[derive(Serialize)]
+struct LogCreate<'a> {
+    part: i32,
+    parent: i32,
+    index: i32,
+    title: &'a str,
+    module: Option<Uuid>,
+}
+
+#[derive(Serialize)]
+struct LogReparent {
+    part: i32,
+    parent: i32,
+    index: i32,
 }

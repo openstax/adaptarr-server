@@ -10,6 +10,7 @@ use std::ops::Deref;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -136,7 +137,7 @@ impl Version {
 
             let version = diesel::update(&version)
                 .set(edit_process_versions::start.eq(steps[structure.start].id))
-                .get_result(dbcon)?;
+                .get_result::<db::EditProcessVersion>(dbcon)?;
 
             let process = if structure.name != process.name {
                 diesel::update(&process)
@@ -146,6 +147,9 @@ impl Version {
             } else {
                 Process::from_db(process)
             };
+
+            audit::log_db(
+                dbcon, "edit-process", process.id, "create-version", version.id);
 
             Ok(Version::from_db(version, process))
         })

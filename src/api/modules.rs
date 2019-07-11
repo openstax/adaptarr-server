@@ -150,11 +150,15 @@ from_multipart! {
 /// ```
 pub fn create_module_from_zip(
     state: actix_web::State<State>,
-    _session: Session<EditModule>,
+    session: Session<EditModule>,
     data: Multipart<NewModuleZip>,
 ) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     let NewModuleZip { title, file } = data.into_inner();
-    state.importer.send(ImportModule { title, file })
+    state.importer.send(ImportModule {
+        title,
+        file,
+        actor: session.user_id().into(),
+    })
         .from_err()
         .and_then(|r| future::result(r).from_err())
         .and_then(move |module| -> Result<_, Error> {
@@ -234,7 +238,7 @@ pub struct ModuleUpdate {
 pub fn replace_module(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
-    _session: Session<EditModule>,
+    session: Session<EditModule>,
     id: Path<Uuid>,
 ) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     future::result(
@@ -262,7 +266,11 @@ pub fn replace_module(
                 .map(|file| (db, module, file))
         })
         .and_then(move |(db, module, file)| {
-            state.importer.send(ReplaceModule { module, file })
+            state.importer.send(ReplaceModule {
+                module,
+                file,
+                actor: session.user_id().into(),
+            })
                 .map_err(Error::from)
                 .and_then(|r| future::result(r).from_err())
                 .map(|ok| (db, ok))

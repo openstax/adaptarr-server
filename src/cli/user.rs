@@ -100,6 +100,7 @@ pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
     let user = User::create(
         &db,
+        None,
         &opts.email,
         &opts.name,
         &opts.password,

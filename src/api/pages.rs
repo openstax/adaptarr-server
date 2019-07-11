@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
+    audit,
     i18n::{LanguageTag, Locale},
     mail::Mailer,
     models::{
@@ -156,6 +157,8 @@ pub fn do_login(
         },
     };
 
+    audit::log_db_actor(&*db, user.id, "users", user.id, "authenticate", ());
+
     // NOTE: This will automatically remove any session that may still exist,
     // we don't have to do it manually here.
     Session::<Normal>::create(&req, &user, false);
@@ -225,6 +228,8 @@ pub fn do_elevate(
         );
     }
 
+    audit::log_db(&*db, "users", user.id, "elevate", ());
+
     Session::<Normal>::create(&req, &user, true);
 
     Ok(HttpResponse::SeeOther()
@@ -276,6 +281,8 @@ pub fn do_elevate_json(
         return Ok(HttpResponse::BadRequest()
             .json(ElevationResult::Error { message }));
     }
+
+    audit::log_db(&*db, "users", user.id, "elevate", ());
 
     Session::<Normal>::create(&req, &user, true);
 

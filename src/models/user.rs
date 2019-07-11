@@ -11,6 +11,7 @@ use serde::Serialize;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -109,6 +110,7 @@ impl User {
     /// Create a new user.
     pub fn create(
         dbcon: &Connection,
+        actor: Option<i32>,
         email: &str,
         name: &str,
         password: &str,
@@ -141,7 +143,7 @@ impl User {
                 .execute(dbcon)
                 .map_err(CreateUserError::Internal)?;
 
-            diesel::insert_into(users::table)
+            let data = diesel::insert_into(users::table)
                 .values(db::NewUser {
                     email,
                     name,
@@ -155,9 +157,19 @@ impl User {
                         permissions.bits()
                     },
                 })
-                .get_result::<db::User>(dbcon)
-                .map(|data| User { data, role: None })
-                .map_err(Into::into)
+                .get_result::<db::User>(dbcon)?;
+
+            let actor = actor.unwrap_or(data.id);
+            audit::log_db_actor(
+                dbcon, actor, "users", data.id, "create", LogNewUser {
+                    email,
+                    name,
+                    is_super,
+                    language,
+                    permissions: data.permissions,
+                });
+
+            Ok(User { data, role: None })
         })
     }
 
@@ -262,6 +274,8 @@ impl User {
             diesel::delete(sessions::table.filter(sessions::user.eq(self.id)))
                 .execute(dbcon)?;
 
+            audit::log_db(dbcon, "users", self.id, "change-password", ());
+
             // Update credentials.
             diesel::update(&self.data)
                 .set(db::PasswordChange {
@@ -282,6 +296,9 @@ impl User {
         self.data = diesel::update(&self.data)
             .set(users::name.eq(name))
             .get_result::<db::User>(dbcon)?;
+
+        audit::log_db(dbcon, "users", self.id, "set-name", name);
+
         Ok(())
     }
 
@@ -296,6 +313,8 @@ impl User {
             .get_result::<db::User>(dbcon)?;
 
         self.data = data;
+
+        audit::log_db(dbcon, "users", self.id, "change-language", language);
 
         Ok(())
     }
@@ -315,6 +334,9 @@ impl User {
             | self.role.as_ref().map_or(PermissionBits::empty(), Role::permissions);
 
         let data = dbcon.transaction(|| {
+            audit::log_db(
+                dbcon, "users", self.id, "set-permissions", permissions.bits());
+
             // Since we might be removing a permission we also need to update
             // user's sessions.
             diesel::update(sessions::table.filter(
@@ -354,6 +376,8 @@ impl User {
         };
 
         let data = dbcon.transaction(|| {
+            audit::log_db(dbcon, "users", self.id, "set-role", role_id);
+
             // Since user's previous role might have had more permissions
             // we also need to update user's sessions.
             diesel::update(sessions::table.filter(
@@ -467,4 +491,16 @@ pub enum ChangePasswordError {
 
 impl_from! { for ChangePasswordError ;
     DbError => |e| ChangePasswordError::Internal(e),
+}
+
+#[derive(Serialize)]
+struct LogNewUser<'a> {
+    email: &'a str,
+    name: &'a str,
+    is_super: bool,
+    language: &'a str,
+    // XXX: we serialize permissions as bits as rmp-serde currently works as
+    // a human-readable format, and serializes PermissionBits as an array of
+    // strings.
+    permissions: i32,
 }

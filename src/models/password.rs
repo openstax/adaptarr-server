@@ -8,6 +8,7 @@ use failure::Fail;
 use crate::{
     ApiError,
     Config,
+    audit,
     db::{
         Connection,
         models as db,
@@ -27,14 +28,18 @@ pub struct PasswordResetToken {
 impl PasswordResetToken {
     /// Create a new password reset token for a given user.
     pub fn create(dbcon: &Connection, user: &User) -> Result<PasswordResetToken, CreateTokenError> {
-        diesel::insert_into(tokens::table)
+        let data = diesel::insert_into(tokens::table)
             .values(db::NewPasswordResetToken {
                 user: user.id,
                 expires: Utc::now().naive_utc() + Duration::minutes(15),
             })
             .get_result::<db::PasswordResetToken>(dbcon)
-            .map(|data| PasswordResetToken { data })
-            .map_err(CreateTokenError)
+            .map_err(CreateTokenError)?;
+
+        audit::log_db_actor(
+            dbcon, user.id, "password-reset-tokens", data.id, "create", ());
+
+        Ok(PasswordResetToken { data })
     }
 
     /// Get an existing password reset token by code.
@@ -67,7 +72,18 @@ impl PasswordResetToken {
     pub fn fulfil(self, dbcon: &Connection, password: &str)
     -> Result<User, ResetPasswordError> {
         let mut user = User::by_id(dbcon, self.data.user)?;
-        user.change_password(dbcon, password)?;
+        audit::with_actor(
+            audit::Actor::User(user.id),
+            || user.change_password(dbcon, password),
+        )?;
+        audit::log_db_actor(
+            dbcon,
+            user.id,
+            "password-reset-tokens",
+            self.data.id,
+            "fulfil-password-reset-token",
+            (),
+        );
         Ok(user)
     }
 }

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -52,13 +53,16 @@ impl Book {
 
     /// Create a new book.
     pub fn create(dbconn: &Connection, title: &str) -> Result<Book, DbError> {
-        diesel::insert_into(books::table)
+        let data = diesel::insert_into(books::table)
             .values(db::NewBook {
                 id: Uuid::new_v4(),
                 title,
             })
-            .get_result::<db::Book>(dbconn)
-            .map(|data| Book { data })
+            .get_result::<db::Book>(dbconn)?;
+
+        audit::log_db(dbconn, "books", data.id, "create", LogCreation { title });
+
+        Ok(Book { data })
     }
 
     /// Get underlying database models.
@@ -72,6 +76,7 @@ impl Book {
     /// book will not be affected.
     pub fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
         diesel::delete(&self.data).execute(dbconn)?;
+        audit::log_db(dbconn, "books", self.data.id, "delete", ());
         Ok(())
     }
 
@@ -100,6 +105,9 @@ impl Book {
         diesel::update(&self.data)
             .set(books::title.eq(&title))
             .execute(dbconn)?;
+
+        audit::log_db(dbconn, "books", self.data.id, "set-title", &title);
+
         self.data.title = title;
         Ok(())
     }
@@ -127,4 +135,9 @@ pub enum FindBookError {
 
 impl_from! { for FindBookError ;
     DbError => |e| FindBookError::Database(e),
+}
+
+#[derive(Serialize)]
+struct LogCreation<'a> {
+    title: &'a str,
 }

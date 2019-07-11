@@ -13,6 +13,7 @@ use zip::{ZipArchive, result::ZipError};
 
 use crate::{
     ApiError,
+    audit,
     config::Storage,
     db::{Connection, Pool},
     models::{
@@ -35,6 +36,7 @@ const SKIP_FILES: &[&str] = &[
 pub struct ImportModule {
     pub title: String,
     pub file: NamedTempFile,
+    pub actor: audit::Actor,
 }
 
 impl Message for ImportModule {
@@ -46,6 +48,7 @@ impl Message for ImportModule {
 pub struct ReplaceModule {
     pub module: Module,
     pub file: NamedTempFile,
+    pub actor: audit::Actor,
 }
 
 impl Message for ReplaceModule {
@@ -56,6 +59,7 @@ impl Message for ReplaceModule {
 pub struct ImportBook {
     pub title: String,
     pub file: NamedTempFile,
+    pub actor: audit::Actor,
 }
 
 impl Message for ImportBook {
@@ -67,6 +71,7 @@ impl Message for ImportBook {
 pub struct ReplaceBook {
     pub book: Book,
     pub file: NamedTempFile,
+    pub actor: audit::Actor,
 }
 
 impl Message for ReplaceBook {
@@ -407,9 +412,9 @@ impl Handler<ImportModule> for Importer {
     type Result = Result<Module, ImportError>;
 
     fn handle(&mut self, msg: ImportModule, _: &mut Self::Context) -> Self::Result {
-        let ImportModule { title, file } = msg;
+        let ImportModule { title, file, actor } = msg;
 
-        self.create_module(title, file)
+        audit::with_actor(actor, || self.create_module(title, file))
     }
 }
 
@@ -417,9 +422,9 @@ impl Handler<ReplaceModule> for Importer {
     type Result = Result<Module, ImportError>;
 
     fn handle(&mut self, msg: ReplaceModule, _: &mut Self::Context) -> Self::Result {
-        let ReplaceModule { module, file } = msg;
+        let ReplaceModule { module, file, actor } = msg;
 
-        self.replace_module(module, file)
+        audit::with_actor(actor, || self.replace_module(module, file))
     }
 }
 
@@ -427,9 +432,9 @@ impl Handler<ImportBook> for Importer {
     type Result = Result<Book, ImportError>;
 
     fn handle(&mut self, msg: ImportBook, _: &mut Self::Context) -> Self::Result {
-        let ImportBook { title, file } = msg;
+        let ImportBook { title, file, actor } = msg;
 
-        self.create_book(title, file)
+        audit::with_actor(actor, || self.create_book(title, file))
     }
 }
 
@@ -437,9 +442,9 @@ impl Handler<ReplaceBook> for Importer {
     type Result = Result<Book, ImportError>;
 
     fn handle(&mut self, msg: ReplaceBook, _: &mut Self::Context) -> Self::Result {
-        let ReplaceBook { book, file } = msg;
+        let ReplaceBook { book, file, actor } = msg;
 
-        self.replace_book(book, file)
+        audit::with_actor(actor, || self.replace_book(book, file))
     }
 }
 

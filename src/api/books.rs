@@ -129,11 +129,15 @@ from_multipart! {
 /// ```
 pub fn create_book_from_zip(
     state: actix_web::State<State>,
-    _session: Session<EditBook>,
+    session: Session<EditBook>,
     data: Multipart<NewBookZip>,
 ) -> impl Future<Item = Json<BookData>, Error = Error> {
     let NewBookZip { title, file } = data.into_inner();
-    state.importer.send(ImportBook { title, file })
+    state.importer.send(ImportBook {
+        title,
+        file,
+        actor: session.user_id().into(),
+    })
         .from_err()
         .and_then(|r| future::result(r).from_err())
         .map(|book| Json(book.get_public()))
@@ -186,7 +190,7 @@ pub fn update_book(
 pub fn replace_book(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
-    _session: Session<EditBook>,
+    session: Session<EditBook>,
     id: Path<Uuid>,
 ) -> impl Future<Item = Json<BookData>, Error = Error> {
     future::result(
@@ -210,7 +214,11 @@ pub fn replace_book(
                 .map(|file| (book, file))
         })
         .and_then(move |(book, file)| {
-            state.importer.send(ReplaceBook { book, file })
+            state.importer.send(ReplaceBook {
+                book,
+                file,
+                actor: session.user_id().into(),
+            })
                 .from_err()
         })
         .and_then(|r| future::result(r).from_err())

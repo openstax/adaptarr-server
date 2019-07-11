@@ -19,3 +19,11 @@ impl Link {
         self.data
     }
 }
+
+impl std::ops::Deref for Link {
+    type Target = db::EditProcessLink;
+
+    fn deref(&self) -> &db::EditProcessLink {
+        &self.data
+    }
+}

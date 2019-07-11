@@ -1,14 +1,16 @@
-use chrono::{Duration, Utc};
+use chrono::{Duration, Utc, NaiveDateTime};
 use diesel::{
     Connection as _Connection,
     prelude::*,
     result::Error as DbError,
 };
 use failure::Fail;
+use serde::Serialize;
 
 use crate::{
     ApiError,
     Config,
+    audit,
     db::{
         Connection,
         models as db,
@@ -38,14 +40,19 @@ impl Invite {
                 return Err(CreateInviteError::UserExists);
             }
 
-            diesel::insert_into(invites::table)
+            let data = diesel::insert_into(invites::table)
                 .values(db::NewInvite {
                     email,
                     expires: Utc::now().naive_utc() + Duration::days(7),
                 })
-                .get_result::<db::Invite>(dbcon)
-                .map(|data| Invite { data })
-                .map_err(Into::into)
+                .get_result::<db::Invite>(dbcon)?;
+
+            audit::log_db(dbcon, "invites", data.id, "create", LogNewInvite {
+                email,
+                expires: data.expires,
+            });
+
+            Ok(Invite { data })
         })
     }
 
@@ -86,15 +93,20 @@ impl Invite {
         password: &str,
         language: &str,
     ) -> Result<User, CreateUserError> {
-        User::create(
+        let user = User::create(
             dbconn,
+            None,
             &self.email,
             name,
             password,
             false,
             language,
             PermissionBits::normal(),
-        )
+        )?;
+
+        audit::log_db_actor(dbconn, user.id, "invites", self.id, "fulfil", ());
+
+        Ok(user)
     }
 }
 
@@ -146,4 +158,10 @@ impl_from! { for FromCodeError ;
     DbError => |e| FromCodeError::Database(e),
     base64::DecodeError => |e| FromCodeError::Decoding(e),
     utils::UnsealingError => |e| FromCodeError::Unsealing(e),
+}
+
+#[derive(Serialize)]
+struct LogNewInvite<'a> {
+   email: &'a str,
+   expires: NaiveDateTime,
 }

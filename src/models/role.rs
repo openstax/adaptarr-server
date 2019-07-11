@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -53,14 +54,19 @@ impl Role {
     /// Create a new role.
     pub fn create(dbcon: &Connection, name: &str, permissions: PermissionBits)
     -> Result<Role, CreateRoleError> {
-        diesel::insert_into(roles::table)
+        let data = diesel::insert_into(roles::table)
             .values(db::NewRole {
                 name,
                 permissions: permissions.bits(),
             })
-            .get_result::<db::Role>(dbcon)
-            .map(|data| Role { data })
-            .map_err(Into::into)
+            .get_result::<db::Role>(dbcon)?;
+
+        audit::log_db(dbcon, "roles", data.id, "create", LogNewRole {
+            name,
+            permissions: permissions.bits(),
+        });
+
+        Ok(Role { data })
     }
 
     /// Get underlying database model.
@@ -74,6 +80,7 @@ impl Role {
     /// they will be unassigned first.
     pub fn delete(self, dbcon: &Connection) -> Result<(), DbError> {
         diesel::delete(&self.data).execute(dbcon)?;
+        audit::log_db(dbcon, "roles", self.id, "delete", ());
         Ok(())
     }
 
@@ -100,6 +107,8 @@ impl Role {
             .set(roles::name.eq(name))
             .get_result::<db::Role>(dbcon)?;
 
+        audit::log_db(dbcon, "roles", self.id, "set-name", name);
+
         self.data = data;
 
         Ok(())
@@ -114,6 +123,9 @@ impl Role {
         let data = diesel::update(&self.data)
             .set(roles::permissions.eq(permissions.bits()))
             .get_result::<db::Role>(dbcon)?;
+
+        audit::log_db(
+            dbcon, "roles", self.id, "set-permissions", permissions.bits());
 
         self.data = data;
 
@@ -163,4 +175,13 @@ impl std::ops::Deref for Role {
     fn deref(&self) -> &db::Role {
         &self.data
     }
+}
+
+#[derive(Serialize)]
+struct LogNewRole<'a> {
+    name: &'a str,
+    // XXX: we serialize permissions as bits as rmp-serde currently works as
+    // a human-readable format, and serializes PermissionBits as an array of
+    // strings.
+    permissions: i32,
 }

@@ -8,6 +8,7 @@ use std::ops::Deref;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -199,6 +200,11 @@ impl Slot {
             });
         }
 
+        audit::log_db(dbcon, "drafts", draft.module_id(), "fill-slot", LogFill {
+            slot: self.data.id,
+            user: user.id,
+        });
+
         Ok(())
     }
 }
@@ -245,4 +251,10 @@ pub enum FillSlotError {
 
 impl_from! { for FillSlotError ;
     DbError => |e| FillSlotError::Database(e),
+}
+
+#[derive(Serialize)]
+struct LogFill {
+    slot: i32,
+    user: i32,
 }

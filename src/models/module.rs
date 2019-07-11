@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         functions::duplicate_document,
@@ -118,6 +119,12 @@ impl Module {
                     document: document.id,
                 })
                 .get_result::<db::Module>(dbconn)?;
+
+            audit::log_db(dbconn, "modules", data.id, "create", LogNewModule {
+                title,
+                language,
+                document: document.id,
+            });
 
             Ok(Module::from_db(data, document))
         })?;
@@ -230,12 +237,20 @@ impl Module {
                 .filter(documents::id.eq(draft.document))
                 .get_result::<db::Document>(dbconn)?;
 
+            audit::log_db(
+                dbconn, "modules", self.data.id, "begin-process", version.id);
+
             for slot in slots {
                 EventManager::notify(slot.user, SlotFilled {
                     slot: slot.slot,
                     module: self.data.id,
                     document: document.id,
                 });
+                audit::log_db(
+                    dbconn, "drafts", self.data.id, "fill-slot", LogFill {
+                        slot: slot.slot,
+                        user: slot.user,
+                    });
             }
 
             Ok(Draft::from_db(draft, Document::from_db(document)))
@@ -268,6 +283,9 @@ impl Module {
             diesel::update(modules::table.filter(modules::id.eq(self.data.id)))
                 .set(modules::document.eq(document.id))
                 .execute(dbconn)?;
+
+            audit::log_db(
+                dbconn, "modules", self.data.id, "replace-content", document.id);
 
             self.document = document;
 
@@ -358,4 +376,17 @@ pub enum GetXrefTargetsError {
 
 impl_from! { for GetXrefTargetsError ;
     DbError => |e| GetXrefTargetsError::Database(e),
+}
+
+#[derive(Serialize)]
+struct LogNewModule<'a> {
+    title: &'a str,
+    language: &'a str,
+    document: i32,
+}
+
+#[derive(Serialize)]
+struct LogFill {
+    slot: i32,
+    user: i32,
 }

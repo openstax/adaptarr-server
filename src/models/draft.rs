@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -119,6 +120,7 @@ impl Draft {
     /// Delete this draft.
     pub fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
         dbconn.transaction(|| {
+            audit::log_db(dbconn, "drafts", self.data.module, "delete", ());
             diesel::delete(&self.data).execute(dbconn)?;
             self.document.delete(dbconn)?;
             Ok(())
@@ -246,6 +248,13 @@ impl Draft {
             .do_update()
             .set(document_files::file.eq(file.id))
             .execute(dbconn)?;
+
+        audit::log_db(
+            dbconn, "drafts", self.data.module, "write-file", LogWrite {
+                name,
+                file: file.id,
+            });
+
         Ok(())
     }
 
@@ -255,12 +264,17 @@ impl Draft {
             .filter(document_files::document.eq(self.document.id)
                 .and(document_files::name.eq(name))))
             .execute(dbconn)?;
+
+        audit::log_db(dbconn, "drafts", self.data.module, "delete-file", name);
+
         Ok(())
     }
 
     /// Change title of this draft's document.
     pub fn set_title(&mut self, dbconn: &Connection, title: &str) -> Result<(), DbError> {
-        self.document.set_title(dbconn, title)
+        self.document.set_title(dbconn, title)?;
+        audit::log_db(dbconn, "drafts", self.data.module, "set-title", title);
+        Ok(())
     }
 
     /// Advance this draft to the next editing step.
@@ -327,11 +341,24 @@ impl Draft {
                     version: self.data.document,
                 });
 
+                audit::log_db_actor(
+                    dbconn, user, "drafts", self.data.module, "finish", LogFinish {
+                        link: (link.from, link.to),
+                        next: next.id,
+                        document: self.data.document,
+                    });
+
                 return Ok(AdvanceResult::Finished(
                     Module::from_db(module, self.document)));
             }
 
             // Otherwise we are advancing normally.
+
+            audit::log_db_actor(
+                dbconn, user, "drafts", self.data.module, "advance", LogAdvance {
+                    link: (link.from, link.to),
+                    next: next.id,
+                });
 
             // Get users' permissions in the next step. We do it before filling
             // slots to avoid sending two notifications to newly assigned users.
@@ -374,7 +401,6 @@ impl Draft {
                     permissions,
                 });
             }
-
 
             Ok(AdvanceResult::Advanced(self))
         })
@@ -437,4 +463,23 @@ pub enum AdvanceDraftError {
 
 impl_from! { for AdvanceDraftError ;
     DbError => |e| AdvanceDraftError::Database(e),
+}
+
+#[derive(Serialize)]
+struct LogWrite<'a> {
+    name: &'a str,
+    file: i32,
+}
+
+#[derive(Serialize)]
+struct LogFinish {
+    link: (i32, i32),
+    next: i32,
+    document: i32,
+}
+
+#[derive(Serialize)]
+struct LogAdvance {
+    link: (i32, i32),
+    next: i32,
 }
