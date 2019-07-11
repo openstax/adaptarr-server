@@ -173,7 +173,9 @@ impl Slot {
             .filter(draft_slots::draft.eq(draft.module_id())
                 .and(draft_slots::slot.eq(self.data.id)))
             .select(draft_slots::user.nullable())
-            .get_result::<Option<i32>>(dbcon)?;
+            .get_result::<Option<i32>>(dbcon)
+            .optional()?
+            .unwrap_or(None);
 
         diesel::insert_into(draft_slots::table)
             .values(db::DraftSlot {
