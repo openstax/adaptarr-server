@@ -167,8 +167,8 @@ impl Kind {
         }
     }
 
-    pub fn group(&self) -> Group {
-        match *self {
+    pub fn group(self) -> Group {
+        match self {
             Kind::Assigned => Group::Assigned,
             Kind::ProcessEnded => Group::ProcessEnded,
             Kind::SlotFilled | Kind::SlotVacated => Group::SlotAssignment,

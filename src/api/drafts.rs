@@ -286,7 +286,7 @@ pub fn update_file(
         Ok(true) => (),
         Ok(false) => return Box::new(future::err(
             InsufficientSlotPermission(SlotPermission::Edit).into())),
-        Err(err) => return Box::new(future::err(err.into())),
+        Err(err) => return Box::new(future::err(err)),
     }
 
     Box::new(File::from_stream::<_, _, Error>(

@@ -83,7 +83,7 @@ pub fn new_app(state: State) -> App<State> {
     App::with_state(state)
         .middleware(SentryMiddleware::new())
         .middleware(Logger::default())
-        .middleware(session::SessionManager::new())
+        .middleware(session::SessionManager::default())
         .prefix("/api/v1")
         .configure(books::routes)
         .configure(conversations::routes)

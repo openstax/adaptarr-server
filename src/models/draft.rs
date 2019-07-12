@@ -390,7 +390,7 @@ impl Draft {
                 .get_result(dbconn)?;
 
             for (user, permissions) in permissions.into_iter() {
-                let permissions = permissions.into_iter()
+                let permissions = permissions
                     .map(|(_, p)| p.permission)
                     .collect();
 

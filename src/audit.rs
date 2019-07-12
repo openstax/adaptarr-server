@@ -30,8 +30,8 @@ pub enum Actor {
 }
 
 impl Actor {
-    fn as_db(&self) -> Option<i32> {
-        match *self {
+    fn as_db(self) -> Option<i32> {
+        match self {
             Actor::System => None,
             Actor::User(id) => Some(id),
         }

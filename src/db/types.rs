@@ -32,8 +32,8 @@ pub enum SlotPermission {
 
 impl SlotPermission {
     /// Does this permission allow editing documents?
-    pub fn allows_editing(&self) -> bool {
-        match *self {
+    pub fn allows_editing(self) -> bool {
+        match self {
             SlotPermission::Edit | SlotPermission::ProposeChanges |
             SlotPermission::AcceptChanges => true,
             _ => false,

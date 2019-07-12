@@ -36,7 +36,7 @@ pub fn app(state: State) -> App<State> {
     App::with_state(state)
         .middleware(SentryMiddleware::new())
         .middleware(Logger::default())
-        .middleware(SessionManager::new())
+        .middleware(SessionManager::default())
         .resource("/login", |r| {
             r.get().api_with(login);
             r.post().api_with(do_login);

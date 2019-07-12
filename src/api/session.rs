@@ -118,17 +118,6 @@ struct SessionData {
 }
 
 impl SessionManager {
-    pub fn new() -> SessionManager {
-        let config = config::load().expect("configuration should be ready");
-        let db = db::pool().expect("database should be ready");
-
-        SessionManager {
-            secret: config.server.secret.clone(),
-            domain: &config.server.domain,
-            db,
-        }
-    }
-
     fn validate(ses: &DbSession) -> Validation {
         let now = Utc::now().naive_utc();
 
@@ -157,6 +146,19 @@ impl SessionManager {
         }
 
         Validation::Pass
+    }
+}
+
+impl Default for SessionManager {
+    fn default() -> SessionManager {
+        let config = config::load().expect("configuration should be ready");
+        let db = db::pool().expect("database should be ready");
+
+        SessionManager {
+            secret: config.server.secret.clone(),
+            domain: &config.server.domain,
+            db,
+        }
     }
 }
 

@@ -131,7 +131,8 @@ impl Slot {
             .map(|slot| match User::by_id(dbcon, slot.user) {
                 Ok(user) => Ok(user),
                 Err(FindUserError::Internal(err)) => Err(err),
-                Err(_) => panic!("Database inconsistency: no user for draft slot"),
+                Err(FindUserError::NotFound) =>
+                    panic!("Database inconsistency: no user for draft slot"),
             })
             .transpose()
     }
