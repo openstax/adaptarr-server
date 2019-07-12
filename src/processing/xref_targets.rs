@@ -39,6 +39,8 @@ const CNXML_NS: &str = "http://cnx.rice.edu/cnxml";
 pub fn process_document(dbconn: &Connection, document: &db::Document)
     -> Result<(), Error>
 {
+    debug!("Processing reference targets for {}", document.id);
+
     let index = File::by_id(dbconn, document.index)?;
     let content = index.read_to_string()?;
     let root = Element::from_str(&content)?;
@@ -143,9 +145,20 @@ pub fn process_stale(dbconn: &Connection) -> Result<(), Error> {
             .filter(documents::xrefs_ready.eq(false))
             .get_results::<(db::Module, db::Document)>(dbconn)?;
 
-        for (_, document) in documents {
-            process_document(dbconn, &document)?;
+        trace!("Processing stale documents ({})", documents.len());
+
+        for (module, document) in documents {
+            if let Err(err) = process_document(dbconn, &document) {
+                error!(
+                    "Could not process stale document {} (from module {}): {}",
+                    document.id,
+                    module.id,
+                    err,
+                );
+            }
         }
+
+        trace!("Finished processing stale documents");
 
         Ok(())
     })
