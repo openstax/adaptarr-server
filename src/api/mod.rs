@@ -1,4 +1,4 @@
-use actix::{Addr, System};
+use actix::{Actor, Addr, System};
 use actix_web::{
     App,
     middleware::Logger,
@@ -12,6 +12,7 @@ use super::{
     db,
     i18n::{self, I18n},
     import::Importer,
+    processing::TargetProcessor,
 };
 
 pub use self::error::{ApiError, Error};
@@ -39,6 +40,10 @@ pub fn start(cfg: &Config) -> Result<()> {
         new_app(state.clone()),
         pages::app(state.clone()),
     ]);
+
+    // Manually start TargetProcessor to ensure stale documents are processed
+    // immediately.
+    TargetProcessor::start_default();
 
     let server = if let Some(fd) = listenfd::ListenFd::from_env().take_tcp_listener(0)? {
         server.listen(fd)
