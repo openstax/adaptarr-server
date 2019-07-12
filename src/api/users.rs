@@ -17,6 +17,7 @@ use crate::{
     models::{
         Invite,
         Role,
+        draft::{Draft, PublicData as DraftData},
         user::{Fields, User, PublicData, UserAuthenticateError},
     },
     permissions::{InviteUser, PermissionBits},
@@ -41,6 +42,7 @@ pub fn routes(app: App<State>) -> App<State> {
                 r.get().api_with(get_user);
                 r.put().api_with(modify_user);
             })
+            .api_route("/{id}/drafts", Method::GET, list_user_drafts)
             .api_route("/me/password", Method::PUT, modify_password)
             .route("/me/session", Method::GET, get_session)
         )
@@ -230,6 +232,34 @@ pub fn modify_user(
     }
 
     Ok(Json(user.get_public(fields)))
+}
+
+/// Get list of drafts a given user has access to.
+///
+/// ## Method
+///
+/// ```text
+/// GET /users/:id/drafts
+/// ```
+pub fn list_user_drafts(
+    state: actix_web::State<State>,
+    session: Session,
+    path: Path<UserId>,
+) -> Result<Json<Vec<DraftData>>, Error> {
+    let db = state.db.get()?;
+    let sesusr = session.user(&*db)?;
+
+    if !path.is_current() {
+        sesusr.permissions(true).require(PermissionBits::MANAGE_PROCESS)?;
+    }
+
+    let user = path.get_user(&*state, &session)?;
+    let drafts = Draft::all_of(&*db, user.id)?;
+
+    drafts.into_iter().map(|d| d.get_public(&*db, user.id))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Json)
+        .map_err(From::from)
 }
 
 #[derive(Debug, Deserialize)]
