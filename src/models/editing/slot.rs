@@ -104,6 +104,40 @@ impl Slot {
             .collect())
     }
 
+    /// Does a draft have any unoccupied slots to which a user with given role
+    /// can assign themselves?
+    pub fn free_in_draft_for(dbcon: &Connection, draft: &Draft, role: Option<i32>)
+    -> Result<bool, DbError> {
+        // TODO: fold this and all_free into a single helper function?
+        let query = drafts::table
+            .inner_join(edit_process_step_slots::table
+                .on(drafts::step.eq(edit_process_step_slots::step)))
+            .left_join(draft_slots::table
+                .on(drafts::module.eq(draft_slots::draft)
+                    .and(edit_process_step_slots::slot.eq(draft_slots::slot))))
+            .inner_join(edit_process_slots::table
+                .on(edit_process_step_slots::slot.eq(edit_process_slots::id)));
+
+        let count = if let Some(role) = role {
+            query
+                .filter(draft_slots::user.is_null()
+                    .and(edit_process_slots::role.is_null()
+                        .or(edit_process_slots::role.eq(role)))
+                    .and(drafts::module.eq(draft.module_id())))
+                .count()
+                .get_result::<i64>(dbcon)?
+        } else {
+            query
+                .filter(draft_slots::user.is_null()
+                    .and(edit_process_slots::role.is_null())
+                    .and(drafts::module.eq(draft.module_id())))
+                .count()
+                .get_result::<i64>(dbcon)?
+        };
+
+        Ok(count > 0)
+    }
+
     /// Unpack database data.
     pub fn into_db(self) -> db::EditProcessSlot {
         self.data

@@ -36,7 +36,7 @@ use super::{
     Module,
     User,
     document::{Document, PublicData as DocumentData},
-    editing::{Step, StepData, Version, slot::FillSlotError},
+    editing::{Step, StepData, Slot, Version, slot::FillSlotError},
 };
 
 #[derive(Debug)]
@@ -199,12 +199,18 @@ impl Draft {
             return Ok(true);
         }
 
-        draft_slots::table
+        let member = draft_slots::table
             .select(diesel::dsl::count(draft_slots::user))
             .filter(draft_slots::draft.eq(self.data.module)
                 .and(draft_slots::user.eq(user.id)))
             .get_result::<i64>(dbconn)
-            .map(|c| c > 0)
+            .map(|c| c > 0)?;
+        if member {
+            return Ok(true);
+        }
+
+        let could_assign = Slot::free_in_draft_for(dbconn, self, user.role)?;
+        Ok(could_assign)
     }
 
     /// Check that a user currently possesses specified slot permissions.

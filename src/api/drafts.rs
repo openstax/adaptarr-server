@@ -98,7 +98,12 @@ pub fn get_draft(
     id: Path<Uuid>,
 ) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
+    let draft = Draft::by_id(&*db, *id)?;
+    let user = session.user(&*db)?;
+
+    if !draft.check_access(&*db, &user)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
 }
@@ -223,7 +228,12 @@ pub fn list_files(
     id: Path<Uuid>,
 ) -> Result<Json<Vec<FileInfo>>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
+    let draft = Draft::by_id(&*db, *id)?;
+    let user = session.user(&*db)?;
+
+    if !draft.check_access(&*db, &user)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     let files = draft.get_files(&*db)?
         .into_iter()
@@ -250,7 +260,12 @@ pub fn get_file(
 ) -> Result<impl Responder> {
     let (id, name) = path.into_inner();
     let db = state.db.get()?;
-    let draft = Draft::by_id_and_user(&*db, id, session.user)?;
+    let draft = Draft::by_id(&*db, id)?;
+    let user = session.user(&*db)?;
+
+    if !draft.check_access(&*db, &user)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     Ok(draft.get_file(&*db, &name)?
         .stream(&state.config))
@@ -357,7 +372,12 @@ pub fn list_containing_books(
     id: Path<Uuid>,
 ) -> Result<Json<Vec<Uuid>>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
+    let draft = Draft::by_id(&*db, *id)?;
+    let user = session.user(&*db)?;
+
+    if !draft.check_access(&*db, &user)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     draft.get_books(&*db)
         .map(Json)
