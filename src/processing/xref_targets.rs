@@ -59,7 +59,7 @@ pub fn process_document(dbconn: &Connection, document: &db::Document)
             "example" | "solution" | "commentary" | "note"
                 => line_contex_text(element),
             // Elements that have captions
-            "figure" | "subfigure"
+            "figure" | "subfigure"  | "table"
                 => element.get_child("caption", CNXML_NS)
                     .and_then(line_contex_text),
             // Description of an exercise is the same as of its problem, as we
