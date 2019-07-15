@@ -233,7 +233,15 @@ impl<S> Middleware<S> for SessionManager {
                 diesel::delete(&session.existing.unwrap())
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-                rsp.add_cookie(&Cookie::new(COOKIE, ""))?;
+                let cookie = Cookie::build(COOKIE, "")
+                    .domain(self.domain)
+                    .path("/")
+                    .max_age(Duration::zero())
+                    .secure(!cfg!(debug_assertions))
+                    .http_only(!cfg!(debug_assertions))
+                    .same_site(SameSite::Strict)
+                    .finish();
+                rsp.add_cookie(&cookie)?;
             } else if let Some(new) = session.new {
                 if let Some(session) = session.existing {
                     diesel::delete(&session)
