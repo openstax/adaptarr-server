@@ -248,31 +248,33 @@ impl Draft {
     /// a new file will be created.
     pub fn write_file(&self, dbconn: &Connection, name: &str, file: &File)
     -> Result<(), DbError> {
-        if name == "index.cnxml" {
-            diesel::update(&*self.document)
-                .set(documents::index.eq(file.id))
+        dbconn.transaction(|| {
+            audit::log_db(
+                dbconn, "drafts", self.data.module, "write-file", LogWrite {
+                    name,
+                    file: file.id,
+                });
+
+            if name == "index.cnxml" {
+                diesel::update(&*self.document)
+                    .set(documents::index.eq(file.id))
+                    .execute(dbconn)?;
+                return Ok(());
+            }
+
+            diesel::insert_into(document_files::table)
+                .values(&db::NewDocumentFile {
+                    document: self.document.id,
+                    name,
+                    file: file.id,
+                })
+                .on_conflict((document_files::document, document_files::name))
+                .do_update()
+                .set(document_files::file.eq(file.id))
                 .execute(dbconn)?;
-            return Ok(());
-        }
 
-        diesel::insert_into(document_files::table)
-            .values(&db::NewDocumentFile {
-                document: self.document.id,
-                name,
-                file: file.id,
-            })
-            .on_conflict((document_files::document, document_files::name))
-            .do_update()
-            .set(document_files::file.eq(file.id))
-            .execute(dbconn)?;
-
-        audit::log_db(
-            dbconn, "drafts", self.data.module, "write-file", LogWrite {
-                name,
-                file: file.id,
-            });
-
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Delete a file from this draft.
