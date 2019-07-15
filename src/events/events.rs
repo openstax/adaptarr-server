@@ -26,6 +26,7 @@ use super::Error;
 pub enum Event {
     Assigned(Assigned),
     ProcessEnded(ProcessEnded),
+    ProcessCancelled(ProcessCancelled),
     SlotFilled(SlotFilled),
     SlotVacated(SlotVacated),
     DraftAdvanced(DraftAdvanced),
@@ -38,6 +39,8 @@ impl Event {
                 Ok(Event::Assigned(rmps::from_slice(&data)?)),
             Kind::ProcessEnded =>
                 Ok(Event::ProcessEnded(rmps::from_slice(&data)?)),
+            Kind::ProcessCancelled =>
+                Ok(Event::ProcessCancelled(rmps::from_slice(&data)?)),
             Kind::SlotFilled =>
                 Ok(Event::SlotFilled(rmps::from_slice(&data)?)),
             Kind::SlotVacated =>
@@ -77,6 +80,13 @@ pub struct ProcessEnded {
     pub module: Uuid,
     /// Version which the draft become.
     pub version: i32,
+}
+
+/// Editing process for a draft was cancelled.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProcessCancelled {
+    /// Module for a draft of which the editing process was cancelled.
+    pub module: Uuid,
 }
 
 /// A slot was filled with a user.
@@ -119,6 +129,7 @@ impl Event {
         match *self {
             Event::Assigned(_) => "assigned",
             Event::ProcessEnded(_) => "process-ended",
+            Event::ProcessCancelled(_) => "process-cancelled",
             Event::SlotFilled(_) => "slot-filled",
             Event::SlotVacated(_) => "slot-vacated",
             Event::DraftAdvanced(_) => "draft-advanced",
@@ -129,6 +140,7 @@ impl Event {
 impl_from! { for Event ;
     Assigned => |e| Event::Assigned(e),
     ProcessEnded => |e| Event::ProcessEnded(e),
+    ProcessCancelled => |e| Event::ProcessCancelled(e),
     SlotFilled => |e| Event::SlotFilled(e),
     SlotVacated => |e| Event::SlotVacated(e),
     DraftAdvanced => |e| Event::DraftAdvanced(e),
@@ -149,6 +161,7 @@ pub enum Group {
 pub enum Kind {
     Assigned,
     ProcessEnded,
+    ProcessCancelled,
     SlotFilled,
     SlotVacated,
     DraftAdvanced,
@@ -160,6 +173,7 @@ impl Kind {
         match s {
             "assigned" => Kind::Assigned,
             "process-ended" => Kind::ProcessEnded,
+            "process-cancelled" => Kind::ProcessCancelled,
             "slot-filled" => Kind::SlotFilled,
             "slot-vacated" => Kind::SlotVacated,
             "draft-advanced" => Kind::DraftAdvanced,
@@ -170,7 +184,7 @@ impl Kind {
     pub fn group(self) -> Group {
         match self {
             Kind::Assigned => Group::Assigned,
-            Kind::ProcessEnded => Group::ProcessEnded,
+            Kind::ProcessEnded | Kind::ProcessCancelled => Group::ProcessEnded,
             Kind::SlotFilled | Kind::SlotVacated => Group::SlotAssignment,
             Kind::DraftAdvanced => Group::DraftAdvanced,
             Kind::Other => Group::Other,
@@ -193,6 +207,9 @@ pub enum ExpandedEvent {
     ProcessEnded {
         module: ExpandedModule,
         version: i32,
+    },
+    ProcessCancelled {
+        module: ExpandedModule,
     },
     SlotFilled {
         module: ExpandedModule,
@@ -254,6 +271,8 @@ pub fn expand_event(config: &Config, dbcon: &Connection, event: &db::Event)
             expand_assigned(config, dbcon, rmps::from_slice(&event.data)?),
         Kind::ProcessEnded =>
             expand_process_ended(config, dbcon, rmps::from_slice(&event.data)?),
+        Kind::ProcessCancelled =>
+            expand_process_cancelled(config, dbcon, rmps::from_slice(&event.data)?),
         Kind::SlotFilled =>
             expand_slot_filled(config, dbcon, rmps::from_slice(&event.data)?),
         Kind::SlotVacated =>
@@ -352,6 +371,27 @@ fn expand_process_ended(config: &Config, dbcon: &Connection, ev: ProcessEnded)
                 config.server.domain, module.0.id),
         },
         version: ev.version,
+    })
+}
+
+fn expand_process_cancelled(config: &Config, dbcon: &Connection, ev: ProcessCancelled)
+-> Result<ExpandedEvent, Error> {
+    let module = match Module::by_id(dbcon, ev.module) {
+        Ok(module) => module,
+        Err(FindModuleError::Database(err)) =>
+            return Err(err.into()),
+        Err(FindModuleError::NotFound) => panic!(
+            "Inconsistent database: module doesn't exist \
+            but is referenced by an event",
+        ),
+    }.into_db();
+
+    Ok(ExpandedEvent::ProcessCancelled {
+        module: ExpandedModule {
+            title: module.1.title,
+            url: format!("https://{}/modules/{}",
+                config.server.domain, module.0.id),
+        },
     })
 }
 

@@ -252,6 +252,19 @@ mail-notify-event-process-ended =
     Z radością informujemy, że kończymy prace redakcyjne nad modułem {
     -mail-url(url: $moduleurl, text: $moduletitle) }.
 
+# Notification about an editing process being cancelled for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module for whose draft the process was
+#   cancelled
+# - $moduleurl (string): URL to the module $moduletitle
+mail-notify-event-process-cancelled-text =
+    Proces redakcyjny dla modułu „{ $moduletitle }” ({ $moduleurl
+    }) został zatrzymany.
+mail-notify-event-process-cancelled =
+    Proces redakcyjny dla modułu {
+    -mail-url(url: $moduleurl, text: $moduletitle) } został zatrzymany.
+
 # Header displayed before notifications about user being assigned to or removed
 # from a slot in an editing process.
 mail-notify-group-header-slot-assignment =

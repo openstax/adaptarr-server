@@ -46,6 +46,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/drafts/{id}", |r| {
             r.get().api_with(get_draft);
             r.put().api_with(update_draft);
+            r.delete().api_with(delete_draft);
         })
         .api_route("/drafts/{id}/advance", Method::POST, advance_draft)
         .resource("/drafts/{id}/comments", |r| {
@@ -136,6 +137,26 @@ pub fn update_draft(
     draft.set_title(&*db, &update.title)?;
 
     draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
+}
+
+/// Delete a draft.
+///
+/// ## Method
+///
+/// ```text
+/// DELETE /drafts/:id
+/// ```
+pub fn delete_draft(
+    state: actix_web::State<State>,
+    session: Session<ManageProcess>,
+    id: Path<Uuid>,
+) -> Result<HttpResponse> {
+    let db = state.db.get()?;
+    let draft = Draft::by_id(&*db, *id)?;
+
+    draft.delete(&*db)?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[derive(Deserialize)]

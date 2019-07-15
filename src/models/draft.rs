@@ -27,7 +27,7 @@ use crate::{
         },
         types::SlotPermission,
     },
-    events::{DraftAdvanced, EventManager, ProcessEnded},
+    events::{DraftAdvanced, EventManager, ProcessEnded, ProcessCancelled},
     permissions::PermissionBits,
     processing::{ProcessDocument, TargetProcessor},
 };
@@ -120,9 +120,20 @@ impl Draft {
     /// Delete this draft.
     pub fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
         dbconn.transaction(|| {
-            audit::log_db(dbconn, "drafts", self.data.module, "delete", ());
+            let members = draft_slots::table
+                .filter(draft_slots::draft.eq(self.data.module))
+                .select(draft_slots::user)
+                .get_results::<i32>(dbconn)?;
+
             diesel::delete(&self.data).execute(dbconn)?;
             self.document.delete(dbconn)?;
+
+            audit::log_db(dbconn, "drafts", self.data.module, "delete", ());
+
+            EventManager::notify(members, ProcessCancelled {
+                module: self.data.module,
+            });
+
             Ok(())
         })
     }

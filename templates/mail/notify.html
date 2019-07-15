@@ -49,6 +49,12 @@
                     moduletitle=event.module.title,
                     moduleurl=event.module.url
                 ) %}
+            {% elif event.kind == "process-cancelled" %}
+                {% set message = _(
+                    key="mail-notify-event-process-cancelled",
+                    moduletitle=event.module.title,
+                    moduleurl=event.module.url
+                ) %}
             {% elif event.kind == "slot-filled" %}
                 {% set message = _(
                     key="mail-notify-event-slot-filled",

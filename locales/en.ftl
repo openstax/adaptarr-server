@@ -251,6 +251,19 @@ mail-notify-event-process-ended =
         -mail-url(url: $moduleurl, text: $moduletitle)
     } has successfully concluded.
 
+# Notification about an editing process being cancelled for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module for whose draft the process was
+#   cancelled
+# - $moduleurl (string): URL to the module $moduletitle
+mail-notify-event-process-cancelled-text =
+    Editing works on module “{ $moduletitle }” ({ $moduleurl
+    }) have been stopped.
+mail-notify-event-process-cancelled =
+    Editing works on module { -mail-url(url: $moduleurl, text: $moduletitle)
+    } have been stopped.
+
 # Header displayed before notifications about user being assigned to or removed
 # from a slot in an editing process.
 mail-notify-group-header-slot-assignment =
