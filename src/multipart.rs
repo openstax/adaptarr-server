@@ -35,6 +35,12 @@ pub trait FromField: Sized {
     fn from_field<S>(field: S) -> Self::Result
     where
         S: Stream<Item = Bytes, Error = MultipartError> + 'static;
+
+    /// Default value of this filed, if it was not present in multipart,
+    /// or `None` if the field must be present.
+    fn default() -> Option<Self> {
+        None
+    }
 }
 
 /// Macro that auto-implements [`FromMultipart`] for types.
@@ -107,9 +113,11 @@ macro_rules! from_multipart {
                         let $impl_struct { $($field),* } = data;
 
                         $(
-                            let $field = $field.ok_or(
-                                crate::multipart::MultipartError::FieldMissing(
-                                    stringify!($field)))?;
+                            let $field = $field
+                                .or_else(crate::multipart::FromField::default)
+                                .ok_or(
+                                    crate::multipart::MultipartError::FieldMissing(
+                                        stringify!($field)))?;
                         )*
 
                         Ok(Self { $($field),* })
@@ -226,6 +234,22 @@ where
             )
         }
         MultipartItem::Nested(mp) => Box::new(mp.map(process_item).flatten()),
+    }
+}
+
+impl<F: FromField + 'static> FromField for Option<F> {
+    type Error = F::Error;
+    type Result = Box<dyn Future<Item = Self, Error = Self::Error>>;
+
+    fn from_field<S>(field: S) -> Self::Result
+    where
+        S: Stream<Item = Bytes, Error = MultipartError> + 'static,
+    {
+        Box::new(F::from_field(field).map(Some))
+    }
+
+    fn default() -> Option<Option<F>> {
+        Some(None)
     }
 }
 
