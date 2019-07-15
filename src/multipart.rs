@@ -12,7 +12,7 @@ use actix_web::{
 use bytes::Bytes;
 use failure::Fail;
 use futures::{Future, Stream, future::self};
-use std::io::Write;
+use std::{io::Write, str::FromStr};
 use tempfile::NamedTempFile;
 
 /// Trait for types which can be loaded from a `multipart/form-data` request.
@@ -289,5 +289,40 @@ impl FromField for NamedTempFile {
                     Err(e) => future::err(MultipartError::Internal(Box::new(e))),
                 }
             })))
+    }
+}
+
+pub struct FromStrField<T>(T);
+
+impl<T> FromStrField<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T> std::ops::Deref for FromStrField<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> FromField for FromStrField<T>
+where
+    T: FromStr + 'static,
+    <T as FromStr>::Err: Fail,
+{
+    type Error = MultipartError;
+    type Result = Box<dyn Future<Item = Self, Error = Self::Error>>;
+
+    fn from_field<S>(field: S) -> Self::Result
+    where
+        S: Stream<Item = Bytes, Error = MultipartError> + 'static,
+    {
+        Box::new(String::from_field(field).and_then(|s| match T::from_str(&s) {
+            Ok(v) => future::ok(FromStrField(v)),
+            Err(err) => future::err(MultipartError::BadData(Box::new(err))),
+        }))
     }
 }
