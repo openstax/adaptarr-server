@@ -8,7 +8,7 @@ use failure::Fail;
 use futures::{Future, Stream, future};
 use std::{
     fs,
-    io::{self, Read, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 use tempfile::{Builder as TempBuilder, NamedTempFile};
@@ -166,6 +166,7 @@ impl File {
         let digest = {
             let mut sink = io::sink();
             let mut hash = HashWriter::new(64, &mut sink);
+            file.seek(SeekFrom::Start(0))?;
             io::copy(&mut file, &mut hash)?;
             hash.finalize()
         };
