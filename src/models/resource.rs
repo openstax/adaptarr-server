@@ -28,6 +28,14 @@ pub struct PublicData {
     pub id: Uuid,
     pub name: String,
     pub parent: Option<Uuid>,
+    pub kind: Kind,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Kind {
+    File,
+    Directory,
 }
 
 impl Resource {
@@ -93,6 +101,7 @@ impl Resource {
         PublicData {
             id, parent,
             name: name.clone(),
+            kind: if self.is_directory() { Kind::Directory } else { Kind::File },
         }
     }
 
