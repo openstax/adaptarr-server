@@ -1,4 +1,4 @@
-use actix_web::{Responder, fs::NamedFile};
+use actix_web::fs::NamedFile;
 use blake2::blake2b::{Blake2b, Blake2bResult};
 use diesel::{
     prelude::*,
@@ -199,7 +199,7 @@ impl File {
     }
 
     /// Get an Actix responder streaming contents of this file.
-    pub fn stream(&self, cfg: &Config) -> impl Responder {
+    pub fn stream(&self, cfg: &Config) -> std::io::Result<NamedFile> {
         let hash = bytes_to_hex(&self.data.hash);
         let path = cfg.storage.path.join(hash);
         NamedFile::open(path)

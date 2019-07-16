@@ -6,6 +6,7 @@ use actix_web::{
     Json,
     Path,
     Responder,
+    http::header::{ContentDisposition, DispositionType},
 };
 use diesel::Connection as _;
 use futures::{Future, future::{self, Either}};
@@ -163,8 +164,12 @@ pub fn get_resource_content(
 ) -> Result<impl Responder> {
     let db = state.db.get()?;
     let resource = Resource::by_id(&*db, *id)?;
+    let file = resource.get_file(&*db)?.stream(&state.config)?;
 
-    Ok(resource.get_file(&*db)?.stream(&state.config))
+    Ok(file.set_content_disposition(ContentDisposition {
+        disposition: DispositionType::Inline,
+        parameters: vec![],
+    }))
 }
 
 /// Change contents of a resource.
