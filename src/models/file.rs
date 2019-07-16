@@ -161,6 +161,7 @@ impl File {
         dbconn: &Connection,
         config: &Storage,
         mut file: NamedTempFile,
+        mime: Option<&str>,
     ) -> Result<File, CreateFileError> {
         let digest = {
             let mut sink = io::sink();
@@ -169,7 +170,7 @@ impl File {
             hash.finalize()
         };
 
-        File::from_file_with_hash(dbconn, &config.path, file, digest)
+        File::from_file_with_hash(dbconn, &config.path, file, digest, mime)
     }
 
     /// Create new file from a temporary file and hash.

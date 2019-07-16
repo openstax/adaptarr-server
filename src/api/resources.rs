@@ -96,7 +96,7 @@ pub fn create_resource(
 
     let resource = db.transaction::<_, Error, _>(|| {
         let file = file.map(|file| File::from_temporary(
-            &*db, &state.config.storage, file)).transpose()?;
+            &*db, &state.config.storage, file, None)).transpose()?;
 
         Resource::create(&*db, &name, file.as_ref(), parent.as_ref())
             .map_err(From::from)
@@ -201,7 +201,7 @@ pub fn update_resource_content(
         return Either::A(future::err(FileError::IsADirectory.into()));
     }
 
-    Either::B(File::from_stream(state.db.clone(), storage, req.payload())
+    Either::B(File::from_stream(state.db.clone(), storage, req.payload(), None)
         .and_then(move |file| resource.set_file(&*db, &file).map_err(From::from))
         .map(|_| HttpResponse::Ok().finish()))
 }
