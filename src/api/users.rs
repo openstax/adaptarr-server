@@ -171,6 +171,7 @@ pub struct UserUpdate {
     permissions: Option<PermissionBits>,
     #[serde(default, deserialize_with = "de_optional_null")]
     role: Option<Option<i32>>,
+    name: Option<String>,
 }
 
 /// Update user information.
@@ -202,6 +203,14 @@ pub fn modify_user(
             let locale = state.i18n.find_locale(&language)
                 .ok_or(NoSuchLocaleError)?;
             user.set_language(dbcon, &locale.code)?;
+        }
+
+        if let Some(name) = form.name {
+            if !id.is_current() {
+                permissions.require(PermissionBits::EDIT_USER)?;
+            }
+
+            user.set_name(dbcon, &name)?;
         }
 
         if let Some(new_perms) = form.permissions {
