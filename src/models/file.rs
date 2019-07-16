@@ -35,6 +35,9 @@ thread_local! {
     };
 }
 
+/// MIME-type of a CNXML file.
+pub static CNXML_MIME: &str = "application/vnd.openstax.cnx+xml";
+
 /// A virtual file.
 #[derive(Debug)]
 pub struct File {
@@ -58,8 +61,12 @@ impl File {
     }
 
     /// Create new file from a stream of bytes.
-    pub fn from_stream<S, I, E>(dbpool: Pool, storage: PathBuf, data: S)
-        -> impl Future<Item=File, Error=E>
+    pub fn from_stream<S, I, E>(
+        dbpool: Pool,
+        storage: PathBuf,
+        data: S,
+        mime: Option<&'static str>,
+    ) -> impl Future<Item=File, Error=E>
     where
         S: Stream<Item=I>,
         I: AsRef<[u8]>,
@@ -74,13 +81,17 @@ impl File {
                 dbpool.get()
                     .map_err(Into::into)
                     .and_then(|db|
-                        File::from_file_with_hash(&*db, storage, tmp, hash))
+                        File::from_file_with_hash(&*db, storage, tmp, hash, mime))
                     .map_err(E::from)))
     }
 
     /// Create new file from a data in memory.
-    pub fn from_data<B>(dbconn: &Connection, config: &Config, data: B)
-        -> Result<File, CreateFileError>
+    pub fn from_data<'c, B>(
+        dbconn: &Connection,
+        config: &Config,
+        data: B,
+        mime: Option<&str>,
+    ) -> Result<File, CreateFileError>
     where
         B: AsRef<[u8]>,
     {
@@ -103,12 +114,17 @@ impl File {
                 let mut file = std::fs::File::create(&path)?;
                 file.write_all(data.as_ref())?;
 
-                let mime = MAGIC.with(|magic| magic.file(&path))
-                    .expect("libmagic to work");
+                let magic = match mime {
+                    Some(_) => None,
+                    None => Some(MAGIC.with(|magic| magic.file(&path))
+                        .expect("libmagic to work")),
+                };
+
+                let mime = mime.or(magic.as_ref().map(String::as_str)).unwrap();
 
                 diesel::insert_into(files::table)
                     .values(db::NewFile {
-                        mime: &mime,
+                        mime,
                         path: path.to_str().expect("invalid path"),
                         hash: hash.as_bytes(),
                     })
@@ -120,8 +136,12 @@ impl File {
     }
 
     /// Create new file from any type implementing [`std::io::Write`].
-    pub fn from_read<R>(dbconn: &Connection, config: &Storage, mut read: R)
-        -> Result<File, CreateFileError>
+    pub fn from_read<'c, R>(
+        dbconn: &Connection,
+        config: &Storage,
+        mut read: R,
+        mime: Option<&str>,
+    ) -> Result<File, CreateFileError>
     where
         R: Read,
     {
@@ -133,17 +153,18 @@ impl File {
             hash.finalize()
         };
 
-        File::from_file_with_hash(dbconn, &config.path, tmp, digest)
+        File::from_file_with_hash(dbconn, &config.path, tmp, digest, mime)
     }
 
     /// Create new file from a temporary file and hash.
     ///
     /// This is an internal constructor.
-    fn from_file_with_hash<P>(
+    fn from_file_with_hash<'c, P>(
         dbconn: &Connection,
         storage: P,
         file: NamedTempFile,
         hash: Blake2bResult,
+        mime: Option<&str>,
     ) -> Result<File, CreateFileError>
     where
         P: AsRef<Path>,
@@ -161,12 +182,17 @@ impl File {
                 let path = storage.as_ref().join(name);
                 let _ = file.persist(&path)?;
 
-                let mime = MAGIC.with(|magic| magic.file(&path))
-                    .expect("libmagic to work");
+                let magic = match mime {
+                    Some(_) => None,
+                    None => Some(MAGIC.with(|magic| magic.file(&path))
+                        .expect("libmagic to work")),
+                };
+
+                let mime = mime.or(magic.as_ref().map(String::as_str)).unwrap();
 
                 diesel::insert_into(files::table)
                     .values(db::NewFile {
-                        mime: &mime,
+                        mime,
                         path: path.to_str().expect("invalid path"),
                         hash: hash.as_bytes(),
                     })

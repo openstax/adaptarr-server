@@ -199,7 +199,8 @@ fn new(cfg: &Config, opts: &Opts, new: &NewOpts) -> Result<()> {
 
     let document = db.transaction::<_, failure::Error, _>(|| {
         let index = std::fs::File::open(&new.index)?;
-        let index = File::from_read(&db, &cfg.storage, index)?;
+        let index = File::from_read(
+            &db, &cfg.storage, index, Some(&*crate::models::file::CNXML_MIME))?;
         let module = Module::create::<&str, _>(
             &db, &new.title, new.language.as_str(), index, std::iter::empty())?;
 

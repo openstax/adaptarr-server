@@ -325,10 +325,17 @@ pub fn update_file(
         Err(err) => return Box::new(future::err(err)),
     }
 
+    let mime = if name == "index.cnxml" {
+        Some(&*crate::models::file::CNXML_MIME)
+    } else {
+        None
+    };
+
     Box::new(File::from_stream::<_, _, Error>(
             state.db.clone(),
             storage,
             req.payload(),
+            mime,
         )
         .and_then(move |file| {
             draft.write_file(&*db, &name, &file)

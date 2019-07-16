@@ -120,7 +120,8 @@ pub fn create_module(
         tera::escape_html(&data.title),
     );
 
-    let index = File::from_data(&*db, &state.config, &content)?;
+    let index = File::from_data(
+        &*db, &state.config, &content, Some(&*crate::models::file::CNXML_MIME))?;
 
     let module = Module::create::<&str, _>(
         &*db, &data.title, &data.language, index, std::iter::empty())?;

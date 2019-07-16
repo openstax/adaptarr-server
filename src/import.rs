@@ -145,6 +145,7 @@ impl Importer {
             &*db,
             &self.config,
             zip.by_index(index)?,
+            Some(&*crate::models::file::CNXML_MIME),
         )?;
 
         let mut files = Vec::new();
@@ -179,7 +180,7 @@ impl Importer {
                 continue;
             }
 
-            let file = File::from_read(&*db, &self.config, file)?;
+            let file = File::from_read(&*db, &self.config, file, None)?;
 
             files.push((name, file));
         }
@@ -274,7 +275,12 @@ impl Importer {
 
         let index_file = {
             let index = zip.by_name(index_path)?;
-            File::from_read(dbconn, &self.config, index)?
+            File::from_read(
+                dbconn,
+                &self.config,
+                index,
+                Some(&*crate::models::file::CNXML_MIME),
+            )?
         };
 
         let mut files = Vec::new();
@@ -309,7 +315,7 @@ impl Importer {
                 continue;
             }
 
-            let file = File::from_read(dbconn, &self.config, file)?;
+            let file = File::from_read(dbconn, &self.config, file, None)?;
             files.push((name, file));
         }
 
