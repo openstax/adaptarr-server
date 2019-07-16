@@ -27,6 +27,7 @@ pub mod events;
 pub mod modules;
 pub mod pages;
 pub mod process;
+pub mod resources;
 pub mod roles;
 pub mod session;
 pub mod users;
@@ -96,6 +97,7 @@ pub fn new_app(state: State) -> App<State> {
         .configure(events::routes)
         .configure(modules::routes)
         .configure(process::routes)
+        .configure(resources::routes)
         .configure(roles::routes)
         .configure(users::routes)
 }

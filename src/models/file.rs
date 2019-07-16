@@ -1,4 +1,4 @@
-use actix_web::{Responder, fs::NamedFile};
+use actix_web::fs::NamedFile;
 use blake2::blake2b::{Blake2b, Blake2bResult};
 use diesel::{
     prelude::*,
@@ -156,6 +156,22 @@ impl File {
         File::from_file_with_hash(dbconn, &config.path, tmp, digest, mime)
     }
 
+    /// Create a new file from a temporary file.
+    pub fn from_temporary(
+        dbconn: &Connection,
+        config: &Storage,
+        mut file: NamedTempFile,
+    ) -> Result<File, CreateFileError> {
+        let digest = {
+            let mut sink = io::sink();
+            let mut hash = HashWriter::new(64, &mut sink);
+            io::copy(&mut file, &mut hash)?;
+            hash.finalize()
+        };
+
+        File::from_file_with_hash(dbconn, &config.path, file, digest)
+    }
+
     /// Create new file from a temporary file and hash.
     ///
     /// This is an internal constructor.
@@ -209,7 +225,7 @@ impl File {
     }
 
     /// Get an Actix responder streaming contents of this file.
-    pub fn stream(&self, cfg: &Config) -> impl Responder {
+    pub fn stream(&self, cfg: &Config) -> std::io::Result<NamedFile> {
         let hash = bytes_to_hex(&self.data.hash);
         let path = cfg.storage.path.join(hash);
         let mime = self.data.mime.parse().expect("invalid mime type in database");

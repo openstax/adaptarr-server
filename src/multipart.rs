@@ -12,7 +12,7 @@ use actix_web::{
 use bytes::Bytes;
 use failure::Fail;
 use futures::{Future, Stream, future::self};
-use std::io::Write;
+use std::{io::Write, str::FromStr};
 use tempfile::NamedTempFile;
 
 /// Trait for types which can be loaded from a `multipart/form-data` request.
@@ -35,6 +35,12 @@ pub trait FromField: Sized {
     fn from_field<S>(field: S) -> Self::Result
     where
         S: Stream<Item = Bytes, Error = MultipartError> + 'static;
+
+    /// Default value of this filed, if it was not present in multipart,
+    /// or `None` if the field must be present.
+    fn default() -> Option<Self> {
+        None
+    }
 }
 
 /// Macro that auto-implements [`FromMultipart`] for types.
@@ -107,9 +113,11 @@ macro_rules! from_multipart {
                         let $impl_struct { $($field),* } = data;
 
                         $(
-                            let $field = $field.ok_or(
-                                crate::multipart::MultipartError::FieldMissing(
-                                    stringify!($field)))?;
+                            let $field = $field
+                                .or_else(crate::multipart::FromField::default)
+                                .ok_or(
+                                    crate::multipart::MultipartError::FieldMissing(
+                                        stringify!($field)))?;
                         )*
 
                         Ok(Self { $($field),* })
@@ -229,6 +237,22 @@ where
     }
 }
 
+impl<F: FromField + 'static> FromField for Option<F> {
+    type Error = F::Error;
+    type Result = Box<dyn Future<Item = Self, Error = Self::Error>>;
+
+    fn from_field<S>(field: S) -> Self::Result
+    where
+        S: Stream<Item = Bytes, Error = MultipartError> + 'static,
+    {
+        Box::new(F::from_field(field).map(Some))
+    }
+
+    fn default() -> Option<Option<F>> {
+        Some(None)
+    }
+}
+
 impl FromField for String {
     type Error = MultipartError;
     type Result = Box<dyn Future<Item = Self, Error = Self::Error>>;
@@ -265,5 +289,40 @@ impl FromField for NamedTempFile {
                     Err(e) => future::err(MultipartError::Internal(Box::new(e))),
                 }
             })))
+    }
+}
+
+pub struct FromStrField<T>(T);
+
+impl<T> FromStrField<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T> std::ops::Deref for FromStrField<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> FromField for FromStrField<T>
+where
+    T: FromStr + 'static,
+    <T as FromStr>::Err: Fail,
+{
+    type Error = MultipartError;
+    type Result = Box<dyn Future<Item = Self, Error = Self::Error>>;
+
+    fn from_field<S>(field: S) -> Self::Result
+    where
+        S: Stream<Item = Bytes, Error = MultipartError> + 'static,
+    {
+        Box::new(String::from_field(field).and_then(|s| match T::from_str(&s) {
+            Ok(v) => future::ok(FromStrField(v)),
+            Err(err) => future::err(MultipartError::BadData(Box::new(err))),
+        }))
     }
 }

@@ -523,3 +523,26 @@ pub struct NewAuditLog<'a> {
     pub kind: &'a str,
     pub data: &'a [u8],
 }
+
+#[derive(Clone, Debug, Identifiable, Insertable, Queryable)]
+pub struct Resource {
+    /// Resource's ID.
+    pub id: Uuid,
+    /// Resource's name.
+    pub name: String,
+    /// File associated with this resource.
+    ///
+    /// When `None` this resource is a ‘folder’ containing other resources.
+    pub file: Option<i32>,
+    /// ‘Folder’ containing this resource.
+    pub parent: Option<Uuid>,
+}
+
+#[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
+#[table_name = "resources"]
+pub struct NewResource<'a> {
+    pub id: Uuid,
+    pub name: &'a str,
+    pub file: Option<i32>,
+    pub parent: Option<Uuid>,
+}

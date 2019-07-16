@@ -168,6 +168,15 @@ table! {
 }
 
 table! {
+    resources (id) {
+        id -> Uuid,
+        name -> Varchar,
+        file -> Nullable<Int4>,
+        parent -> Nullable<Uuid>,
+    }
+}
+
+table! {
     roles (id) {
         id -> Int4,
         name -> Varchar,
@@ -236,6 +245,7 @@ joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
 joinable!(modules -> documents (document));
 joinable!(password_reset_tokens -> users (user));
+joinable!(resources -> files (file));
 joinable!(sessions -> users (user));
 joinable!(users -> roles (role));
 joinable!(xref_targets -> documents (document));
@@ -260,6 +270,7 @@ allow_tables_to_appear_in_same_query!(
     modules,
     module_versions,
     password_reset_tokens,
+    resources,
     roles,
     sessions,
     users,
