@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Added resources.
+
 ## 0.2.0 - 2019-07-12
 
 First deploy-ready version.
