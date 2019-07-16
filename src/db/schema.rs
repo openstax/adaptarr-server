@@ -81,11 +81,17 @@ table! {
 }
 
 table! {
+    edit_process_slot_roles (slot, role) {
+        slot -> Int4,
+        role -> Int4,
+    }
+}
+
+table! {
     edit_process_slots (id) {
         id -> Int4,
         process -> Int4,
         name -> Varchar,
-        role -> Nullable<Int4>,
         autofill -> Bool,
     }
 }
@@ -234,8 +240,9 @@ joinable!(drafts -> documents (document));
 joinable!(drafts -> edit_process_steps (step));
 joinable!(drafts -> modules (module));
 joinable!(edit_process_links -> edit_process_slots (slot));
+joinable!(edit_process_slot_roles -> edit_process_slots (slot));
+joinable!(edit_process_slot_roles -> roles (role));
 joinable!(edit_process_slots -> edit_process_versions (process));
-joinable!(edit_process_slots -> roles (role));
 joinable!(edit_process_step_slots -> edit_process_slots (slot));
 joinable!(edit_process_step_slots -> edit_process_steps (step));
 joinable!(edit_process_versions -> edit_processes (process));
@@ -260,6 +267,7 @@ allow_tables_to_appear_in_same_query!(
     draft_slots,
     edit_processes,
     edit_process_links,
+    edit_process_slot_roles,
     edit_process_slots,
     edit_process_steps,
     edit_process_step_slots,

@@ -413,8 +413,6 @@ pub struct EditProcessSlot {
     pub process: i32,
     /// Slot's name.
     pub name: String,
-    /// When set, role to which this slot is limited.
-    pub role: Option<i32>,
     /// Whether the system should automatically fill this slot with a user.
     pub autofill: bool,
 }
@@ -424,8 +422,17 @@ pub struct EditProcessSlot {
 pub struct NewEditProcessSlot<'a> {
     pub process: i32,
     pub name: &'a str,
-    pub role: Option<i32>,
     pub autofill: bool,
+}
+
+/// Limit on which users
+#[derive(Associations, Clone, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(slot, role)]
+pub struct EditProcessSlotRole {
+    /// Slot to which this limit applies.
+    pub slot: i32,
+    /// Role to which the slot is limited.
+    pub role: i32,
 }
 
 /// A single editing step.

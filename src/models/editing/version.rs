@@ -15,6 +15,7 @@ use crate::{
         Connection,
         models as db,
         schema::{
+            edit_process_slot_roles,
             edit_process_links,
             edit_process_slots,
             edit_process_step_slots,
@@ -90,16 +91,26 @@ impl Version {
 
             let slots = structure.slots.iter()
                 .map(|slot| {
-                    diesel::insert_into(edit_process_slots::table)
+                    let data = diesel::insert_into(edit_process_slots::table)
                         .values(&db::NewEditProcessSlot {
                             process: version.id,
                             name: &slot.name,
-                            role: slot.role,
                             autofill: slot.autofill,
                         })
-                        .get_result::<db::EditProcessSlot>(dbcon)
+                        .get_result::<db::EditProcessSlot>(dbcon)?;
+
+                    diesel::insert_into(edit_process_slot_roles::table)
+                        .values(slot.roles.iter()
+                            .map(|&role| db::EditProcessSlotRole {
+                                slot: data.id,
+                                role,
+                            })
+                            .collect::<Vec<_>>())
+                        .execute(dbcon)?;
+
+                    Ok(data)
                 })
-                .collect::<Result<Vec<db::EditProcessSlot>, _>>()?;
+                .collect::<Result<Vec<db::EditProcessSlot>, DbError>>()?;
 
             let steps = structure.steps.iter()
                 .map(|step| {
@@ -199,13 +210,16 @@ impl Version {
                 .get_results::<db::EditProcessSlot>(dbcon)?;
 
             let slots = dbslots.iter()
-                .map(|slot| structure::Slot {
+                .map(|slot| Ok(structure::Slot {
                     id: slot.id,
                     name: slot.name.clone(),
-                    role: slot.role,
+                    roles: edit_process_slot_roles::table
+                        .select(edit_process_slot_roles::role)
+                        .filter(edit_process_slot_roles::slot.eq(slot.id))
+                        .get_results::<i32>(dbcon)?,
                     autofill: slot.autofill,
-                })
-                .collect();
+                }))
+                .collect::<Result<Vec<_>, DbError>>()?;
 
             let dbsteps = edit_process_steps::table
                 .filter(edit_process_steps::process.eq(self.data.id))

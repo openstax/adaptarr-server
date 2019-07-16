@@ -144,11 +144,11 @@ pub fn list_free_slots(
     let user = session.user(&*db)?;
     let slots = Slot::all_free(&*db, user.role)?
         .into_iter()
-        .map(|(draft, slot)| FreeSlot {
-            slot: slot.get_public(),
+        .map(|(draft, slot)| Ok(FreeSlot {
+            slot: slot.get_public(&*db)?,
             draft: draft.get_public_small(),
-        })
-        .collect();
+        }))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(Json(slots))
 }

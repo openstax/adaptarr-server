@@ -25,7 +25,7 @@ pub struct Slot {
     pub id: i32,
     pub name: String,
     #[serde(default)]
-    pub role: Option<i32>,
+    pub roles: Vec<i32>,
     #[serde(default)]
     pub autofill: bool,
 }
@@ -560,7 +560,7 @@ mod tests {
                 Slot {
                     id: 0,
                     name: "Slot".into(),
-                    role: None,
+                    roles: Vec::new(),
                     autofill: false,
                 },
             ],
@@ -609,7 +609,7 @@ mod tests {
         test.slots.push(Slot {
             id: 1,
             name: "Slot".into(),
-            role: None,
+            roles: Vec::new(),
             autofill: false,
         });
         assert_eq!(
@@ -712,7 +712,7 @@ mod tests {
         test.slots.push(Slot {
             id: 1,
             name: "Another".into(),
-            role: None,
+            roles: Vec::new(),
             autofill: false,
         });
         test.steps[0].slots.push(StepSlot {

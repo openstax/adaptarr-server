@@ -13,11 +13,12 @@ use crate::{
         Connection,
         models as db,
         schema::{
-            edit_process_slots,
-            edit_process_step_slots,
-            drafts,
             documents,
             draft_slots,
+            drafts,
+            edit_process_slot_roles,
+            edit_process_slots,
+            edit_process_step_slots,
             users,
         },
         functions::count_distinct,
@@ -37,7 +38,7 @@ pub struct Slot {
 pub struct PublicData {
     pub id: i32,
     pub name: String,
-    pub role: Option<i32>,
+    pub roles: Vec<i32>,
 }
 
 impl Slot {
@@ -68,28 +69,31 @@ impl Slot {
                     .and(edit_process_step_slots::slot.eq(draft_slots::slot))))
             .inner_join(documents::table)
             .inner_join(edit_process_slots::table
-                .on(edit_process_step_slots::slot.eq(edit_process_slots::id)));
+                .on(edit_process_step_slots::slot.eq(edit_process_slots::id)))
+            .left_join(edit_process_slot_roles::table
+                .on(edit_process_slots::id.eq(edit_process_slot_roles::slot)))
+            .select((
+                drafts::all_columns,
+                documents::all_columns,
+                edit_process_slots::all_columns,
+            ));
 
         let slots = if let Some(role) = role {
             query
                 .filter(draft_slots::user.is_null()
-                    .and(edit_process_slots::role.is_null()
-                        .or(edit_process_slots::role.eq(role))))
+                    .and(edit_process_slot_roles::role.is_null()
+                        .or(edit_process_slot_roles::role.eq(role))))
                 .get_results::<(
                     db::Draft,
-                    db::EditProcessStepSlot,
-                    Option<db::DraftSlot>, // Note: this will always be None.
                     db::Document,
                     db::EditProcessSlot,
                 )>(dbcon)?
         } else {
             query
                 .filter(draft_slots::user.is_null()
-                    .and(edit_process_slots::role.is_null()))
+                    .and(edit_process_slot_roles::role.is_null()))
                 .get_results::<(
                     db::Draft,
-                    db::EditProcessStepSlot,
-                    Option<db::DraftSlot>, // Note: this will always be None.
                     db::Document,
                     db::EditProcessSlot,
                 )>(dbcon)?
@@ -97,7 +101,7 @@ impl Slot {
 
         Ok(slots
             .into_iter()
-            .map(|(draft, _, _, document, slot)| (
+            .map(|(draft, document, slot)| (
                 Draft::from_db(draft, Document::from_db(document)),
                 Slot::from_db(slot),
             ))
@@ -116,20 +120,22 @@ impl Slot {
                 .on(drafts::module.eq(draft_slots::draft)
                     .and(edit_process_step_slots::slot.eq(draft_slots::slot))))
             .inner_join(edit_process_slots::table
-                .on(edit_process_step_slots::slot.eq(edit_process_slots::id)));
+                .on(edit_process_step_slots::slot.eq(edit_process_slots::id)))
+            .left_join(edit_process_slot_roles::table
+                .on(edit_process_slots::id.eq(edit_process_slot_roles::slot)));
 
         let count = if let Some(role) = role {
             query
                 .filter(draft_slots::user.is_null()
-                    .and(edit_process_slots::role.is_null()
-                        .or(edit_process_slots::role.eq(role)))
+                    .and(edit_process_slot_roles::role.is_null()
+                        .or(edit_process_slot_roles::role.eq(role)))
                     .and(drafts::module.eq(draft.module_id())))
                 .count()
                 .get_result::<i64>(dbcon)?
         } else {
             query
                 .filter(draft_slots::user.is_null()
-                    .and(edit_process_slots::role.is_null())
+                    .and(edit_process_slot_roles::role.is_null())
                     .and(drafts::module.eq(draft.module_id())))
                 .count()
                 .get_result::<i64>(dbcon)?
@@ -144,14 +150,14 @@ impl Slot {
     }
 
     /// Get the public portion of this slot's data.
-    pub fn get_public(&self) -> PublicData {
-        let db::EditProcessSlot { id, ref name, role, .. } = self.data;
+    pub fn get_public(&self, dbcon: &Connection) -> Result<PublicData, DbError> {
+        let db::EditProcessSlot { id, ref name, .. } = self.data;
 
-        PublicData {
+        Ok(PublicData {
             id,
             name: name.clone(),
-            role,
-        }
+            roles: self.get_role_limit(dbcon)?,
+        })
     }
 
     /// Get current occupant of this slot in a draft.
@@ -171,6 +177,26 @@ impl Slot {
             .transpose()
     }
 
+    /// Get list of roles to which this slot is limited.
+    ///
+    /// If the list is empty the there is no limit on this slot.
+    pub fn get_role_limit(&self, dbcon: &Connection) -> Result<Vec<i32>, DbError> {
+        edit_process_slot_roles::table
+            .select(edit_process_slot_roles::role)
+            .filter(edit_process_slot_roles::slot.eq(self.data.id))
+            .get_results::<i32>(dbcon)
+    }
+
+    /// Is this slot limited to only users with a specific role?
+    pub fn is_role_limited(&self, dbcon: &Connection) -> Result<bool, DbError> {
+        edit_process_slot_roles::table
+            .filter(edit_process_slot_roles::slot.eq(self.data.id))
+            .limit(1)
+            .count()
+            .get_result::<i64>(dbcon)
+            .map(|r| r != 0)
+    }
+
     /// Fill this slot with an auto-selected user for a particular draft.
     pub fn fill(&self, dbcon: &Connection, draft: &Draft)
     -> Result<Option<i32>, FillSlotError> {
@@ -179,9 +205,10 @@ impl Slot {
         }
 
         let user = users::table
+            .inner_join(edit_process_slot_roles::table
+                .on(users::role.eq(edit_process_slot_roles::role.nullable())))
             .inner_join(draft_slots::table)
             .select(users::all_columns)
-            .filter(users::role.eq(self.data.role))
             .group_by((users::all_columns, draft_slots::draft))
             .order_by(count_distinct(draft_slots::draft).asc())
             .first::<db::User>(dbcon)
@@ -196,8 +223,10 @@ impl Slot {
     /// Fill this slot with a user for a particular draft.
     pub fn fill_with(&self, dbcon: &Connection, draft: &Draft, user: &db::User)
     -> Result<(), FillSlotError> {
-        if let Some(role) = self.data.role {
-            if !user.role.map_or(false, |r| r == role) {
+        let roles = self.get_role_limit(dbcon)?;
+
+        if !roles.is_empty() {
+            if !user.role.map_or(false, |r| roles.iter().any(|&role| r == role)) {
                 return Err(FillSlotError::BadRole);
             }
         }

@@ -449,7 +449,7 @@ pub fn get_process_details(
     let slots = process.get_slots(&*db)?
         .into_iter()
         .map(|slot| Ok(SlotSeating {
-            slot: slot.get_public(),
+            slot: slot.get_public(&*db)?,
             user: slot.get_occupant(&*db, &draft)?
                 .map(|user| user.get_public(Fields::empty())),
         }))
