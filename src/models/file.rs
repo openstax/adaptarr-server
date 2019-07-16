@@ -186,7 +186,8 @@ impl File {
     pub fn stream(&self, cfg: &Config) -> impl Responder {
         let hash = bytes_to_hex(&self.data.hash);
         let path = cfg.storage.path.join(hash);
-        NamedFile::open(path)
+        let mime = self.data.mime.parse().expect("invalid mime type in database");
+        NamedFile::open(path).map(|f| f.set_content_type(mime))
     }
 
     /// Read contents of this file into memory as a [`String`].
