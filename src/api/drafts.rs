@@ -6,7 +6,7 @@ use actix_web::{
     Json,
     Path,
     Responder,
-    http::Method,
+    http::{StatusCode, Method},
 };
 use failure::Fail;
 use futures::{Future, future};
@@ -156,7 +156,7 @@ pub fn delete_draft(
 
     draft.delete(&*db)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 #[derive(Deserialize)]
@@ -340,7 +340,7 @@ pub fn update_file(
         .and_then(move |file| {
             draft.write_file(&*db, &name, &file)
                 .map_err(Into::into)
-                .map(|_| HttpResponse::Ok().finish())
+                .map(|_| HttpResponse::new(StatusCode::NO_CONTENT))
         }))
 }
 
@@ -384,7 +384,7 @@ pub fn delete_file(
 
     draft.delete_file(&*db, &name)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 /// Get a list of all books containing the module this draft was derived from.
@@ -392,7 +392,7 @@ pub fn delete_file(
 /// ## Method
 ///
 /// ```text
-/// GET /modules/:id/books
+/// GET /drafts/:id/books
 /// ```
 pub fn list_containing_books(
     state: actix_web::State<State>,
@@ -482,7 +482,7 @@ pub fn assign_slot(
 
     slot.fill_with(&*db, &draft, &user)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 #[derive(ApiError, Debug, Fail)]

@@ -468,7 +468,7 @@ pub enum UserAuthenticateError {
     NotFound,
     /// Provided password was not valid for the user.
     #[fail(display = "Bad password")]
-    #[api(code = "user:authenticate:bad-password", status = "BAD_REQUEST")]
+    #[api(code = "user:authenticate:bad-password", status = "FORBIDDEN")]
     BadPassword,
 }
 

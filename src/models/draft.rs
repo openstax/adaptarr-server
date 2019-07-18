@@ -469,7 +469,7 @@ pub enum AdvanceDraftError {
     BadSlot,
     /// User making request does not occupy the slot they is trying to use.
     #[fail(display = "User doesn't occupy requested slot")]
-    #[api(code = "draft:advance:bad-user", status = "BAD_REQUEST")]
+    #[api(code = "draft:advance:bad-user", status = "FORBIDDEN")]
     BadUser,
     /// Specified link does not exist.
     #[fail(display = "Requested link doesn't exist")]

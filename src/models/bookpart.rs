@@ -49,7 +49,7 @@ enum Variant<Part> {
 
 #[derive(Debug, Serialize)]
 pub struct Tree {
-    number: i32,
+    pub number: i32,
     title: String,
     #[serde(flatten)]
     part: Variant<Tree>,

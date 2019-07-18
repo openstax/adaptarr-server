@@ -1,4 +1,4 @@
-use actix_web::{App, HttpResponse, Json, Path};
+use actix_web::{App, HttpResponse, Json, Path, http::StatusCode};
 use diesel::{Connection as _};
 use serde::Deserialize;
 
@@ -6,7 +6,7 @@ use crate::{
     models::role::{Role, PublicData as RoleData},
     permissions::{EditRole, PermissionBits},
 };
-use super::{Error, RouteExt, State, session::Session};
+use super::{Error, RouteExt, State, session::Session, util::Created};
 
 /// Configure routes.
 pub fn routes(app: App<State>) -> App<State> {
@@ -64,11 +64,13 @@ pub fn create_role(
     state: actix_web::State<State>,
     _session: Session<EditRole>,
     data: Json<NewRole>,
-) -> Result<Json<RoleData>> {
+) -> Result<Created<String, Json<RoleData>>> {
     let db = state.db.get()?;
     let role = Role::create(&*db, &data.name, data.permissions)?;
+    let location = format!("{}/api/v1/roles/{}",
+        state.config.server.domain, role.id);
 
-    Ok(Json(role.get_public(true)))
+    Ok(Created(location, Json(role.get_public(true))))
 }
 
 /// Get a role by ID.
@@ -146,5 +148,5 @@ pub fn delete_role(
 
     Role::by_id(&*db, id.into_inner())?.delete(&*db)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }

@@ -4,7 +4,7 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
-    http::Method,
+    http::{Method, StatusCode},
 };
 use chrono::NaiveDateTime;
 use failure::Fail;
@@ -96,7 +96,7 @@ pub fn list_users(
 pub fn create_invitation(
     state: actix_web::State<State>,
     _session: Session<InviteUser>,
-    params: Json<InviteParams>,
+    params: FormOrJson<InviteParams>,
 ) -> Result<HttpResponse, Error> {
     let locale = state.i18n.find_locale(&params.language)
         .ok_or(NoSuchLocaleError)?;
@@ -127,7 +127,7 @@ pub fn create_invitation(
         locale,
     );
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::ACCEPTED))
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -308,7 +308,7 @@ pub fn modify_password(
     // Changing password invalidates all sessions.
     Session::<Normal>::create(&req, &user, false);
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 #[derive(ApiError, Debug, Fail)]
