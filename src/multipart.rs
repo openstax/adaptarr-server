@@ -13,7 +13,7 @@ use bytes::Bytes;
 use failure::Fail;
 use futures::{Future, Stream, future::self};
 use std::{io::Write, str::FromStr};
-use tempfile::NamedTempFile;
+use tempfile::{Builder as TempBuilder, NamedTempFile};
 
 /// Trait for types which can be loaded from a `multipart/form-data` request.
 pub trait FromMultipart: Sized {
@@ -281,7 +281,10 @@ impl FromField for NamedTempFile {
     where
         S: Stream<Item = Bytes, Error = MultipartError> + 'static,
     {
-        Box::new(future::result(NamedTempFile::new())
+        let config = crate::config::load()
+            .expect("configuration should be loaded at this point");
+
+        Box::new(future::result(TempBuilder::new().tempfile_in(&config.storage.path))
             .map_err(|e| MultipartError::Internal(Box::new(e)))
             .and_then(|file| field.fold(file, |mut file, chunk| {
                 match file.write_all(chunk.as_ref()) {
