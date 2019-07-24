@@ -21,6 +21,7 @@ use tempfile::{Builder as TempBuilder, NamedTempFile};
 
 use crate::{
     ApiError,
+    api::util::EntityTag,
     config::{Config, Storage},
     db::{
         Connection,
@@ -244,6 +245,11 @@ impl File {
 
     pub fn open(&self) -> Result<impl Read, io::Error> {
         std::fs::File::open(&self.data.path)
+    }
+
+    pub fn entity_tag(&self) -> EntityTag<'static> {
+        // Base64 encoding only uses bytes allowed in entity tags
+        EntityTag::strong(base64::encode(&self.hash)).unwrap()
     }
 }
 

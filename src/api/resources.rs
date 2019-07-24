@@ -6,7 +6,7 @@ use actix_web::{
     Json,
     Path,
     Responder,
-    http::header::{ContentDisposition, DispositionType},
+    http::{StatusCode, header::{ContentDisposition, DispositionType}},
 };
 use diesel::Connection as _;
 use futures::{Future, future::{self, Either}};
@@ -24,7 +24,7 @@ use super::{
     RouteExt,
     State,
     session::Session,
-    util::FormOrJson,
+    util::{FormOrJson, IfMatch},
 };
 
 /// Configure routes.
@@ -184,6 +184,7 @@ pub fn update_resource_content(
     state: actix_web::State<State>,
     _session: Session<ManageResources>,
     id: Path<Uuid>,
+    if_match: IfMatch,
 ) -> impl Future<Item = HttpResponse, Error = Error> {
     let db = match state.db.get() {
         Ok(db) => db,
@@ -195,11 +196,23 @@ pub fn update_resource_content(
         Err(err) => return Either::A(future::err(err.into())),
     };
 
-    let storage = state.config.storage.path.clone();
-
     if resource.is_directory() {
         return Either::A(future::err(FileError::IsADirectory.into()));
     }
+
+    if !if_match.is_any() {
+        let file = match resource.get_file(&*db) {
+            Ok(file) => file,
+            Err(err) => return Either::A(future::err(err.into())),
+        };
+
+        if !if_match.test(&file.entity_tag()) {
+            return Either::A(future::ok(
+                HttpResponse::new(StatusCode::PRECONDITION_FAILED)));
+        }
+    }
+
+    let storage = state.config.storage.path.clone();
 
     Either::B(File::from_stream(state.db.clone(), storage, req.payload(), None)
         .and_then(move |file| resource.set_file(&*db, &file).map_err(From::from))
