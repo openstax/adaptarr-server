@@ -121,8 +121,6 @@ impl Module {
                 .get_result::<db::Module>(dbconn)?;
 
             audit::log_db(dbconn, "modules", data.id, "create", LogNewModule {
-                title,
-                language,
                 document: document.id,
             });
 
@@ -236,6 +234,9 @@ impl Module {
             let document = documents::table
                 .filter(documents::id.eq(draft.document))
                 .get_result::<db::Document>(dbconn)?;
+
+            audit::log_db(
+                dbconn, "documents", document.id, "clone-from", self.document.id);
 
             audit::log_db(
                 dbconn, "modules", self.data.id, "begin-process", version.id);
@@ -379,9 +380,7 @@ impl_from! { for GetXrefTargetsError ;
 }
 
 #[derive(Serialize)]
-struct LogNewModule<'a> {
-    title: &'a str,
-    language: &'a str,
+struct LogNewModule {
     document: i32,
 }
 

@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -58,15 +59,29 @@ impl Document {
                 })
                 .get_result::<db::Document>(dbconn)?;
 
+            let mut new_files = Vec::new();
+
             for (name, file) in files {
-                diesel::insert_into(document_files::table)
+                let file = diesel::insert_into(document_files::table)
                     .values(&db::NewDocumentFile {
                         document: data.id,
                         name: name.as_ref(),
                         file: file.id,
                     })
-                    .execute(dbconn)?;
+                    .get_result::<db::DocumentFile>(dbconn)?;
+
+                new_files.push(LogNewFile {
+                    name: file.name,
+                    file: file.file,
+                });
             }
+
+            audit::log_db(dbconn, "documents", data.id, "create", LogNewDocument {
+                title,
+                language,
+                index: index.id,
+                files: new_files,
+            });
 
             Ok(Document { data })
         })
@@ -159,4 +174,18 @@ pub enum GetFileError {
 
 impl_from! { for GetFileError ;
     DbError => |e| GetFileError::Database(e),
+}
+
+#[derive(Serialize)]
+struct LogNewDocument<'a> {
+    title: &'a str,
+    language: &'a str,
+    index: i32,
+    files: Vec<LogNewFile>,
+}
+
+#[derive(Serialize)]
+struct LogNewFile {
+    name: String,
+    file: i32,
 }
