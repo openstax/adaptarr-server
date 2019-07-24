@@ -241,6 +241,11 @@ impl Module {
             audit::log_db(
                 dbconn, "modules", self.data.id, "begin-process", version.id);
 
+            audit::log_db(dbconn, "drafts", draft.module, "create", LogNewDraft {
+                from: self.data.id,
+                document: document.id,
+            });
+
             for slot in slots {
                 EventManager::notify(slot.user, SlotFilled {
                     slot: slot.slot,
@@ -388,4 +393,12 @@ struct LogNewModule {
 struct LogFill {
     slot: i32,
     user: i32,
+}
+
+#[derive(Serialize)]
+struct LogNewDraft {
+    /// Module from which this draft was derived.
+    from: Uuid,
+    /// Document containing the first version of this draft.
+    document: i32,
 }
