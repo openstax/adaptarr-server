@@ -1,4 +1,4 @@
-use actix_web::{App, HttpResponse, Json, Path, http::Method};
+use actix_web::{App, HttpResponse, Json, Path, http::{StatusCode, Method}};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -22,7 +22,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
-    util::FormOrJson,
+    util::{Created, FormOrJson},
 };
 
 /// Configure routes.
@@ -86,11 +86,13 @@ pub fn create_process(
     state: actix_web::State<State>,
     _session: Session<EditProcess>,
     data: Json<structure::Process>,
-) -> Result<Json<ProcessData>> {
+) -> Result<Created<String, Json<ProcessData>>> {
     let db = state.db.get()?;
     let process = Process::create(&*db, &*data)?;
+    let location = format!("{}/api/v1/processes/{}",
+        state.config.server.domain, process.process().id);
 
-    Ok(Json(process.process().get_public()))
+    Ok(Created(location, Json(process.process().get_public())))
 }
 
 #[derive(Deserialize)]
@@ -119,7 +121,7 @@ pub fn assign_to_slot(
     Slot::by_id(&*db, data.slot)?
         .fill_with(&*db, &draft, &user)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 #[derive(Serialize)]
@@ -214,7 +216,7 @@ pub fn delete_process(
     Process::by_id(&*db, id.into_inner())?
         .delete(&*db)?;
 
-    Ok(HttpResponse::NoContent().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 /// Get detailed process description.
@@ -267,12 +269,14 @@ pub fn create_version(
     _session: Session<EditProcess>,
     id: Path<i32>,
     data: Json<structure::Process>,
-) -> Result<Json<VersionData>> {
+) -> Result<Created<String, Json<VersionData>>> {
     let db = state.db.get()?;
-    let process = Process::by_id(&*db, id.into_inner())?;
+    let process = Process::by_id(&*db, *id)?;
     let version = Version::create(&*db, process, &*data)?;
+    let location = format!("{}/api/v1/processes/{}/versions/{}",
+        state.config.server.domain, *id, version.id);
 
-    Ok(Json(version.get_public()))
+    Ok(Created(location, Json(version.get_public())))
 }
 
 /// Get a version by ID.

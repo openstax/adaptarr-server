@@ -6,7 +6,7 @@ use actix_web::{
     Json,
     Path,
     Responder,
-    http::header::{ContentDisposition, DispositionType},
+    http::{StatusCode, header::{ContentDisposition, DispositionType}},
 };
 use diesel::Connection as _;
 use futures::{Future, future::{self, Either}};
@@ -24,7 +24,7 @@ use super::{
     RouteExt,
     State,
     session::Session,
-    util::FormOrJson,
+    util::{Created, FormOrJson},
 };
 
 /// Configure routes.
@@ -89,7 +89,7 @@ pub fn create_resource(
     state: actix_web::State<State>,
     _session: Session<ManageResources>,
     data: Multipart<NewResource>,
-) -> Result<Json<ResourceData>> {
+) -> Result<Created<String, Json<ResourceData>>> {
     let db = state.db.get()?;
     let NewResource { name, file, parent } = data.into_inner();
     let parent = parent.map(|id| Resource::by_id(&*db, *id)).transpose()?;
@@ -102,7 +102,10 @@ pub fn create_resource(
             .map_err(From::from)
     })?;
 
-    Ok(Json(resource.get_public()))
+    let location = format!("{}/api/v1/resources/{}",
+        state.config.server.domain, resource.id);
+
+    Ok(Created(location, Json(resource.get_public())))
 }
 
 /// Get a resource by ID.
@@ -203,5 +206,5 @@ pub fn update_resource_content(
 
     Either::B(File::from_stream(state.db.clone(), storage, req.payload(), None)
         .and_then(move |file| resource.set_file(&*db, &file).map_err(From::from))
-        .map(|_| HttpResponse::Ok().finish()))
+        .map(|_| HttpResponse::new(StatusCode::NO_CONTENT)))
 }

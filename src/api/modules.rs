@@ -34,7 +34,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
-    util::FormOrJson,
+    util::{Created, FormOrJson},
 };
 
 /// Configure routes.
@@ -105,7 +105,7 @@ pub fn create_module(
     state: actix_web::State<State>,
     _session: Session<EditModule>,
     data: Json<NewModule>,
-) -> Result<Json<ModuleData>> {
+) -> Result<Created<String, Json<ModuleData>>> {
     let db = state.db.get()?;
 
     let content = format!(
@@ -126,7 +126,11 @@ pub fn create_module(
     let module = Module::create::<&str, _>(
         &*db, &data.title, &data.language, index, std::iter::empty())?;
 
-    module.get_public(&*db).map(Json).map_err(Into::into)
+    let public = module.get_public(&*db)?;
+    let location = format!("{}/api/v1/modules/{}",
+        state.config.server.domain, module.id());
+
+    Ok(Created(location, Json(public)))
 }
 
 pub struct NewModuleZip {
@@ -153,7 +157,7 @@ pub fn create_module_from_zip(
     state: actix_web::State<State>,
     session: Session<EditModule>,
     data: Multipart<NewModuleZip>,
-) -> impl Future<Item = Json<ModuleData>, Error = Error> {
+) -> impl Future<Item = Created<String, Json<ModuleData>>, Error = Error> {
     let NewModuleZip { title, file } = data.into_inner();
     state.importer.send(ImportModule {
         title,
@@ -166,7 +170,11 @@ pub fn create_module_from_zip(
             let db = state.db.get()?;
             module.get_public(&*db).map_err(Into::into)
         })
-        .map(Json)
+        .map(|p| {
+            let location = format!("{}/api/v1/modules/{}",
+                crate::config::load().unwrap().server.domain, p.id);
+            Created(location, Json(p))
+        })
 }
 
 /// Get a module by ID.
@@ -206,7 +214,7 @@ pub fn begin_process(
     session: Session<ManageProcess>,
     id: Path<Uuid>,
     data: FormOrJson<BeginProcess>,
-) -> Result<Json<DraftData>> {
+) -> Result<Created<String, Json<DraftData>>> {
     let db = state.db.get()?;
     let data = data.into_inner();
     let module = Module::by_id(&*db, id.into_inner())?;
@@ -221,8 +229,11 @@ pub fn begin_process(
         .collect::<Result<Vec<_>, Error>>()?;
 
     let draft = module.begin_process(&*db, &version, slots)?;
+    let public = draft.get_public(&*db, session.user_id())?;
+    let location = format!("{}/api/v1/drafts/{}",
+        state.config.server.domain, draft.module_id());
 
-    draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
+    Ok(Created(location, Json(public)))
 }
 
 #[derive(Debug, Deserialize)]
