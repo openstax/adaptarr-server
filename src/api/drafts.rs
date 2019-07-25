@@ -36,7 +36,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
-    util::FormOrJson,
+    util::{FormOrJson, IfMatch},
 };
 
 /// Configure routes.
@@ -304,6 +304,7 @@ pub fn update_file(
     state: actix_web::State<State>,
     session: Session,
     path: Path<(Uuid, String)>,
+    if_match: IfMatch,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let (id, name) = path.into_inner();
     let storage = state.config.storage.path.clone();
@@ -330,6 +331,18 @@ pub fn update_file(
     } else {
         None
     };
+
+    if !if_match.is_any() {
+        let file = match draft.get_file(&*db, &name) {
+            Ok(file) => file,
+            Err(err) => return Box::new(future::err(err.into())),
+        };
+
+        if !if_match.test(&file.entity_tag()) {
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::PRECONDITION_FAILED)));
+        }
+    }
 
     Box::new(File::from_stream::<_, _, Error>(
             state.db.clone(),

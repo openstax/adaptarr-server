@@ -1,11 +1,17 @@
-use actix_web::fs::NamedFile;
+use actix_web::{
+    HttpRequest,
+    HttpResponse,
+    Responder,
+    fs::NamedFile,
+    http::header::{ETAG, ContentDisposition, IntoHeaderValue},
+};
 use blake2::blake2b::{Blake2b, Blake2bResult};
 use diesel::{
     prelude::*,
     result::Error as DbError,
 };
 use failure::Fail;
-use futures::{Future, Stream, future};
+use futures::{Future, Stream as _, future};
 use std::{
     fs,
     io::{self, Read, Seek, SeekFrom, Write},
@@ -15,6 +21,7 @@ use tempfile::{Builder as TempBuilder, NamedTempFile};
 
 use crate::{
     ApiError,
+    api::util::EntityTag,
     config::{Config, Storage},
     db::{
         Connection,
@@ -68,7 +75,7 @@ impl File {
         mime: Option<&'static str>,
     ) -> impl Future<Item=File, Error=E>
     where
-        S: Stream<Item=I>,
+        S: futures::Stream<Item=I>,
         I: AsRef<[u8]>,
         E: From<CreateFileError>,
         E: From<S::Error>,
@@ -227,11 +234,8 @@ impl File {
     }
 
     /// Get an Actix responder streaming contents of this file.
-    pub fn stream(&self, cfg: &Config) -> std::io::Result<NamedFile> {
-        let hash = bytes_to_hex(&self.data.hash);
-        let path = cfg.storage.path.join(hash);
-        let mime = self.data.mime.parse().expect("invalid mime type in database");
-        NamedFile::open(path).map(|f| f.set_content_type(mime))
+    pub fn stream(&self, cfg: &Config) -> std::io::Result<Stream> {
+        Stream::open(self, cfg)
     }
 
     /// Read contents of this file into memory as a [`String`].
@@ -241,6 +245,11 @@ impl File {
 
     pub fn open(&self) -> Result<impl Read, io::Error> {
         std::fs::File::open(&self.data.path)
+    }
+
+    pub fn entity_tag(&self) -> EntityTag<'static> {
+        // Base64 encoding only uses bytes allowed in entity tags
+        EntityTag::strong(base64::encode(&self.hash)).unwrap()
     }
 }
 
@@ -295,7 +304,7 @@ impl_from! { for CreateFileError ;
 fn copy_hash<S, C, W, E>(nn: usize, input: S, output: W)
     -> impl Future<Item=(Blake2bResult, W), Error=E>
 where
-    S: Stream<Item=C>,
+    S: futures::Stream<Item=C>,
     C: AsRef<[u8]>,
     W: Write,
     E: From<S::Error>,
@@ -349,5 +358,44 @@ where
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
+    }
+}
+
+pub struct Stream {
+    stream: NamedFile,
+    hash: Vec<u8>,
+}
+
+impl Stream {
+    fn open(file: &File, cfg: &Config) -> std::io::Result<Stream> {
+        let hash = bytes_to_hex(&file.data.hash);
+        let path = cfg.storage.path.join(hash);
+        let mime = file.data.mime.parse().expect("invalid mime type in database");
+        let stream = NamedFile::open(path)?.set_content_type(mime);
+
+        Ok(Stream {
+            stream,
+            hash: file.hash.clone(),
+        })
+    }
+
+    pub fn set_content_disposition(mut self, cd: ContentDisposition) -> Self {
+        self.stream = self.stream.set_content_disposition(cd);
+        self
+    }
+}
+
+impl Responder for Stream {
+    type Item = HttpResponse;
+    type Error = <NamedFile as Responder>::Error;
+
+    fn respond_to<S: 'static>(self, req: &HttpRequest<S>)
+    -> Result<Self::Item, Self::Error> {
+        let mut rsp = self.stream.respond_to(req)?;
+
+        let etag = format!(r#""{}""#, base64::encode(&self.hash));
+        rsp.headers_mut().insert(ETAG, etag.try_into().unwrap());
+
+        Ok(rsp)
     }
 }
