@@ -7,7 +7,6 @@ use actix_web::{
     Path,
     Responder,
     http::Method,
-    pred,
 };
 use futures::{Future, Stream, future};
 use serde::{Deserialize, Serialize, de::Deserializer};
@@ -34,7 +33,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
-    util::{Created, FormOrJson},
+    util::{ContentType, Created, FormOrJson},
 };
 
 /// Configure routes.
@@ -43,7 +42,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/modules", |r| {
             r.get().api_with(list_modules);
             r.post()
-                .filter(pred::Header("Content-Type", "application/json"))
+                .filter(ContentType::from_mime(&mime::APPLICATION_JSON))
                 .api_with(create_module);
             r.post()
                 .api_with_async(create_module_from_zip);

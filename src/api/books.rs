@@ -5,7 +5,6 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
-    pred,
     http::StatusCode,
 };
 use futures::{Future, Stream, future};
@@ -34,7 +33,7 @@ use super::{
     RouteExt,
     State,
     session::Session,
-    util::Created,
+    util::{Created, ContentType},
 };
 
 /// Configure routes.
@@ -43,14 +42,14 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/books", |r| {
             r.get().api_with(list_books);
             r.post()
-                .filter(pred::Header("Content-Type", "application/json"))
+                .filter(ContentType::from_mime(&mime::APPLICATION_JSON))
                 .api_with(create_book);
             r.post().api_with_async(create_book_from_zip);
         })
         .resource("/books/{id}", |r| {
             r.get().api_with(get_book);
             r.put()
-                .filter(pred::Header("Content-Type", "application/json"))
+                .filter(ContentType::from_mime(&mime::APPLICATION_JSON))
                 .api_with(update_book);
             r.put().api_with_async(replace_book);
             r.delete().api_with(delete_book);

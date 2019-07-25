@@ -5,16 +5,26 @@ use actix_web::{
     HttpRequest,
     HttpResponse,
     Json,
+    Request,
     Responder,
     ResponseError,
     http::{
         HttpTryFrom,
         StatusCode,
-        header::{ACCEPT_LANGUAGE, LOCATION, IF_MATCH, HeaderValue, ToStrError},
+        header::{
+            ACCEPT_LANGUAGE,
+            CONTENT_TYPE,
+            IF_MATCH,
+            LOCATION,
+            HeaderValue,
+            ToStrError,
+        },
     },
+    pred::Predicate,
 };
 use failure::Fail;
 use futures::Future;
+use mime::{Name, Mime};
 use std::{borrow::Cow, str::FromStr};
 
 use crate::i18n::{LanguageRange, Locale};
@@ -302,5 +312,26 @@ impl<S: 'static> FromRequest<S> for IfMatch<'static> {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(IfMatch::OneOf(tags))
+    }
+}
+
+pub struct ContentType<'a>(Name<'a>, Name<'a>);
+
+impl<'a> ContentType<'a> {
+    pub fn from_mime(mime: &'a Mime) -> Self {
+        ContentType(mime.type_(), mime.subtype())
+    }
+}
+
+impl<'a, S: 'static> Predicate<S> for ContentType<'a> {
+    fn check(&self, req: &Request, _: &S) -> bool {
+        match req.headers()
+            .get(CONTENT_TYPE)
+            .map(|v| v.to_str().map(str::parse::<Mime>))
+        {
+            Some(Ok(Ok(mime))) =>
+                mime.type_() == self.0 && mime.subtype() == self.1,
+            _ => false,
+        }
     }
 }
