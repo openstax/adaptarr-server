@@ -1,4 +1,5 @@
 use diesel::{
+    Connection as _,
     prelude::*,
     result::Error as DbError,
 };
@@ -24,7 +25,7 @@ use crate::{
         functions::count_distinct,
     },
     events::{self, EventManager},
-    models::{Document, Draft, user::{User, FindUserError}},
+    models::{Document, Draft, Role, user::{User, FindUserError}},
 };
 
 /// Abstract representation of roles a user can take during an editing process.
@@ -272,6 +273,42 @@ impl Slot {
         });
 
         Ok(())
+    }
+
+    /// Set slot's name.
+    pub fn set_name(&mut self, dbcon: &Connection, name: &str) -> Result<(), DbError> {
+        dbcon.transaction(|| {
+            audit::log_db(dbcon, "slots", self.id, "set-name", name);
+
+            self.data = diesel::update(&self.data)
+                .set(edit_process_slots::name.eq(name))
+                .get_result(dbcon)?;
+
+            Ok(())
+        })
+    }
+
+    /// Set slot's role limit.
+    pub fn set_role_limit(&mut self, dbcon: &Connection, roles: &[Role])
+    -> Result<(), DbError> {
+    let roles = roles.iter().map(|r| r.id).collect::<Vec<_>>();
+
+        dbcon.transaction(|| {
+            audit::log_db(dbcon, "slots", self.id, "set-roles", &roles);
+
+            diesel::delete(edit_process_slot_roles::table
+                .filter(edit_process_slot_roles::slot.eq(self.data.id))
+            ).execute(dbcon)?;
+
+            diesel::insert_into(edit_process_slot_roles::table)
+                .values(roles.iter().map(|&role| db::EditProcessSlotRole {
+                    slot: self.data.id,
+                    role,
+                }).collect::<Vec<_>>())
+                .execute(dbcon)?;
+
+            Ok(())
+        })
     }
 }
 

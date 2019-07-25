@@ -51,6 +51,17 @@ impl Role {
             .map(|data| Role { data })
     }
 
+    /// Find all roles by ID.
+    pub fn by_ids(dbcon: &Connection, ids: &[i32])
+    -> Result<Vec<Role>, FindRoleError> {
+        Ok(roles::table
+            .filter(roles::id.eq_any(ids))
+            .get_results::<db::Role>(dbcon)?
+            .into_iter()
+            .map(Role::from_db)
+            .collect())
+    }
+
     /// Create a new role.
     pub fn create(dbcon: &Connection, name: &str, permissions: PermissionBits)
     -> Result<Role, CreateRoleError> {

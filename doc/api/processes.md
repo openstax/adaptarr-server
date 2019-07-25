@@ -140,6 +140,45 @@ Used to represent a single slot in an editing process.
 - `roles`: when not empty, this slot is limited to only users who are assigned
   to one of the roles named by IDs in this array.
 
+### `Step`
+
+```
+{
+    id: number,
+    process: [number, number],
+    name: string,
+    links: Link[],
+}
+```
+
+Used to represent a single step in an editing process.
+
+- `id`: step's ID;
+
+- `process`: IDs of process and version this step is a part of.
+
+- `name`: step's name;
+
+- `links`: list of links originating at this step.
+
+### `Link`
+
+```
+{
+    to: number,
+    slot: number,
+    name: string,
+}
+```
+
+Used to represent a single link in an editing process.
+
+- `to`: ID of the target step;
+
+- `slot`: ID of the slot allowed to use this link;
+
+- `name`: link's name.
+
 
 
 ## Endpoints ###################################################################
@@ -241,6 +280,63 @@ This endpoint is only available in elevated sessions with the
 
 - 204: process was deleted.
 
+### `GET /api/v1/processes/:id/slots`
+
+Return list of all slots in the newest version of a process, as a JSON array of
+objects of the [`Slot`](#slot) model.
+
+### `GET /api/v1/processes/:id/slots/:slot`
+
+Return detailed information about a particular slot in the newest version of
+a process, as a JSON object of the [`Slot`](#slot) model.
+
+### `PUT /api/v1/processes/:id/slots/:slot`
+
+Modify a slot in the newest version of a process. Accepts the same body as
+[`PUT /api/v1/processes/:id/versions/:version/slots/:slot`](
+#put-apiv1processesidversionsversionslotsslot).
+
+This endpoint is only available in elevated sessions with the
+[`editing-process:edit`](../#p-editing-process-edit) permission.
+
+### `GET /api/v1/processes/:id/steps`
+
+Return list of all steps in the newest version of a process, as a JSON array of
+objects of the [`Step`](#step) model.
+
+### `GET /api/v1/processes/:id/steps/:step`
+
+Return detailed information about a particular step in the newset version of
+a process, as a JSON object of the [`Step`](#step) model.
+
+### `PUT /api/v1/processes/:id/steps/:step`
+
+Modify a step in the newest version of a process. Accepts the same body as
+[`PUT /api/v1/processes/:id/versions/:version/steps/:step`](
+#put-apiv1processesidversionsversionstepsstep).
+
+This endpoint is only available in elevated sessions with the
+[`editing-process:edit`](../#p-editing-process-edit) permission.
+
+### `GET /api/v1/processes/:id/steps/:step/links`
+
+Return list of all link in a particular step in the newest version of a process,
+as a JSON array of objects of the [`Link`](#link) model.
+
+### `GET /api/v1/processes/:id/steps/:step/links/:slot/:target`
+
+Return detailed information about a particular link in a step of the newest
+version of a process, as a JSON object of the [`Link`](#link) model.
+
+### `PUT /api/v1/processes/:id/steps/:step/links/:slot/:target`
+
+Modify a link in the newest version of a process. Accepts the same body as
+[`PUT /api/v1/processes/:id/versions/:version/steps/:step/links/:slot/:target`](
+#put-apiv1processesidversionsversionstepssteplinksslottarget).
+
+This endpoint is only available in elevated sessions with the
+[`editing-process:edit`](../#p-editing-process-edit) permission.
+
 ### `GET /api/v1/processes/:id/structure`
 
 Get detailed structure of this process, as a JSON object of the [`Tree`](#tree)
@@ -271,6 +367,88 @@ This endpoint is only available in elevated sessions with the
 
 Return detailed information about a process's version, as a JSON object of the
 [`Version`](#version) model.
+
+### `GET /api/v1/processes/versions/:version/:id/slots`
+
+Return list of all slots in a particular version of a process, as a JSON array
+of objects of the [`Slot`](#slot) model.
+
+### `GET /api/v1/processes/versions/:version/:id/slots/:slot`
+
+Return detailed information about a particular slot in a version of a process,
+as a JSON object of the [`Slot`](#slot) model.
+
+### `PUT /api/v1/processes/versions/:version/:id/slots/:slot`
+
+Modify a slot in a particular version of a process. Accepts a JSON object with
+following properties:
+
+```
+{
+    name: string?,
+    roles: number[]?,
+}
+```
+
+- `name`: slot's new name;
+
+- `roles`: slot's new role limit.
+
+Optional fields may be omitted, in which case the corresponding property will
+remain unchanged. This endpoint is only available in elevated sessions with the
+[`editing-process:edit`](../#p-editing-process-edit) permission.
+
+### `GET /api/v1/processes/versions/:version/:id/steps`
+
+Return list of all steps in the newest version of a process, as a JSON array of
+objects of the [`Step`](#step) model.
+
+### `GET /api/v1/processes/versions/:version/:id/steps/:step`
+
+Return detailed information about a particular step in the newset version of
+a process, as a JSON object of the [`Step`](#step) model.
+
+### `PUT /api/v1/processes/versions/:version/:id/steps/:step`
+
+Modify a step in the newest version of a process. Accepts a JSON object with
+following properties:
+
+```
+{
+    name: string,
+}
+```
+
+- `name`: step's new name.
+
+This endpoint is only available in elevated sessions with the
+[`editing-process:edit`](../#p-editing-process-edit) permission.
+
+### `GET /api/v1/processes/versions/:version/:id/steps/:step/links`
+
+Return list of all link in a particular step in the newest version of a process,
+as a JSON array of objects of the [`Link`](#link) model.
+
+### `GET /api/v1/processes/versions/:version/:id/steps/:step/links/:slot/:target`
+
+Return detailed information about a particular link in a step of the newest
+version of a process, as a JSON object of the [`Link`](#link) model.
+
+### `PUT /api/v1/processes/versions/:version/:id/steps/:step/links/:slot/:target`
+
+Modify a link in the newest version of a process. Accepts a JSON object with
+following properties:
+
+```
+{
+    name: string,
+}
+```
+
+- `name`: link's new name.
+
+This endpoint is only available in elevated sessions with the
+[`editing-process:edit`](../#p-editing-process-edit) permission.
 
 ### `GET /api/v1/processes/:id/versions/:version/structure`
 
