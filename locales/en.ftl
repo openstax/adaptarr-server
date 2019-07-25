@@ -273,29 +273,29 @@ mail-notify-group-header-slot-assignment =
 # a draft.
 #
 # Variables:
-# - $moduletitle (string): title of the module in which the user was assigned
-# - $moduleurl (string): URL to the module $moduletitle
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
 # - $slotname (string): name of the slot to which the user was assigned
 mail-notify-event-slot-filled-text =
-    You have been assigned the role of { $slotname } for module “{ $moduletitle
-    }” ({ $moduleurl }).
+    You have been assigned the role of { $slotname } for module “{ $drafttitle
+    }” ({ $drafturl }).
 mail-notify-event-slot-filled =
     You have been assigned the role of { $slotname } for module {
-    -mail-url(url: $moduleurl, text: $moduletitle) }.
+    -mail-url(url: $drafturl, text: $drafttitle) }.
 
 # Notification about user being removed from a slot in an editing process for
 # a draft.
 #
 # Variables:
-# - $moduletitle (string): title of the module in which the user was assigned
-# - $moduleurl (string): URL to the module $moduletitle
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
 # - $slotname (string): name of the slot to which the user was assigned
 mail-notify-event-slot-vacated-text =
-    Your role of { $slotname } for module “{ $moduletitle }” ({ $moduleurl
+    Your role of { $slotname } for module “{ $drafttitle }” ({ $drafturl
     }) has been assigned to another user.
 mail-notify-event-slot-vacated =
     Your role of { $slotname } for module {
-        -mail-url(url: $moduleurl, text: $moduletitle)
+        -mail-url(url: $drafturl, text: $drafttitle)
     } has been assigned to another user.
 
 # Header displayed before notifications about drafts moving between steps.
@@ -305,15 +305,15 @@ mail-notify-group-header-draft-advanced =
 # Notification about a draft moving between steps.
 #
 # Variable:
-# - $moduletitle (string): title of the module in which the user was assigned
-# - $moduleurl (string): URL to the module $moduletitle
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
 # - $stepname (string): name of the step to which draft has moved
 # - $bookcount (number): number of books in which the module is used
 # - $booktitle (string): title of one of books in which the module is used
 # - $bookurl (string): URL to the book $booktitle
 mail-notify-event-draft-advanced-text =
     You are asked to perform the the work of { $stepname } on module “{
-    $moduletitle }” ({ $moduleurl }). { $bookcount ->
+    $drafttitle }” ({ $drafturl }). { $bookcount ->
         [0] This module is not used in any books.
         [1] This module is used in book “{ $booktitle }” ({ $bookurl }).
        *[other] This module is used in { $bookcount } books, including “{
@@ -321,7 +321,7 @@ mail-notify-event-draft-advanced-text =
     }
 mail-notify-event-draft-advanced =
     You are asked to perform the work of { $stepname } on module {
-        -mail-url(url: $moduleurl, text: $moduletitle)
+        -mail-url(url: $drafturl, text: $drafttitle)
     }. { $bookcount ->
         [0] This module is not used in any books.
         [1] This module is used in book {

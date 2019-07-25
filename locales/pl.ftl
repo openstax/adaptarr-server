@@ -274,30 +274,30 @@ mail-notify-group-header-slot-assignment =
 # process for a draft.
 #
 # Variables:
-# - $moduletitle (string): title of the module in which the user was assigned
-# - $moduleurl (string): URL to the module $moduletitle
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
 # - $slotname (string): name of the slot to which the user was assigned
 mail-notify-event-slot-filled-text =
-    Została przydzielona Ci rola { $slotname } modułu „{ $moduletitle }” ({
-    $moduleurl }).
+    Została przydzielona Ci rola { $slotname } modułu „{ $drafttitle }” ({
+    $drafturl }).
 mail-notify-event-slot-filled =
     Została przydzielona Ci rola { $slotname } modułu {
-    -mail-url(url: $moduleurl, text: $moduletitle) }.
+    -mail-url(url: $drafturl, text: $drafttitle) }.
 
 # Notification about user being removed from a slot in an editing process for
 # a draft.
 #
 # Variables:
-# - $moduletitle (string): title of the module in which the user was assigned
-# - $moduleurl (string): URL to the module $moduletitle
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
 # - $slotname (string): name of the slot to which the user was assigned
 mail-notify-event-slot-vacated-text =
-    Dotychczas przydzielona Ci rola { $slotname } modułu „{ $moduletitle }” ({
-    $moduleurl }) została przekazana innemu użytkownikowi.
+    Dotychczas przydzielona Ci rola { $slotname } modułu „{ $drafttitle }” ({
+    $drafturl }) została przekazana innemu użytkownikowi.
 mail-notify-event-slot-vacated =
     Dotychczas przydzielona Ci rola { $slotname
     } modułu {
-        -mail-url(url: $moduleurl, text: $moduletitle)
+        -mail-url(url: $drafturl, text: $drafttitle)
     } została przekazana innemu użytkownikowi.
 
 # Header displayed before notifications about drafts moving between steps.
@@ -307,14 +307,14 @@ mail-notify-group-header-draft-advanced =
 # Notification about a draft moving between steps.
 #
 # Variable:
-# - $moduletitle (string): title of the module in which the user was assigned
-# - $moduleurl (string): URL to the module $moduletitle
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
 # - $stepname (string): name of the step to which draft has moved
 # - $bookcount (number): number of books in which the module is used
 # - $booktitle (string): title of one of books in which the module is used
 # - $bookurl (string): URL to the book $booktitle
 mail-notify-event-draft-advanced-text =
-    Moduł „{ $moduletitle }” ({ $moduleurl
+    Moduł „{ $drafttitle }” ({ $drafturl
     }) zostaje przekazany z prośbą o wykonanie prac w zakresie: { $stepname
     }. { $bookcount ->
         [0] Moduł nie jest wykorzystywany w żadnej książce.
@@ -323,7 +323,7 @@ mail-notify-event-draft-advanced-text =
             $booktitle }” ({ $bookurl }).
     }
 mail-notify-event-draft-advanced =
-    Moduł { -mail-url(url: $moduleurl, text: $moduletitle)
+    Moduł { -mail-url(url: $drafturl, text: $drafttitle)
     } zostaje przekazany z prośbą o wykonanie prac w zakresie: { $stepname
     }. { $bookcount ->
         [0] Moduł nie jest wykorzystywany w żadnej książce.

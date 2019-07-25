@@ -212,15 +212,15 @@ pub enum ExpandedEvent {
         module: ExpandedModule,
     },
     SlotFilled {
-        module: ExpandedModule,
+        draft: ExpandedDraft,
         slot: ExpandedSlot,
     },
     SlotVacated {
-        module: ExpandedModule,
+        draft: ExpandedDraft,
         slot: ExpandedSlot,
     },
     DraftAdvanced {
-        module: ExpandedModule,
+        draft: ExpandedDraft,
         step: ExpandedStep,
         book: ExpandedBooks,
     },
@@ -236,6 +236,14 @@ pub struct ExpandedUser {
 
 #[derive(Debug, Serialize)]
 pub struct ExpandedModule {
+    /// Module's title.
+    pub title: String,
+    /// Module's URL.
+    pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExpandedDraft {
     /// Module's title.
     pub title: String,
     /// Module's URL.
@@ -418,9 +426,9 @@ fn expand_slot_filled(config: &Config, dbcon: &Connection, ev: SlotFilled)
     }.into_db();
 
     Ok(ExpandedEvent::SlotFilled {
-        module: ExpandedModule {
+        draft: ExpandedDraft {
             title: module.1.title,
-            url: format!("https://{}/modules/{}",
+            url: format!("https://{}/drafts/{}",
                 config.server.domain, module.0.id),
         },
         slot: ExpandedSlot {
@@ -452,9 +460,9 @@ fn expand_slot_vacated(config: &Config, dbcon: &Connection, ev: SlotVacated)
     }.into_db();
 
     Ok(ExpandedEvent::SlotVacated {
-        module: ExpandedModule {
+        draft: ExpandedDraft {
             title: module.1.title,
-            url: format!("https://{}/modules/{}",
+            url: format!("https://{}/drafts/{}",
                 config.server.domain, module.0.id),
         },
         slot: ExpandedSlot {
@@ -480,9 +488,9 @@ fn expand_draft_advanced(config: &Config, dbcon: &Connection, ev: DraftAdvanced)
     let step = Step::by_id(dbcon, ev.step)?.into_db();
 
     Ok(ExpandedEvent::DraftAdvanced {
-        module: ExpandedModule {
+        draft: ExpandedDraft {
             title: module.1.title,
-            url: format!("https://{}/modules/{}",
+            url: format!("https://{}/drafts/{}",
                 config.server.domain, module.0.id),
         },
         step: ExpandedStep {

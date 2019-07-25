@@ -58,24 +58,24 @@
 
 {{ _(
     key="mail-notify-event-slot-filled-text",
-    moduletitle=event.module.title,
-    moduleurl=event.module.url,
+    drafttitle=event.draft.title,
+    drafturl=event.draft.url,
     slotname=event.slot.name
 ) }}
 {%- elif event.kind == "slot-vacated" %}
 
 {{ _(
     key="mail-notify-event-slot-vacated-text",
-    moduletitle=event.module.title,
-    moduleurl=event.module.url,
+    drafttitle=event.draft.title,
+    drafturl=event.draft.url,
     slotname=event.slot.name
 ) }}
 {%- elif event.kind == "draft-advanced" %}
 
 {{ _(
     key="mail-notify-event-draft-advanced-text",
-    moduletitle=event.module.title,
-    moduleurl=event.module.url,
+    drafttitle=event.draft.title,
+    drafturl=event.draft.url,
     stepname=event.step.name,
     booktitle=event.book.title,
     bookurl=event.book.url,
