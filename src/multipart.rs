@@ -185,8 +185,10 @@ pub enum MultipartError {
     Internal(#[cause] Box<dyn failure::Fail>),
 }
 
-impl_from! { for MultipartError ;
-    actix_web::error::MultipartError => |e| MultipartError::BadData(Box::new(e)),
+impl From<actix_web::error::MultipartError> for MultipartError {
+    fn from(e: actix_web::error::MultipartError) -> Self {
+        MultipartError::BadData(Box::new(e))
+    }
 }
 
 impl ResponseError for MultipartError {

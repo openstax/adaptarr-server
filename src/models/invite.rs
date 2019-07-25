@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use chrono::{Duration, Utc, NaiveDateTime};
 use diesel::{
     Connection as _Connection,
@@ -136,7 +137,7 @@ impl std::ops::Deref for Invite {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum CreateInviteError {
     /// There is already an account associated with the email address given.
     #[fail(display = "User exists")]
@@ -145,14 +146,10 @@ pub enum CreateInviteError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
 }
 
-impl_from! { for CreateInviteError ;
-    DbError => |e| CreateInviteError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FromCodeError {
     /// Invitation has expired or was already used.
     #[fail(display = "Invitation expired")]
@@ -161,21 +158,15 @@ pub enum FromCodeError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Code was not valid base64.
     #[fail(display = "Invalid base64: {}", _0)]
     #[api(code = "invitation:invalid", status = "BAD_REQUEST")]
-    Decoding(#[cause] base64::DecodeError),
+    Decoding(#[cause] #[from] base64::DecodeError),
     /// Code could not be unsealed.
     #[fail(display = "Unsealing error: {}", _0)]
     #[api(code = "invitation:invalid", status = "BAD_REQUEST")]
-    Unsealing(#[cause] utils::UnsealingError),
-}
-
-impl_from! { for FromCodeError ;
-    DbError => |e| FromCodeError::Database(e),
-    base64::DecodeError => |e| FromCodeError::Decoding(e),
-    utils::UnsealingError => |e| FromCodeError::Unsealing(e),
+    Unsealing(#[cause] #[from] utils::UnsealingError),
 }
 
 #[derive(Serialize)]

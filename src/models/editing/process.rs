@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _,
     prelude::*,
@@ -144,18 +145,14 @@ impl Deref for Process {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindProcessError {
     /// Database error.
     #[api(internal)]
     #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No process found matching given criteria.
     #[api(code = "edit-process:not-found", status = "NOT_FOUND")]
     #[fail(display = "No such process")]
     NotFound,
-}
-
-impl_from! { for FindProcessError ;
-    DbError => |e| FindProcessError::Database(e),
 }

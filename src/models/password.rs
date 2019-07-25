@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use chrono::{Duration, Utc};
 use diesel::{
     prelude::*,
@@ -93,7 +94,7 @@ impl PasswordResetToken {
 #[api(internal)]
 pub struct CreateTokenError(#[cause] DbError);
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FromCodeError {
     /// Reset token has expired or was already used.
     #[fail(display = "Reset token expired")]
@@ -102,41 +103,42 @@ pub enum FromCodeError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Code was not valid base64.
     #[fail(display = "Invalid base64: {}", _0)]
     #[api(code = "password:reset:invalid", status = "BAD_REQUEST")]
-    Decoding(#[cause] base64::DecodeError),
+    Decoding(#[cause] #[from] base64::DecodeError),
     /// Code could not be unsealed.
     #[fail(display = "Unsealing error: {}", _0)]
     #[api(code = "password:reset:invalid", status = "BAD_REQUEST")]
-    Unsealing(#[cause] utils::UnsealingError),
+    Unsealing(#[cause] #[from] utils::UnsealingError),
 }
 
-impl_from! { for FromCodeError ;
-    DbError => |e| FromCodeError::Database(e),
-    base64::DecodeError => |e| FromCodeError::Decoding(e),
-    utils::UnsealingError => |e| FromCodeError::Unsealing(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum ResetPasswordError {
     /// Internal database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Internal(#[cause] DbError),
+    Internal(#[cause] #[from] DbError),
     #[fail(display = "{}", _0)]
     Password(#[cause] ChangePasswordError),
 }
 
-impl_from! { for ResetPasswordError ;
-    ChangePasswordError => |e| match e {
-        ChangePasswordError::Internal(e) => ResetPasswordError::Internal(e),
-        e => ResetPasswordError::Password(e),
-    },
-    DbError => |e| ResetPasswordError::Internal(e),
-    FindUserError => |e| match e {
-        FindUserError::Internal(e) => ResetPasswordError::Internal(e),
-        FindUserError::NotFound => panic!("Inconsistent database: no user for reset token"),
-    },
+impl From<ChangePasswordError> for ResetPasswordError {
+    fn from(e: ChangePasswordError) -> Self {
+        match e {
+            ChangePasswordError::Internal(e) => ResetPasswordError::Internal(e),
+            e => ResetPasswordError::Password(e),
+        }
+    }
+}
+
+impl From<FindUserError> for ResetPasswordError {
+    fn from(e: FindUserError) -> Self {
+        match e {
+            FindUserError::Internal(e) => ResetPasswordError::Internal(e),
+            FindUserError::NotFound =>
+                panic!("Inconsistent database: no user for reset token"),
+        }
+    }
 }

@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{prelude::*, result::{DatabaseErrorKind, Error as DbError}};
 use failure::Fail;
 use serde::Serialize;
@@ -133,20 +134,16 @@ impl Role {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindRoleError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No role found for given email address.
     #[fail(display = "No such role")]
     #[api(code = "role:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindRoleError ;
-    DbError => |e| FindRoleError::Database(e),
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -161,12 +158,14 @@ pub enum CreateRoleError {
     Duplicate,
 }
 
-impl_from! { for CreateRoleError ;
-    DbError => |e| match e {
-        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
-            => CreateRoleError::Duplicate,
-        _ => CreateRoleError::Database(e),
-    },
+impl From<DbError> for CreateRoleError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
+                => CreateRoleError::Duplicate,
+            _ => CreateRoleError::Database(e),
+        }
+    }
 }
 
 impl std::ops::Deref for Role {

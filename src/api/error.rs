@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use actix_web::{
     App,
     FromRequest,
@@ -47,13 +48,13 @@ impl Fail for Box<dyn ApiError> {
 /// A wrapper around many types of errors, including user-facing [`ApiError`]s
 /// as well as many other errors that should not be reported to the user, such
 /// as database connection errors.
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum Error {
     #[fail(display = "{}", _0)]
     Api(#[cause] Box<dyn ApiError>),
     /// Generic system error.
     #[fail(display = "{}", _0)]
-    System(#[cause] std::io::Error),
+    System(#[cause] #[from] std::io::Error),
     /// Error communicating with the database.
     ///
     /// Note that this variant also includes errors related to missing record,
@@ -65,10 +66,10 @@ pub enum Error {
     ///     .ok_or_else(|| MyApiError::NotFound)?
     /// ```
     #[fail(display = "{}", _0)]
-    Db(#[cause] diesel::result::Error),
+    Db(#[cause] #[from] diesel::result::Error),
     /// Error obtaining database connection for the pool.
     #[fail(display = "{}", _0)]
-    DbPool(#[cause] r2d2::Error),
+    DbPool(#[cause] #[from] r2d2::Error),
     /// Error rendering template.
     ///
     /// Note that due to [`tera::Error`] currently being `!Send + !Sync` it
@@ -77,10 +78,10 @@ pub enum Error {
     Template(String),
     /// Error sending messages between actors.
     #[fail(display = "{}", _0)]
-    ActixMailbox(#[cause] actix::MailboxError),
+    ActixMailbox(#[cause] #[from] actix::MailboxError),
     /// Error reading message payload.
     #[fail(display = "{}", _0)]
-    Payload(#[cause] actix_web::error::PayloadError),
+    Payload(#[cause] #[from] actix_web::error::PayloadError),
 }
 
 impl<T: ApiError> From<T> for Error {
@@ -89,11 +90,8 @@ impl<T: ApiError> From<T> for Error {
     }
 }
 
-impl_from! { for Error ;
-    std::io::Error => |e| Error::System(e),
-    diesel::result::Error => |e| Error::Db(e),
-    r2d2::Error => |e| Error::DbPool(e),
-    tera::Error => |e| {
+impl From<tera::Error> for Error {
+    fn from(e: tera::Error) -> Self {
         let mut msg = String::new();
         for (inx, err) in e.iter().enumerate() {
             if inx > 0 {
@@ -102,9 +100,7 @@ impl_from! { for Error ;
             msg.push_str(&err.to_string());
         }
         Error::Template(msg)
-    },
-    actix::MailboxError => |e| Error::ActixMailbox(e),
-    actix_web::error::PayloadError => |e| Error::Payload(e),
+    }
 }
 
 impl ResponseError for Error {

@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use actix::SystemService;
 use diesel::{
     Connection as _Connection,
@@ -434,20 +435,16 @@ impl std::ops::Deref for Draft {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindDraftError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No draft found matching given criteria.
     #[fail(display = "No such draft")]
     #[api(code = "draft:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindDraftError ;
-    DbError => |e| FindDraftError::Database(e),
 }
 
 pub enum AdvanceResult {
@@ -457,12 +454,12 @@ pub enum AdvanceResult {
     Finished(Module),
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum AdvanceDraftError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Specified slot doesn't exist or has no permissions in current step.
     #[fail(display = "Requested slot doesn't exist in this step")]
     #[api(code = "draft:advance:bad-slot", status = "BAD_REQUEST")]
@@ -478,10 +475,6 @@ pub enum AdvanceDraftError {
     /// Could not fill a slot,
     #[fail(display = "Could not fill slot {}: {}", _0, _1)]
     FillSlot(i32, #[cause] FillSlotError),
-}
-
-impl_from! { for AdvanceDraftError ;
-    DbError => |e| AdvanceDraftError::Database(e),
 }
 
 #[derive(Serialize)]

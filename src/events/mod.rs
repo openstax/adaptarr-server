@@ -1,5 +1,6 @@
 //! Handling of events and notifications.
 
+use adaptarr_macros::From;
 use diesel::result::Error as DbError;
 use failure::Fail;
 
@@ -17,23 +18,16 @@ pub use self::{
     },
 };
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum Error {
     #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     #[fail(display = "Error obtaining database connection: {}", _0)]
-    DatabasePool(#[cause] r2d2::Error),
+    DatabasePool(#[cause] #[from] r2d2::Error),
     #[fail(display = "Error serializing event data: {}", _0)]
-    Serialize(#[cause] rmps::encode::Error),
+    Serialize(#[cause] #[from] rmps::encode::Error),
     #[fail(display = "Unknown event type: {:?}", _0)]
     UnknownEvent(String),
     #[fail(display = "Error deserializing event data: {}", _0)]
-    Deserialize(#[cause] rmps::decode::Error),
-}
-
-impl_from! { for Error ;
-    DbError => |e| Error::Database(e),
-    r2d2::Error => |e| Error::DatabasePool(e),
-    rmps::encode::Error => |e| Error::Serialize(e),
-    rmps::decode::Error => |e| Error::Deserialize(e),
+    Deserialize(#[cause] #[from] rmps::decode::Error),
 }

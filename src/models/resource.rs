@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _,
     prelude::*,
@@ -159,20 +160,16 @@ impl std::ops::Deref for Resource {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindResourceError {
     /// Database error.
     #[fail(display = "database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No resource found matching given criteria.
     #[fail(display = "no such resource")]
     #[api(code = "resource:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindResourceError ;
-    DbError => |e| FindResourceError::Database(e),
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -187,30 +184,27 @@ pub enum CreateResourceError {
     Duplicate,
 }
 
-impl_from! { for CreateResourceError ;
-    DbError => |e| match e {
-        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
-            => CreateResourceError::Duplicate,
-        _ => CreateResourceError::Database(e),
-    },
+impl From<DbError> for CreateResourceError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
+                => CreateResourceError::Duplicate,
+            _ => CreateResourceError::Database(e),
+        }
+    }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FileError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Resource is a directory.
     #[fail(display = "No such file")]
     #[api(code = "resource:is-a-directory", status = "BAD_REQUEST")]
     IsADirectory,
 }
-
-impl_from! { for FileError ;
-    DbError => |e| FileError::Database(e),
-}
-
 
 #[derive(Serialize)]
 struct LogCreation<'a> {

@@ -1,6 +1,6 @@
 //! Managing tests databases.
 
-use adaptarr::impl_from;
+use adaptarr_macros::From;
 use diesel::{
     RunQueryDsl,
     backend::Backend,
@@ -100,25 +100,22 @@ where
     })
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum SetupDbError {
     #[fail(display = "{}", _0)]
-    Database(#[cause] diesel::result::Error),
+    Database(#[cause] #[from] diesel::result::Error),
     #[fail(display = "{}", _0)]
-    Connection(#[cause] diesel::ConnectionError),
+    Connection(#[cause] #[from] diesel::ConnectionError),
     #[fail(display = "{}", _0)]
-    Pool(#[cause] r2d2::Error),
+    Pool(#[cause] #[from] r2d2::Error),
     #[fail(display = "{}", _0)]
-    Migration(#[cause] RunMigrationsError),
+    Migration(#[cause] #[from] RunMigrationsError),
 }
 
-impl_from! { for SetupDbError ;
-    diesel::result::Error => |e| SetupDbError::Database(e),
-    diesel::ConnectionError => |e| SetupDbError::Connection(e),
-    r2d2::Error => |e| SetupDbError::Pool(e),
-    RunMigrationsError => |e| SetupDbError::Migration(e),
-    MigrationError => |e| SetupDbError::Migration(
-        RunMigrationsError::MigrationError(e)),
+impl From<MigrationError> for SetupDbError {
+    fn from(e: MigrationError) -> Self {
+        SetupDbError::Migration(RunMigrationsError::MigrationError(e))
+    }
 }
 
 /// Find correct database URL for testing.

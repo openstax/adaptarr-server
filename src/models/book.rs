@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     prelude::*,
     result::Error as DbError,
@@ -121,20 +122,16 @@ impl std::ops::Deref for Book {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindBookError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No book found matching given criteria.
     #[fail(display = "No such book")]
     #[api(code = "book:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindBookError ;
-    DbError => |e| FindBookError::Database(e),
 }
 
 #[derive(Serialize)]

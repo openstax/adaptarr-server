@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use actix_web::{
     Either,
     Form,
@@ -242,18 +243,14 @@ impl<'a> EntityTag<'a> {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum ParseEntityTagError {
     #[fail(display = "entity tag is not quoted")]
     NotQuoted,
     #[fail(display = "entity tag contains invalid byte {}", _0)]
     BadByte(u8),
     #[fail(display = "{}", _0)]
-    String(ToStrError),
-}
-
-impl_from! { for ParseEntityTagError ;
-    ToStrError => |e| ParseEntityTagError::String(e),
+    String(#[from] ToStrError),
 }
 
 impl ResponseError for ParseEntityTagError {

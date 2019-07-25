@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use bitflags::bitflags;
 use diesel::{
     Connection as _Connection,
@@ -414,20 +415,16 @@ impl std::ops::Deref for User {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindUserError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Internal(#[cause] DbError),
+    Internal(#[cause] #[from] DbError),
     /// No user found for given email address.
     #[fail(display = "No such user")]
     #[api(code = "user:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindUserError ;
-    DbError => |e| FindUserError::Internal(e),
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -448,20 +445,22 @@ pub enum CreateUserError {
     EmptyPassword,
 }
 
-impl_from! { for CreateUserError ;
-    DbError => |e| match e {
-        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
-            => CreateUserError::Duplicate,
-        _ => CreateUserError::Internal(e),
-    },
+impl From<DbError> for CreateUserError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
+                => CreateUserError::Duplicate,
+            _ => CreateUserError::Internal(e),
+        }
+    }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum UserAuthenticateError {
     /// Authentication failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Internal(#[cause] DbError),
+    Internal(#[cause] #[from] DbError),
     /// No user found for given email address.
     #[fail(display = "No such user")]
     #[api(code = "user:not-found", status = "NOT_FOUND")]
@@ -472,27 +471,24 @@ pub enum UserAuthenticateError {
     BadPassword,
 }
 
-impl_from! { for UserAuthenticateError ;
-    DbError => |e| UserAuthenticateError::Internal(e),
-    FindUserError => |e| match e {
-        FindUserError::Internal(e) => UserAuthenticateError::Internal(e),
-        FindUserError::NotFound => UserAuthenticateError::NotFound,
-    },
+impl From<FindUserError> for UserAuthenticateError {
+    fn from(e: FindUserError) -> Self {
+        match e {
+            FindUserError::Internal(e) => UserAuthenticateError::Internal(e),
+            FindUserError::NotFound => UserAuthenticateError::NotFound,
+        }
+    }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum ChangePasswordError {
     /// Authentication failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Internal(#[cause] DbError),
+    Internal(#[cause] #[from] DbError),
     #[fail(display = "Password cannot be empty")]
     #[api(code = "user:change-password:empty", status = "BAD_REQUEST")]
     EmptyPassword,
-}
-
-impl_from! { for ChangePasswordError ;
-    DbError => |e| ChangePasswordError::Internal(e),
 }
 
 #[derive(Serialize)]

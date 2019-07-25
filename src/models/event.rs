@@ -77,9 +77,11 @@ pub enum FindEventError {
     NotFound,
 }
 
-impl_from! { for FindEventError ;
-    DbError => |e| match e {
-        DbError::NotFound => FindEventError::NotFound,
-        e => FindEventError::Database(e),
-    },
+impl From<DbError> for FindEventError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::NotFound => FindEventError::NotFound,
+            e => FindEventError::Database(e),
+        }
+    }
 }

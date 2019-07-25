@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use failure::Fail;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -21,15 +22,15 @@ use crate::{
 };
 use super::Error;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, From)]
 #[serde(untagged)]
 pub enum Event {
-    Assigned(Assigned),
-    ProcessEnded(ProcessEnded),
-    ProcessCancelled(ProcessCancelled),
-    SlotFilled(SlotFilled),
-    SlotVacated(SlotVacated),
-    DraftAdvanced(DraftAdvanced),
+    Assigned(#[from] Assigned),
+    ProcessEnded(#[from] ProcessEnded),
+    ProcessCancelled(#[from] ProcessCancelled),
+    SlotFilled(#[from] SlotFilled),
+    SlotVacated(#[from] SlotVacated),
+    DraftAdvanced(#[from] DraftAdvanced),
 }
 
 impl Event {
@@ -52,16 +53,12 @@ impl Event {
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum LoadEventError {
     #[fail(display = "unknown event type: {}", _0)]
     UnknownEvent(String),
     #[fail(display = "error deserializing event data: {}", _0)]
-    Deserialize(#[cause] rmps::decode::Error),
-}
-
-impl_from! { for LoadEventError ;
-    rmps::decode::Error => |e| LoadEventError::Deserialize(e),
+    Deserialize(#[cause] #[from] rmps::decode::Error),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -135,15 +132,6 @@ impl Event {
             Event::DraftAdvanced(_) => "draft-advanced",
         }
     }
-}
-
-impl_from! { for Event ;
-    Assigned => |e| Event::Assigned(e),
-    ProcessEnded => |e| Event::ProcessEnded(e),
-    ProcessCancelled => |e| Event::ProcessCancelled(e),
-    SlotFilled => |e| Event::SlotFilled(e),
-    SlotVacated => |e| Event::SlotVacated(e),
-    DraftAdvanced => |e| Event::DraftAdvanced(e),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]

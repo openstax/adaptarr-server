@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
     Connection as _,
@@ -294,28 +295,24 @@ impl Deref for Version {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindVersionError {
     /// Database error.
     #[api(internal)]
     #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No version found matching given criteria.
     #[api(code = "edit-process:not-found", status = "NOT_FOUND")]
     #[fail(display = "No such process")]
     NotFound,
 }
 
-impl_from! { for FindVersionError ;
-    DbError => |e| FindVersionError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum CreateVersionError {
     /// Description of a process is not valid.
     #[api(code = "edit-process:new:invalid-description", status = "BAD_REQUEST")]
     #[fail(display = "{}", _0)]
-    InvalidDescription(#[cause] structure::ValidateStructureError),
+    InvalidDescription(#[cause] #[from] structure::ValidateStructureError),
     /// Database error
     #[api(internal)]
     #[fail(display = "Database error: {}", _0)]
@@ -326,31 +323,28 @@ pub enum CreateVersionError {
     Duplicate,
 }
 
-impl_from! { for CreateVersionError ;
-    structure::ValidateStructureError => |e| CreateVersionError::InvalidDescription(e),
-    DbError => |e| match e {
-        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, detail) =>
-            match detail.constraint_name() {
-                Some("edit_processes_name_key") => CreateVersionError::Duplicate,
-                _ => CreateVersionError::Database(DbError::DatabaseError(
-                    DatabaseErrorKind::UniqueViolation, detail)),
-            },
-        _ => CreateVersionError::Database(e),
+impl From<DbError> for CreateVersionError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, detail) =>
+                match detail.constraint_name() {
+                    Some("edit_processes_name_key") => CreateVersionError::Duplicate,
+                    _ => CreateVersionError::Database(DbError::DatabaseError(
+                        DatabaseErrorKind::UniqueViolation, detail)),
+                },
+            _ => CreateVersionError::Database(e),
+        }
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindSlotError {
     /// Database error.
     #[api(internal)]
     #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No slot found matching given criteria.
     #[api(code = "edit-process:slot:not-found", status = "NOT_FOUND")]
     #[fail(display = "No such slot")]
     NotFound,
-}
-
-impl_from! { for FindSlotError ;
-    DbError => |e| FindSlotError::Database(e),
 }

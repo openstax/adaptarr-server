@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     prelude::*,
     result::Error as DbError,
@@ -283,28 +284,24 @@ impl Deref for Slot {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindSlotError {
     /// Database error.
     #[api(internal)]
     #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No slot found matching given criteria.
     #[api(code = "edit-process:slot:not-found", status = "NOT_FOUND")]
     #[fail(display = "No such slot")]
     NotFound,
 }
 
-impl_from! { for FindSlotError ;
-    DbError => |e| FindSlotError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FillSlotError {
     /// Database error
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// There is no user available to fill this slot
     #[fail(display = "There is no user available to fill this slot")]
     #[api(code = "edit-process:slot:fill")]
@@ -313,10 +310,6 @@ pub enum FillSlotError {
     #[api(code = "edit-process:slot:fill:bad-role", status = "BAD_REQUEST")]
     #[fail(display = "User doesn't have required role")]
     BadRole,
-}
-
-impl_from! { for FillSlotError ;
-    DbError => |e| FillSlotError::Database(e),
 }
 
 #[derive(Serialize)]

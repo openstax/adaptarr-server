@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -312,20 +313,16 @@ impl std::ops::Deref for Module {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindModuleError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No module found matching given criteria.
     #[fail(display = "No such module")]
     #[api(code = "module:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindModuleError ;
-    DbError => |e| FindModuleError::Database(e),
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -344,44 +341,38 @@ pub enum BeginProcessError {
     BadSlot(i32, i32),
 }
 
-impl_from! { for BeginProcessError ;
-    DbError => |e| match e {
-        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) =>
-            BeginProcessError::Exists,
-        _ => BeginProcessError::Database(e),
+impl From<DbError> for BeginProcessError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) =>
+                BeginProcessError::Exists,
+            _ => BeginProcessError::Database(e),
+        }
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum ReplaceModuleError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Module has drafts.
     #[fail(display = "Module with drafts cannot be replaced")]
     #[api(code = "module:replace:has-draft", status = "BAD_REQUEST")]
     HasDrafts,
 }
 
-impl_from! { for ReplaceModuleError ;
-    DbError => |e| ReplaceModuleError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum GetXrefTargetsError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// List of cross-reference targets is yet to be generated for this module.
     #[fail(display = "List of cross references is not yet ready for this module")]
     #[api(code = "module:xref:not-ready", status = "SERVICE_UNAVAILABLE")]
     NotReady,
-}
-
-impl_from! { for GetXrefTargetsError ;
-    DbError => |e| GetXrefTargetsError::Database(e),
 }
 
 #[derive(Serialize)]

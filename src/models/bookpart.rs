@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -366,109 +367,89 @@ impl std::ops::Deref for BookPart {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindBookPartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No module found matching given criteria.
     #[fail(display = "No such module")]
     #[api(internal)]
     NotFound,
 }
 
-impl_from! { for FindBookPartError ;
-    DbError => |e| FindBookPartError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum DeletePartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Deleting group 0 is not possible.
     #[fail(display = "Cannot delete group 0")]
     #[api(code = "bookpart:delete:is-root", status = "BAD_REQUEST")]
     RootGroup,
 }
 
-impl_from! { for DeletePartError ;
-    DbError => |e| DeletePartError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum GetPartsError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// This part is a module, it has no parts of its own.
     #[fail(display = "Module has no parts")]
     #[api(code = "bookpart:get-parts:is-module", status = "BAD_REQUEST")]
     IsAModule,
 }
 
-impl_from! { for GetPartsError ;
-    DbError => |e| GetPartsError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum CreatePartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// This part is a module, it has no parts of its own.
     #[fail(display = "Module has no parts")]
     #[api(code = "bookpart:create-part:is-module", status = "BAD_REQUEST")]
     IsAModule,
 }
 
-impl_from! { for CreatePartError ;
-    DbError => |e| CreatePartError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum RealizeTemplateError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// This part is a module, it has no parts of its own.
     #[fail(display = "Module has no parts")]
     #[api(code = "bookpart:create-part:is-module", status = "BAD_REQUEST")]
     IsAModule,
     #[fail(display = "Module not found: {}", _0)]
-    ModuleNotFound(#[cause] FindModuleError),
+    ModuleNotFound(#[cause] #[from] FindModuleError),
     #[fail(display = "Part could not be created: {}", _0)]
     CreatePart(#[cause] CreatePartError),
 }
 
-impl_from! { for RealizeTemplateError ;
-    DbError => |e| RealizeTemplateError::Database(e),
-    FindModuleError => |e| RealizeTemplateError::ModuleNotFound(e),
-    CreatePartError => |e| match e {
-        CreatePartError::Database(e) => RealizeTemplateError::Database(e),
-        _ => RealizeTemplateError::CreatePart(e),
-    },
+impl From<CreatePartError> for RealizeTemplateError {
+    fn from(e: CreatePartError) -> Self {
+        match e {
+            CreatePartError::Database(e) => RealizeTemplateError::Database(e),
+            _ => RealizeTemplateError::CreatePart(e),
+        }
+    }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum ReparentPartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// New parent is a module, it has no parts of its own.
     #[fail(display = "Parent cannot be a module")]
     #[api(code = "bookpart:reparent:is-module", status = "BAD_REQUEST")]
     IsAModule,
-}
-
-impl_from! { for ReparentPartError ;
-    DbError => |e| ReparentPartError::Database(e),
 }
 
 #[derive(Serialize)]

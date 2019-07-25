@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -160,20 +161,16 @@ impl std::ops::Deref for Document {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum GetFileError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No such file.
     #[fail(display = "No such file")]
     #[api(code = "file:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for GetFileError ;
-    DbError => |e| GetFileError::Database(e),
 }
 
 #[derive(Serialize)]

@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use actix_web::{
     HttpRequest,
     HttpResponse,
@@ -261,43 +262,38 @@ impl std::ops::Deref for File {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindFileError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// File not found.
     #[fail(display = "No such file")]
     #[api(code = "file:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
-impl_from! { for FindFileError ;
-    DbError => |e| FindFileError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum CreateFileError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Obtaining connection from a pool of database connections.
     #[fail(display = "Pooling database connection: {}", _0)]
     #[api(internal)]
-    DbPool(#[cause] r2d2::Error),
+    DbPool(#[cause] #[from] r2d2::Error),
     /// System error.
     #[fail(display = "System error: {}", _0)]
     #[api(internal)]
-    System(#[cause] io::Error),
+    System(#[cause] #[from] io::Error),
 }
 
-impl_from! { for CreateFileError ;
-    DbError => |e| CreateFileError::Database(e),
-    r2d2::Error => |e| CreateFileError::DbPool(e),
-    io::Error => |e| CreateFileError::System(e),
-    tempfile::PersistError => |e| CreateFileError::System(e.error),
+impl From<tempfile::PersistError> for CreateFileError {
+    fn from(e: tempfile::PersistError) -> Self {
+        CreateFileError::System(e.error)
+    }
 }
 
 /// Write stream into a sink and return hash of its contents.
