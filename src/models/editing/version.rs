@@ -26,7 +26,7 @@ use crate::{
         },
     },
 };
-use super::{Process, Slot, structure};
+use super::{Process, Slot, Step, structure};
 
 /// Particular revision of an editing [`Process`][Process]
 ///
@@ -202,6 +202,26 @@ impl Version {
             .map(Slot::from_db)
     }
 
+    /// Get list of all steps in this process.
+    pub fn get_steps(&self, dbcon: &Connection) -> Result<Vec<Step>, DbError> {
+        edit_process_steps::table
+            .filter(edit_process_steps::process.eq(self.data.id))
+            .get_results(dbcon)
+            .map(|v| v.into_iter().map(Step::from_db).collect())
+    }
+
+    /// Find a step in this process.
+    pub fn get_step(&self, dbcon: &Connection, id: i32)
+    -> Result<Step, FindStepError> {
+        edit_process_steps::table
+            .filter(edit_process_steps::id.eq(id)
+                .and(edit_process_steps::process.eq(self.data.id)))
+            .get_result(dbcon)
+            .optional()?
+            .ok_or(FindStepError::NotFound)
+            .map(Step::from_db)
+    }
+
     /// Get a complete description of this editing process.
     pub fn get_structure(&self, dbcon: &Connection)
     -> Result<structure::Process, DbError> {
@@ -346,5 +366,17 @@ pub enum FindSlotError {
     /// No slot found matching given criteria.
     #[api(code = "edit-process:slot:not-found", status = "NOT_FOUND")]
     #[fail(display = "No such slot")]
+    NotFound,
+}
+
+#[derive(ApiError, Debug, Fail, From)]
+pub enum FindStepError {
+    /// Database error.
+    #[api(internal)]
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] #[from] DbError),
+    /// No step found matching given criteria.
+    #[api(code = "edit-process:step:not-found", status = "NOT_FOUND")]
+    #[fail(display = "No such step")]
     NotFound,
 }

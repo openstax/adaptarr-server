@@ -1,4 +1,5 @@
 use diesel::{
+    Connection as _,
     prelude::*,
     result::Error as DbError,
 };
@@ -6,20 +7,27 @@ use itertools::Itertools;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::db::{
-    Connection,
-    models as db,
-    schema::{
-        draft_slots,
-        edit_process_links,
-        edit_process_slots,
-        edit_process_step_slots,
-        edit_process_steps,
-        edit_process_versions,
+use crate::{
+    audit,
+    db::{
+        Connection,
+        models as db,
+        schema::{
+            draft_slots,
+            edit_process_links,
+            edit_process_slots,
+            edit_process_step_slots,
+            edit_process_steps,
+            edit_process_versions,
+        },
+        types::SlotPermission,
     },
-    types::SlotPermission,
 };
-use super::{Link, Slot, version::{Version, FindVersionError}};
+use super::{
+    Slot,
+    link::{Link, PublicData as LinkData, FindLinkError},
+    version::{Version, FindVersionError},
+};
 
 /// A single step in an editing process.
 ///
@@ -36,14 +44,6 @@ pub struct PublicData {
     pub process: [i32; 2],
     pub name: String,
     pub links: Vec<LinkData>,
-}
-
-/// A subset of a link's data.
-#[derive(Debug, Serialize)]
-pub struct LinkData {
-    pub name: String,
-    pub to: i32,
-    pub slot: i32,
 }
 
 impl Step {
@@ -189,6 +189,18 @@ impl Step {
         }
     }
 
+    pub fn get_link(&self, dbcon: &Connection, slot: i32, target: i32)
+    -> Result<Link, FindLinkError> {
+        edit_process_links::table
+            .filter(edit_process_links::from.eq(self.data.id)
+                .and(edit_process_links::to.eq(target))
+                .and(edit_process_links::slot.eq(slot)))
+            .get_result(dbcon)
+            .optional()?
+            .map(Link::from_db)
+            .ok_or(FindLinkError::NotFound)
+    }
+
     /// Get the public portion of this step's data. The list can optionally
     /// be limited to just the data visible by a specific slots.
     pub fn get_public(&self, dbcon: &Connection, slots: Option<(Uuid, i32)>)
@@ -196,13 +208,8 @@ impl Step {
         let db::EditProcessStep { id, process: version, ref name, .. } = self.data;
 
         let links = self.get_links(dbcon, slots)?
-            .into_iter()
-            .map(Link::into_db)
-            .map(|link| LinkData {
-                name: link.name,
-                to: link.to,
-                slot: link.slot,
-            })
+            .iter()
+            .map(Link::get_public)
             .collect();
 
         let process = edit_process_versions::table
@@ -215,6 +222,19 @@ impl Step {
             process: [process, version],
             name: name.clone(),
             links,
+        })
+    }
+
+    /// Set step's name.
+    pub fn set_name(&mut self, dbcon: &Connection, name: &str) -> Result<(), DbError> {
+        dbcon.transaction(|| {
+            audit::log_db(dbcon, "steps", self.data.id, "set-name", name);
+
+            self.data = diesel::update(&self.data)
+                .set(edit_process_steps::name.eq(name))
+                .get_result(dbcon)?;
+
+            Ok(())
         })
     }
 }
