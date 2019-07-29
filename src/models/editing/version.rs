@@ -228,6 +228,7 @@ impl Version {
         dbcon.transaction(|| {
             let dbslots = edit_process_slots::table
                 .filter(edit_process_slots::process.eq(self.data.id))
+                .order_by(edit_process_slots::id.asc())
                 .get_results::<db::EditProcessSlot>(dbcon)?;
 
             let slots = dbslots.iter()
@@ -244,6 +245,7 @@ impl Version {
 
             let dbsteps = edit_process_steps::table
                 .filter(edit_process_steps::process.eq(self.data.id))
+                .order_by(edit_process_steps::id.asc())
                 .get_results::<db::EditProcessStep>(dbcon)?;
 
             let start = dbsteps.iter()
@@ -254,6 +256,7 @@ impl Version {
                 .map(|step| {
                     let slots = edit_process_step_slots::table
                         .filter(edit_process_step_slots::step.eq(step.id))
+                        .order_by(edit_process_step_slots::slot.asc())
                         .get_results::<db::EditProcessStepSlot>(dbcon)?
                         .into_iter()
                         .map(|slot| structure::StepSlot {
@@ -267,6 +270,10 @@ impl Version {
 
                     let links = edit_process_links::table
                         .filter(edit_process_links::from.eq(step.id))
+                        .order_by((
+                            edit_process_links::slot.asc(),
+                            edit_process_links::to.asc(),
+                        ))
                         .get_results::<db::EditProcessLink>(dbcon)?
                         .into_iter()
                         .map(|link| {
