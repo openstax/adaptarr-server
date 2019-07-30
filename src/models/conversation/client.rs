@@ -122,14 +122,10 @@ impl Actor for Client {
     }
 
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
-        Broker::from_registry()
-            .send(Disconnect {
-                conversation: self.conversation,
-                addr: ctx.address().recipient(),
-            })
-            .into_actor(self)
-            .drop_err()
-            .wait(ctx);
+        Broker::from_registry().do_send(Disconnect {
+            conversation: self.conversation,
+            addr: ctx.address().recipient(),
+        });
 
         Running::Stop
     }
