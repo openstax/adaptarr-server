@@ -1,5 +1,6 @@
 //! File upload and importing ZIPs of modules and collections.
 
+use adaptarr_macros::From;
 use actix::{Actor, Addr, Handler, SyncArbiter, SyncContext, Message};
 use diesel::{
     Connection as _Connection,
@@ -13,6 +14,7 @@ use zip::{ZipArchive, result::ZipError};
 
 use crate::{
     ApiError,
+    audit,
     config::Storage,
     db::{Connection, Pool},
     models::{
@@ -35,6 +37,7 @@ const SKIP_FILES: &[&str] = &[
 pub struct ImportModule {
     pub title: String,
     pub file: NamedTempFile,
+    pub actor: audit::Actor,
 }
 
 impl Message for ImportModule {
@@ -46,6 +49,7 @@ impl Message for ImportModule {
 pub struct ReplaceModule {
     pub module: Module,
     pub file: NamedTempFile,
+    pub actor: audit::Actor,
 }
 
 impl Message for ReplaceModule {
@@ -56,6 +60,7 @@ impl Message for ReplaceModule {
 pub struct ImportBook {
     pub title: String,
     pub file: NamedTempFile,
+    pub actor: audit::Actor,
 }
 
 impl Message for ImportBook {
@@ -67,6 +72,7 @@ impl Message for ImportBook {
 pub struct ReplaceBook {
     pub book: Book,
     pub file: NamedTempFile,
+    pub actor: audit::Actor,
 }
 
 impl Message for ReplaceBook {
@@ -140,6 +146,7 @@ impl Importer {
             &*db,
             &self.config,
             zip.by_index(index)?,
+            Some(&*crate::models::file::CNXML_MIME),
         )?;
 
         let mut files = Vec::new();
@@ -174,7 +181,7 @@ impl Importer {
                 continue;
             }
 
-            let file = File::from_read(&*db, &self.config, file)?;
+            let file = File::from_read(&*db, &self.config, file, None)?;
 
             files.push((name, file));
         }
@@ -269,7 +276,12 @@ impl Importer {
 
         let index_file = {
             let index = zip.by_name(index_path)?;
-            File::from_read(dbconn, &self.config, index)?
+            File::from_read(
+                dbconn,
+                &self.config,
+                index,
+                Some(&*crate::models::file::CNXML_MIME),
+            )?
         };
 
         let mut files = Vec::new();
@@ -304,7 +316,7 @@ impl Importer {
                 continue;
             }
 
-            let file = File::from_read(dbconn, &self.config, file)?;
+            let file = File::from_read(dbconn, &self.config, file, None)?;
             files.push((name, file));
         }
 
@@ -407,9 +419,9 @@ impl Handler<ImportModule> for Importer {
     type Result = Result<Module, ImportError>;
 
     fn handle(&mut self, msg: ImportModule, _: &mut Self::Context) -> Self::Result {
-        let ImportModule { title, file } = msg;
+        let ImportModule { title, file, actor } = msg;
 
-        self.create_module(title, file)
+        audit::with_actor(actor, || self.create_module(title, file))
     }
 }
 
@@ -417,9 +429,9 @@ impl Handler<ReplaceModule> for Importer {
     type Result = Result<Module, ImportError>;
 
     fn handle(&mut self, msg: ReplaceModule, _: &mut Self::Context) -> Self::Result {
-        let ReplaceModule { module, file } = msg;
+        let ReplaceModule { module, file, actor } = msg;
 
-        self.replace_module(module, file)
+        audit::with_actor(actor, || self.replace_module(module, file))
     }
 }
 
@@ -427,9 +439,9 @@ impl Handler<ImportBook> for Importer {
     type Result = Result<Book, ImportError>;
 
     fn handle(&mut self, msg: ImportBook, _: &mut Self::Context) -> Self::Result {
-        let ImportBook { title, file } = msg;
+        let ImportBook { title, file, actor } = msg;
 
-        self.create_book(title, file)
+        audit::with_actor(actor, || self.create_book(title, file))
     }
 }
 
@@ -437,18 +449,18 @@ impl Handler<ReplaceBook> for Importer {
     type Result = Result<Book, ImportError>;
 
     fn handle(&mut self, msg: ReplaceBook, _: &mut Self::Context) -> Self::Result {
-        let ReplaceBook { book, file } = msg;
+        let ReplaceBook { book, file, actor } = msg;
 
-        self.replace_book(book, file)
+        audit::with_actor(actor, || self.replace_book(book, file))
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum ImportError {
     /// There was a problem with the ZIP archive.
     #[fail(display = "{}", _0)]
     #[api(code = "import:zip:invalid", status = "BAD_REQUEST")]
-    Archive(#[cause] ZipError),
+    Archive(#[cause] #[from] ZipError),
     /// There was no file named index.cnxml in the ZIP archive.
     #[fail(display = "Archive is missing index.cnxml")]
     #[api(code = "import:zip:index-missing", status = "BAD_REQUEST")]
@@ -460,25 +472,25 @@ pub enum ImportError {
     /// There was a problem obtaining database connection.
     #[fail(display = "Cannot obtain database connection: {}", _0)]
     #[api(internal)]
-    DbPool(#[cause] r2d2::Error),
+    DbPool(#[cause] #[from] r2d2::Error),
     /// A file could not be created.
     #[fail(display = "Cannot create file: {}", _0)]
-    FileCreation(#[cause] CreateFileError),
+    FileCreation(#[cause] #[from] CreateFileError),
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Replacing module's contents failed.
     #[fail(display = "{}", _0)]
-    ReplaceModule(#[cause] ReplaceModuleError),
+    ReplaceModule(#[cause] #[from] ReplaceModuleError),
     /// One of the XML files was invalid.
     #[fail(display = "Invalid XML: {}", _0)]
     #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
-    InvalidXml(#[cause] minidom::Error),
+    InvalidXml(#[cause] #[from] minidom::Error),
     /// collection.xml did not conform to schema.
     #[fail(display = "Invalid collection.xml: {}", _0)]
     #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
-    MalformedColXml(#[cause] ParseCollectionError),
+    MalformedColXml(#[cause] #[from] ParseCollectionError),
     /// index.cnxml did not conform to schema.
     #[fail(display = "invalid {}: {}", _0, _1)]
     #[api(code = "import:invalid-xml", status = "BAD_REQUEST")]
@@ -486,18 +498,7 @@ pub enum ImportError {
     /// An operating system error.
     #[fail(display = "System error: {}", _0)]
     #[api(internal)]
-    System(#[cause] std::io::Error),
-}
-
-impl_from! { for ImportError ;
-    r2d2::Error => |e| ImportError::DbPool(e),
-    ZipError => |e| ImportError::Archive(e),
-    CreateFileError => |e| ImportError::FileCreation(e),
-    DbError => |e| ImportError::Database(e),
-    ReplaceModuleError => |e| ImportError::ReplaceModule(e),
-    minidom::Error => |e| ImportError::InvalidXml(e),
-    ParseCollectionError => |e| ImportError::MalformedColXml(e),
-    std::io::Error => |e| ImportError::System(e),
+    System(#[cause] #[from] std::io::Error),
 }
 
 #[derive(Debug)]

@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use failure::Fail;
 use rand::{self, Rng};
 use ring::aead;
@@ -53,18 +54,14 @@ pub enum SealingError {
     Serialization(#[cause] rmps::encode::Error),
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum UnsealingError {
     #[fail(display = "could not deserialize: {}", _0)]
-    Serialization(#[cause] rmps::decode::Error),
+    Serialization(#[cause] #[from] rmps::decode::Error),
     #[fail(display = "could not decode: {}", _0)]
-    Crypto(#[cause] ring::error::Unspecified),
+    Crypto(#[cause] #[from] ring::error::Unspecified),
     #[fail(display = "not enough data to unseal")]
     TooShort,
-}
-
-impl_from! { for UnsealingError ;
-    ring::error::Unspecified => |e| UnsealingError::Crypto(e),
 }
 
 /// Format a byte array as a hexadecimal string.

@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use bitflags::bitflags;
 use failure::Fail;
 use std::{io::Read, str::Utf8Error};
@@ -71,10 +72,10 @@ pub struct Validation<'a> {
     pub rest: &'a [u8],
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum ValidationError {
     #[fail(display = "{}", _0)]
-    Io(#[cause] std::io::Error),
+    Io(#[cause] #[from] std::io::Error),
     #[fail(display = "message contains a LEB128 value greater than 2^64 - 1")]
     Leb128Overflow,
     #[fail(
@@ -92,16 +93,11 @@ pub enum ValidationError {
     #[fail(display = "frame {:?} cannot contain frame {:?}", _0, _1)]
     BadChild(Frame, Frame),
     #[fail(display = "{}", _0)]
-    Text(#[cause] Utf8Error),
+    Text(#[cause] #[from] Utf8Error),
     #[fail(display = "message contains unknown formatting {}", _0)]
     UnknownFormat(u16),
     #[fail(display = "message contains a non-ASCII URL")]
     NonAsciiUrl,
-}
-
-impl_from! { for ValidationError ;
-    std::io::Error => |e| ValidationError::Io(e),
-    Utf8Error => |e| ValidationError::Text(e),
 }
 
 /// Read a single LEB128 value from a reader.

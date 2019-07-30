@@ -2,6 +2,100 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <link href="https://fonts.googleapis.com/css?family=Raleway:400,400i,700,700i&display=swap&subset=latin-ext" rel="stylesheet">
+    <style type="text/css">
+        body {
+            font-family: 'Raleway', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            margin: 0;
+        }
+        form, .rounded-bg {
+            display: flex;
+            flex-direction: column;
+            width: 300px;
+            padding: 20px;
+            border-radius: 30px;
+            background-color: #b3b3b3;
+        }
+        form h1 {
+            font-size: 26px;
+            font-weight: normal;
+            color: #fff;
+            line-height: 1.4;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        form p, .rounded-bg p {
+            margin-bottom: 20px;
+            color: #fff;
+            line-height: 1.3;
+        }
+        input {
+            font-size: 16px;
+            color: #293b55;
+            text-align: center;
+            padding: 10px;
+            outline: none;
+            background-color: #fff;
+            border-radius: 17px;
+            box-sizing: border-box;
+            border: none;
+        }
+        input[type="submit"] {
+            color: #fff;
+            cursor: pointer;
+            background-color: #293b55;
+            margin: 0 auto 10px auto;
+            padding: 10px 20px;
+        }
+        input[type="submit"]:hover {
+            background-color: #303d50;
+        }
+        input[type="disabled"] {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        input[readonly] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        select {
+            font-size: 16px;
+            color: #293b55;
+            text-align: center;
+            padding: 10px;
+            outline: none;
+            background-color: #fff;
+            border-radius: 17px;
+            box-sizing: border-box;
+            border: none;
+            margin-bottom: 30px;
+        }
+        form input {
+            margin-bottom: 30px;
+        }
+        form a {
+            font-size: 16px;
+            padding: 10px;
+            text-decoration: none;
+            text-align: center;
+            color: #293b55;
+        }
+        form a:hover {
+            color: #303d50;
+        }
+        div.error {
+            color: white;
+            margin: 0 0 10px 0;
+            padding: 4px 12px;
+            background-color: rgba(255, 0, 0, 0.24);
+            border-radius: 14px;
+        }
+    </style>
     {% block head %}
     {% endblock %}
 </head>

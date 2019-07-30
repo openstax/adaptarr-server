@@ -6,7 +6,7 @@ use actix_web::{
     Json,
     Path,
     Responder,
-    http::Method,
+    http::{StatusCode, Method},
 };
 use failure::Fail;
 use futures::{Future, future};
@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     ApiError,
-    db::types::SlotPermission,
+    db::{Connection, types::SlotPermission},
     models::{
         File,
         user::{User, Fields, PublicData as UserData},
@@ -36,7 +36,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
-    util::FormOrJson,
+    util::{FormOrJson, IfMatch},
 };
 
 /// Configure routes.
@@ -46,6 +46,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/drafts/{id}", |r| {
             r.get().api_with(get_draft);
             r.put().api_with(update_draft);
+            r.delete().api_with(delete_draft);
         })
         .api_route("/drafts/{id}/advance", Method::POST, advance_draft)
         .resource("/drafts/{id}/comments", |r| {
@@ -98,7 +99,12 @@ pub fn get_draft(
     id: Path<Uuid>,
 ) -> Result<Json<DraftData>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
+    let draft = Draft::by_id(&*db, *id)?;
+    let user = session.user(&*db)?;
+
+    if !draft.check_access(&*db, &user)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
 }
@@ -131,6 +137,26 @@ pub fn update_draft(
     draft.set_title(&*db, &update.title)?;
 
     draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
+}
+
+/// Delete a draft.
+///
+/// ## Method
+///
+/// ```text
+/// DELETE /drafts/:id
+/// ```
+pub fn delete_draft(
+    state: actix_web::State<State>,
+    session: Session<ManageProcess>,
+    id: Path<Uuid>,
+) -> Result<HttpResponse> {
+    let db = state.db.get()?;
+    let draft = Draft::by_id(&*db, *id)?;
+
+    draft.delete(&*db)?;
+
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 #[derive(Deserialize)]
@@ -223,7 +249,12 @@ pub fn list_files(
     id: Path<Uuid>,
 ) -> Result<Json<Vec<FileInfo>>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
+    let draft = Draft::by_id(&*db, *id)?;
+    let user = session.user(&*db)?;
+
+    if !draft.check_access(&*db, &user)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     let files = draft.get_files(&*db)?
         .into_iter()
@@ -250,7 +281,12 @@ pub fn get_file(
 ) -> Result<impl Responder> {
     let (id, name) = path.into_inner();
     let db = state.db.get()?;
-    let draft = Draft::by_id_and_user(&*db, id, session.user)?;
+    let draft = Draft::by_id(&*db, id)?;
+    let user = session.user(&*db)?;
+
+    if !draft.check_access(&*db, &user)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     Ok(draft.get_file(&*db, &name)?
         .stream(&state.config))
@@ -268,6 +304,7 @@ pub fn update_file(
     state: actix_web::State<State>,
     session: Session,
     path: Path<(Uuid, String)>,
+    if_match: IfMatch,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let (id, name) = path.into_inner();
     let storage = state.config.storage.path.clone();
@@ -282,23 +319,60 @@ pub fn update_file(
         Err(err) => return Box::new(future::err(err.into())),
     };
 
-    match draft.check_permission(&*db, session.user_id(), SlotPermission::Edit) {
+    match check_upload_permissions(&*db, &draft, session.user_id(), &name) {
         Ok(true) => (),
         Ok(false) => return Box::new(future::err(
             InsufficientSlotPermission(SlotPermission::Edit).into())),
-        Err(err) => return Box::new(future::err(err.into())),
+        Err(err) => return Box::new(future::err(err)),
+    }
+
+    let mime = if name == "index.cnxml" {
+        Some(&*crate::models::file::CNXML_MIME)
+    } else {
+        None
+    };
+
+    if !if_match.is_any() {
+        let file = match draft.get_file(&*db, &name) {
+            Ok(file) => file,
+            Err(err) => return Box::new(future::err(err.into())),
+        };
+
+        if !if_match.test(&file.entity_tag()) {
+            return Box::new(future::ok(
+                HttpResponse::new(StatusCode::PRECONDITION_FAILED)));
+        }
     }
 
     Box::new(File::from_stream::<_, _, Error>(
             state.db.clone(),
             storage,
             req.payload(),
+            mime,
         )
         .and_then(move |file| {
             draft.write_file(&*db, &name, &file)
                 .map_err(Into::into)
-                .map(|_| HttpResponse::Ok().finish())
+                .map(|_| HttpResponse::new(StatusCode::NO_CONTENT))
         }))
+}
+
+fn check_upload_permissions(db: &Connection, draft: &Draft, user: i32, file: &str)
+-> Result<bool, Error> {
+    if draft.check_permission(db, user, SlotPermission::Edit)? {
+        return Ok(true);
+    }
+
+    if file == "index.cnxml" {
+        if draft.check_permission(db, user, SlotPermission::ProposeChanges)? {
+            return Ok(true);
+        }
+        if draft.check_permission(db, user, SlotPermission::AcceptChanges)? {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 /// Delete a file from a draft.
@@ -323,7 +397,7 @@ pub fn delete_file(
 
     draft.delete_file(&*db, &name)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 /// Get a list of all books containing the module this draft was derived from.
@@ -331,7 +405,7 @@ pub fn delete_file(
 /// ## Method
 ///
 /// ```text
-/// GET /modules/:id/books
+/// GET /drafts/:id/books
 /// ```
 pub fn list_containing_books(
     state: actix_web::State<State>,
@@ -339,7 +413,12 @@ pub fn list_containing_books(
     id: Path<Uuid>,
 ) -> Result<Json<Vec<Uuid>>> {
     let db = state.db.get()?;
-    let draft = Draft::by_id_and_user(&*db, *id, session.user)?;
+    let draft = Draft::by_id(&*db, *id)?;
+    let user = session.user(&*db)?;
+
+    if !draft.check_access(&*db, &user)? {
+        return Err(FindDraftError::NotFound.into());
+    }
 
     draft.get_books(&*db)
         .map(Json)
@@ -383,8 +462,8 @@ pub fn get_process_details(
     let slots = process.get_slots(&*db)?
         .into_iter()
         .map(|slot| Ok(SlotSeating {
-            slot: slot.get_public(),
-            user: slot.get_occupant(&*db, draft.module_id())?
+            slot: slot.get_public(&*db)?,
+            user: slot.get_occupant(&*db, &draft)?
                 .map(|user| user.get_public(Fields::empty())),
         }))
         .collect::<Result<Vec<_>>>()?;
@@ -414,9 +493,9 @@ pub fn assign_slot(
     let slot = Slot::by_id(&*db, slot)?;
     let user = User::by_id(&*db, *user)?;
 
-    slot.fill_with(&*db, draft.module_id(), &user)?;
+    slot.fill_with(&*db, &draft, &user)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 #[derive(ApiError, Debug, Fail)]

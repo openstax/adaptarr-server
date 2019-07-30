@@ -1,20 +1,28 @@
-use actix_web::{Responder, fs::NamedFile};
+use adaptarr_macros::From;
+use actix_web::{
+    HttpRequest,
+    HttpResponse,
+    Responder,
+    fs::NamedFile,
+    http::header::{ETAG, ContentDisposition, IntoHeaderValue},
+};
 use blake2::blake2b::{Blake2b, Blake2bResult};
 use diesel::{
     prelude::*,
     result::Error as DbError,
 };
 use failure::Fail;
-use futures::{Future, Stream, future};
+use futures::{Future, Stream as _, future};
 use std::{
     fs,
-    io::{self, Read, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 use tempfile::{Builder as TempBuilder, NamedTempFile};
 
 use crate::{
     ApiError,
+    api::util::EntityTag,
     config::{Config, Storage},
     db::{
         Connection,
@@ -34,6 +42,9 @@ thread_local! {
         cookie
     };
 }
+
+/// MIME-type of a CNXML file.
+pub static CNXML_MIME: &str = "application/vnd.openstax.cnx+xml";
 
 /// A virtual file.
 #[derive(Debug)]
@@ -58,10 +69,14 @@ impl File {
     }
 
     /// Create new file from a stream of bytes.
-    pub fn from_stream<S, I, E>(dbpool: Pool, storage: PathBuf, data: S)
-        -> impl Future<Item=File, Error=E>
+    pub fn from_stream<S, I, E>(
+        dbpool: Pool,
+        storage: PathBuf,
+        data: S,
+        mime: Option<&'static str>,
+    ) -> impl Future<Item=File, Error=E>
     where
-        S: Stream<Item=I>,
+        S: futures::Stream<Item=I>,
         I: AsRef<[u8]>,
         E: From<CreateFileError>,
         E: From<S::Error>,
@@ -74,13 +89,17 @@ impl File {
                 dbpool.get()
                     .map_err(Into::into)
                     .and_then(|db|
-                        File::from_file_with_hash(&*db, storage, tmp, hash))
+                        File::from_file_with_hash(&*db, storage, tmp, hash, mime))
                     .map_err(E::from)))
     }
 
     /// Create new file from a data in memory.
-    pub fn from_data<B>(dbconn: &Connection, config: &Config, data: B)
-        -> Result<File, CreateFileError>
+    pub fn from_data<'c, B>(
+        dbconn: &Connection,
+        config: &Config,
+        data: B,
+        mime: Option<&str>,
+    ) -> Result<File, CreateFileError>
     where
         B: AsRef<[u8]>,
     {
@@ -103,12 +122,17 @@ impl File {
                 let mut file = std::fs::File::create(&path)?;
                 file.write_all(data.as_ref())?;
 
-                let mime = MAGIC.with(|magic| magic.file(&path))
-                    .expect("libmagic to work");
+                let magic = match mime {
+                    Some(_) => None,
+                    None => Some(MAGIC.with(|magic| magic.file(&path))
+                        .expect("libmagic to work")),
+                };
+
+                let mime = mime.or(magic.as_ref().map(String::as_str)).unwrap();
 
                 diesel::insert_into(files::table)
                     .values(db::NewFile {
-                        mime: &mime,
+                        mime,
                         path: path.to_str().expect("invalid path"),
                         hash: hash.as_bytes(),
                     })
@@ -120,8 +144,12 @@ impl File {
     }
 
     /// Create new file from any type implementing [`std::io::Write`].
-    pub fn from_read<R>(dbconn: &Connection, config: &Storage, mut read: R)
-        -> Result<File, CreateFileError>
+    pub fn from_read<'c, R>(
+        dbconn: &Connection,
+        config: &Storage,
+        mut read: R,
+        mime: Option<&str>,
+    ) -> Result<File, CreateFileError>
     where
         R: Read,
     {
@@ -133,17 +161,36 @@ impl File {
             hash.finalize()
         };
 
-        File::from_file_with_hash(dbconn, &config.path, tmp, digest)
+        File::from_file_with_hash(dbconn, &config.path, tmp, digest, mime)
+    }
+
+    /// Create a new file from a temporary file.
+    pub fn from_temporary(
+        dbconn: &Connection,
+        config: &Storage,
+        mut file: NamedTempFile,
+        mime: Option<&str>,
+    ) -> Result<File, CreateFileError> {
+        let digest = {
+            let mut sink = io::sink();
+            let mut hash = HashWriter::new(64, &mut sink);
+            file.seek(SeekFrom::Start(0))?;
+            io::copy(&mut file, &mut hash)?;
+            hash.finalize()
+        };
+
+        File::from_file_with_hash(dbconn, &config.path, file, digest, mime)
     }
 
     /// Create new file from a temporary file and hash.
     ///
     /// This is an internal constructor.
-    fn from_file_with_hash<P>(
+    fn from_file_with_hash<'c, P>(
         dbconn: &Connection,
         storage: P,
         file: NamedTempFile,
         hash: Blake2bResult,
+        mime: Option<&str>,
     ) -> Result<File, CreateFileError>
     where
         P: AsRef<Path>,
@@ -161,12 +208,17 @@ impl File {
                 let path = storage.as_ref().join(name);
                 let _ = file.persist(&path)?;
 
-                let mime = MAGIC.with(|magic| magic.file(&path))
-                    .expect("libmagic to work");
+                let magic = match mime {
+                    Some(_) => None,
+                    None => Some(MAGIC.with(|magic| magic.file(&path))
+                        .expect("libmagic to work")),
+                };
+
+                let mime = mime.or(magic.as_ref().map(String::as_str)).unwrap();
 
                 diesel::insert_into(files::table)
                     .values(db::NewFile {
-                        mime: &mime,
+                        mime,
                         path: path.to_str().expect("invalid path"),
                         hash: hash.as_bytes(),
                     })
@@ -183,10 +235,8 @@ impl File {
     }
 
     /// Get an Actix responder streaming contents of this file.
-    pub fn stream(&self, cfg: &Config) -> impl Responder {
-        let hash = bytes_to_hex(&self.data.hash);
-        let path = cfg.storage.path.join(hash);
-        NamedFile::open(path)
+    pub fn stream(&self, cfg: &Config) -> std::io::Result<Stream> {
+        Stream::open(self, cfg)
     }
 
     /// Read contents of this file into memory as a [`String`].
@@ -196,6 +246,11 @@ impl File {
 
     pub fn open(&self) -> Result<impl Read, io::Error> {
         std::fs::File::open(&self.data.path)
+    }
+
+    pub fn entity_tag(&self) -> EntityTag<'static> {
+        // Base64 encoding only uses bytes allowed in entity tags
+        EntityTag::strong(base64::encode(&self.hash)).unwrap()
     }
 }
 
@@ -207,50 +262,45 @@ impl std::ops::Deref for File {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindFileError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// File not found.
     #[fail(display = "No such file")]
     #[api(code = "file:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
-impl_from! { for FindFileError ;
-    DbError => |e| FindFileError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum CreateFileError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Obtaining connection from a pool of database connections.
     #[fail(display = "Pooling database connection: {}", _0)]
     #[api(internal)]
-    DbPool(#[cause] r2d2::Error),
+    DbPool(#[cause] #[from] r2d2::Error),
     /// System error.
     #[fail(display = "System error: {}", _0)]
     #[api(internal)]
-    System(#[cause] io::Error),
+    System(#[cause] #[from] io::Error),
 }
 
-impl_from! { for CreateFileError ;
-    DbError => |e| CreateFileError::Database(e),
-    r2d2::Error => |e| CreateFileError::DbPool(e),
-    io::Error => |e| CreateFileError::System(e),
-    tempfile::PersistError => |e| CreateFileError::System(e.error),
+impl From<tempfile::PersistError> for CreateFileError {
+    fn from(e: tempfile::PersistError) -> Self {
+        CreateFileError::System(e.error)
+    }
 }
 
 /// Write stream into a sink and return hash of its contents.
 fn copy_hash<S, C, W, E>(nn: usize, input: S, output: W)
     -> impl Future<Item=(Blake2bResult, W), Error=E>
 where
-    S: Stream<Item=C>,
+    S: futures::Stream<Item=C>,
     C: AsRef<[u8]>,
     W: Write,
     E: From<S::Error>,
@@ -304,5 +354,44 @@ where
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
+    }
+}
+
+pub struct Stream {
+    stream: NamedFile,
+    hash: Vec<u8>,
+}
+
+impl Stream {
+    fn open(file: &File, cfg: &Config) -> std::io::Result<Stream> {
+        let hash = bytes_to_hex(&file.data.hash);
+        let path = cfg.storage.path.join(hash);
+        let mime = file.data.mime.parse().expect("invalid mime type in database");
+        let stream = NamedFile::open(path)?.set_content_type(mime);
+
+        Ok(Stream {
+            stream,
+            hash: file.hash.clone(),
+        })
+    }
+
+    pub fn set_content_disposition(mut self, cd: ContentDisposition) -> Self {
+        self.stream = self.stream.set_content_disposition(cd);
+        self
+    }
+}
+
+impl Responder for Stream {
+    type Item = HttpResponse;
+    type Error = <NamedFile as Responder>::Error;
+
+    fn respond_to<S: 'static>(self, req: &HttpRequest<S>)
+    -> Result<Self::Item, Self::Error> {
+        let mut rsp = self.stream.respond_to(req)?;
+
+        let etag = format!(r#""{}""#, base64::encode(&self.hash));
+        rsp.headers_mut().insert(ETAG, etag.try_into().unwrap());
+
+        Ok(rsp)
     }
 }

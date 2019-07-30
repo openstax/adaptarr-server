@@ -13,10 +13,10 @@ pub use self::cli::main;
 
 pub(crate) use self::config::Config;
 
-#[macro_use] mod macros;
 #[macro_use] mod multipart;
 
 pub mod api;
+pub mod audit;
 pub mod cli;
 pub mod config;
 pub mod db;

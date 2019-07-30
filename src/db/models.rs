@@ -35,6 +35,7 @@ pub struct NewUser<'a> {
     pub is_super: bool,
     pub language: &'a str,
     pub permissions: i32,
+    pub role: Option<i32>,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug)]
@@ -91,6 +92,7 @@ pub struct Invite {
     pub email: String,
     /// Date by which this invitation becomes unusable.
     pub expires: NaiveDateTime,
+    pub role: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -98,6 +100,7 @@ pub struct Invite {
 pub struct NewInvite<'s> {
     pub email: &'s str,
     pub expires: NaiveDateTime,
+    pub role: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Identifiable, Queryable)]
@@ -410,8 +413,6 @@ pub struct EditProcessSlot {
     pub process: i32,
     /// Slot's name.
     pub name: String,
-    /// When set, role to which this slot is limited.
-    pub role: Option<i32>,
     /// Whether the system should automatically fill this slot with a user.
     pub autofill: bool,
 }
@@ -421,8 +422,17 @@ pub struct EditProcessSlot {
 pub struct NewEditProcessSlot<'a> {
     pub process: i32,
     pub name: &'a str,
-    pub role: Option<i32>,
     pub autofill: bool,
+}
+
+/// Limit on which users
+#[derive(Associations, Clone, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(slot, role)]
+pub struct EditProcessSlotRole {
+    /// Slot to which this limit applies.
+    pub slot: i32,
+    /// Role to which the slot is limited.
+    pub role: i32,
 }
 
 /// A single editing step.
@@ -484,6 +494,64 @@ pub struct NewEditProcessLink<'a> {
     pub to: i32,
     pub name: &'a str,
     pub slot: i32,
+}
+
+#[derive(Clone, Debug, Queryable)]
+pub struct AuditLog {
+    /// Event's ID.
+    pub id: i32,
+    /// Date and time when this event was logged.
+    pub timestamp: NaiveDateTime,
+    /// User who caused this event, or `None` for automated actions carried by
+    /// the system or CLI.
+    pub actor: Option<i32>,
+    /// Context in which this event occurred.
+    ///
+    /// This field is primarily used to identify the kind of resource pointed
+    /// to by either `context_id` or `context_uuid`.
+    pub context: String,
+    /// ID of the context of this event, if it is an integer.
+    pub context_id: Option<i32>,
+    /// ID of the context of this event, if it is a UUID.
+    pub context_uuid: Option<Uuid>,
+    /// What kind of event is this?
+    pub kind: String,
+    /// Data associated with this event.
+    pub data: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "audit_log"]
+pub struct NewAuditLog<'a> {
+    pub actor: Option<i32>,
+    pub context: &'a str,
+    pub context_id: Option<i32>,
+    pub context_uuid: Option<Uuid>,
+    pub kind: &'a str,
+    pub data: &'a [u8],
+}
+
+#[derive(Clone, Debug, Identifiable, Insertable, Queryable)]
+pub struct Resource {
+    /// Resource's ID.
+    pub id: Uuid,
+    /// Resource's name.
+    pub name: String,
+    /// File associated with this resource.
+    ///
+    /// When `None` this resource is a ‘folder’ containing other resources.
+    pub file: Option<i32>,
+    /// ‘Folder’ containing this resource.
+    pub parent: Option<Uuid>,
+}
+
+#[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
+#[table_name = "resources"]
+pub struct NewResource<'a> {
+    pub id: Uuid,
+    pub name: &'a str,
+    pub file: Option<i32>,
+    pub parent: Option<Uuid>,
 }
 
 #[derive(Clone, Copy, Debug, Identifiable, Queryable)]

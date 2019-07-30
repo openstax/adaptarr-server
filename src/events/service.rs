@@ -17,7 +17,7 @@ use diesel::{
 };
 use itertools::Itertools;
 use serde::Serialize;
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::{
     config::{self, Config},
@@ -50,13 +50,31 @@ const NOTIFY_INTERVAL: Duration = Duration::from_secs(60);
 ///
 /// After receiving this message the event manager will persist `event` in
 /// the database, and attempt to notify the user.
-pub struct Notify {
-    pub user: User,
+pub struct Notify<T: NotifyTarget> {
+    pub target: T,
     pub event: Event,
 }
 
-impl Message for Notify {
+impl<T: NotifyTarget> Message for Notify<T> {
     type Result = ();
+}
+
+/// Trait for types describing a target of a notification.
+///
+/// This abstraction is used to allow sending events to a variety of targets,
+/// such as a raw user ID (`i32`), a user model (`User`), or a number of targets
+/// at once (`Vec`).
+pub trait NotifyTarget {
+    type Iter: IntoIterator<Item = i32>;
+
+    /// Convert this target into ID of users to notify.
+    fn into_user_ids(self) -> Self::Iter;
+}
+
+pub trait IntoNotifyTarget {
+    type Target: NotifyTarget;
+
+    fn into_notify_target(self) -> Self::Target;
 }
 
 /// Message sent to all interested listeners when a new event is created.
@@ -66,7 +84,7 @@ impl Message for Notify {
 pub struct NewEvent {
     pub id: i32,
     pub timestamp: NaiveDateTime,
-    pub event: Event,
+    pub event: Arc<Event>,
 }
 
 impl Message for NewEvent {
@@ -106,13 +124,15 @@ impl EventManager {
     /// Emit an event.
     ///
     /// Errors will be logged, but otherwise ignored.
-    pub fn notify<E>(user: User, event: E)
+    pub fn notify<T, E>(target: T, event: E)
     where
+        T: IntoNotifyTarget,
+        T::Target: Send + 'static,
         Event: From<E>,
     {
         let manager = EventManager::from_registry();
         let message = Notify {
-            user,
+            target: target.into_notify_target(),
             event: Event::from(event),
         };
 
@@ -126,28 +146,32 @@ impl EventManager {
     /// This method will create a new database entry and notify event listeners.
     /// It will not however send out email notifications, as this is done
     /// periodically, not immediately after an event is created.
-    fn do_notify(&mut self, msg: Notify) -> Result<(), Error> {
-        let Notify { user, event } = msg;
+    fn do_notify<T: NotifyTarget>(&mut self, msg: Notify<T>) -> Result<(), Error> {
+        let Notify { target, event } = msg;
 
         let db = self.pool.get()?;
 
         let mut data = Vec::new();
         event.serialize(&mut rmps::Serializer::new(&mut data))?;
 
-        let ev = diesel::insert_into(events::table)
-            .values(&db::NewEvent {
-                user: user.id,
-                kind: event.kind(),
-                data: &data,
-            })
-            .get_result::<db::Event>(&*db)?;
+        let event = Arc::new(event);
 
-        if let Some(stream) = self.streams.get(&user.id) {
-            let _ = stream.do_send(NewEvent {
-                id: ev.id,
-                timestamp: ev.timestamp,
-                event,
-            });
+        for user in target.into_user_ids() {
+            let ev = diesel::insert_into(events::table)
+                .values(&db::NewEvent {
+                    user,
+                    kind: event.kind(),
+                    data: &data,
+                })
+                .get_result::<db::Event>(&*db)?;
+
+            if let Some(stream) = self.streams.get(&user) {
+                let _ = stream.do_send(NewEvent {
+                    id: ev.id,
+                    timestamp: ev.timestamp,
+                    event: event.clone(),
+                });
+            }
         }
 
         Ok(())
@@ -204,7 +228,7 @@ impl EventManager {
     ) -> Result<(), Error> {
         let groups = events
             .into_iter()
-            .group_by(|event| Kind::from_str(&event.kind));
+            .group_by(|event| Kind::from_str(&event.kind).group());
 
         let mut groupped = Vec::new();
 
@@ -219,7 +243,7 @@ impl EventManager {
         let locale = self.i18n.find_locale(&user.language())
             .expect("user's preferred language to exist");
 
-        Mailer::send(
+        Mailer::do_send(
             user.mailbox(),
             "notify",
             "mail-notify-subject",
@@ -265,10 +289,10 @@ impl Supervised for EventManager {
 impl SystemService for EventManager {
 }
 
-impl Handler<Notify> for EventManager {
+impl<T: NotifyTarget> Handler<Notify<T>> for EventManager {
     type Result = ();
 
-    fn handle(&mut self, msg: Notify, _: &mut Context<Self>) {
+    fn handle(&mut self, msg: Notify<T>, _: &mut Context<Self>) {
         match self.do_notify(msg) {
             Ok(()) => (),
             Err(err) => {
@@ -293,5 +317,65 @@ impl Handler<UnregisterListener> for EventManager {
     fn handle(&mut self, msg: UnregisterListener, _: &mut Self::Context) {
         let UnregisterListener { user, .. } = msg;
         self.streams.remove(&user);
+    }
+}
+
+impl<T: NotifyTarget> IntoNotifyTarget for T {
+    type Target = T;
+
+    fn into_notify_target(self) -> Self::Target {
+        self
+    }
+}
+
+impl NotifyTarget for User {
+    type Iter = std::iter::Once<i32>;
+
+    fn into_user_ids(self) -> Self::Iter {
+        std::iter::once(self.id)
+    }
+}
+
+impl IntoNotifyTarget for &User {
+    type Target = i32;
+
+    fn into_notify_target(self) -> Self::Target {
+        self.id
+    }
+}
+
+impl NotifyTarget for db::User {
+    type Iter = std::iter::Once<i32>;
+
+    fn into_user_ids(self) -> Self::Iter {
+        std::iter::once(self.id)
+    }
+}
+
+impl IntoNotifyTarget for &db::User {
+    type Target = i32;
+
+    fn into_notify_target(self) -> Self::Target {
+        self.id
+    }
+}
+
+impl NotifyTarget for i32 {
+    type Iter = std::iter::Once<i32>;
+
+    fn into_user_ids(self) -> Self::Iter {
+        std::iter::once(self)
+    }
+}
+
+impl<T: NotifyTarget> NotifyTarget for Vec<T> {
+    type Iter = std::iter::FlatMap<
+        std::vec::IntoIter<T>,
+        <T as NotifyTarget>::Iter,
+        fn(T) -> <T as NotifyTarget>::Iter,
+    >;
+
+    fn into_user_ids(self) -> Self::Iter {
+        self.into_iter().flat_map(NotifyTarget::into_user_ids)
     }
 }

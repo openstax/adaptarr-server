@@ -1,4 +1,17 @@
 table! {
+    audit_log (id) {
+        id -> Int4,
+        timestamp -> Timestamp,
+        actor -> Nullable<Int4>,
+        context -> Varchar,
+        context_id -> Nullable<Int4>,
+        context_uuid -> Nullable<Uuid>,
+        kind -> Varchar,
+        data -> Bytea,
+    }
+}
+
+table! {
     book_parts (book, id) {
         book -> Uuid,
         id -> Int4,
@@ -92,11 +105,17 @@ table! {
 }
 
 table! {
+    edit_process_slot_roles (slot, role) {
+        slot -> Int4,
+        role -> Int4,
+    }
+}
+
+table! {
     edit_process_slots (id) {
         id -> Int4,
         process -> Int4,
         name -> Varchar,
-        role -> Nullable<Int4>,
         autofill -> Bool,
     }
 }
@@ -151,6 +170,7 @@ table! {
         id -> Int4,
         email -> Varchar,
         expires -> Timestamp,
+        role -> Nullable<Int4>,
     }
 }
 
@@ -174,6 +194,15 @@ table! {
         id -> Int4,
         user -> Int4,
         expires -> Timestamp,
+    }
+}
+
+table! {
+    resources (id) {
+        id -> Uuid,
+        name -> Varchar,
+        file -> Nullable<Int4>,
+        parent -> Nullable<Uuid>,
     }
 }
 
@@ -222,6 +251,7 @@ table! {
     }
 }
 
+joinable!(audit_log -> users (actor));
 joinable!(book_parts -> books (book));
 joinable!(book_parts -> modules (module));
 joinable!(conversation_events -> conversations (conversation));
@@ -238,21 +268,25 @@ joinable!(drafts -> documents (document));
 joinable!(drafts -> edit_process_steps (step));
 joinable!(drafts -> modules (module));
 joinable!(edit_process_links -> edit_process_slots (slot));
+joinable!(edit_process_slot_roles -> edit_process_slots (slot));
+joinable!(edit_process_slot_roles -> roles (role));
 joinable!(edit_process_slots -> edit_process_versions (process));
-joinable!(edit_process_slots -> roles (role));
 joinable!(edit_process_step_slots -> edit_process_slots (slot));
 joinable!(edit_process_step_slots -> edit_process_steps (step));
 joinable!(edit_process_versions -> edit_processes (process));
 joinable!(events -> users (user));
+joinable!(invites -> roles (role));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
 joinable!(modules -> documents (document));
 joinable!(password_reset_tokens -> users (user));
+joinable!(resources -> files (file));
 joinable!(sessions -> users (user));
 joinable!(users -> roles (role));
 joinable!(xref_targets -> documents (document));
 
 allow_tables_to_appear_in_same_query!(
+    audit_log,
     book_parts,
     books,
     conversation_events,
@@ -264,6 +298,7 @@ allow_tables_to_appear_in_same_query!(
     draft_slots,
     edit_processes,
     edit_process_links,
+    edit_process_slot_roles,
     edit_process_slots,
     edit_process_steps,
     edit_process_step_slots,
@@ -274,6 +309,7 @@ allow_tables_to_appear_in_same_query!(
     modules,
     module_versions,
     password_reset_tokens,
+    resources,
     roles,
     sessions,
     users,

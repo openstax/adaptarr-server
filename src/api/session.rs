@@ -9,13 +9,17 @@ use actix_web::{
     http::Cookie,
 };
 use chrono::{Duration, Utc};
+use cookie::SameSite;
 use diesel::{prelude::*, result::{Error as DbError}};
 use failure::Fail;
 use std::marker::PhantomData;
 
 use crate::{
     ApiError,
+    audit,
+    config,
     db::{
+        self,
         Connection,
         Pool,
         models::{Session as DbSession, NewSession, SessionUpdate},
@@ -45,6 +49,8 @@ const SUPER_EXPIRATION: i64 = 15;
 pub struct SessionManager {
     /// Secret key used to seal and unseal session cookies.
     secret: Vec<u8>,
+    /// Domain for which session cookies are valid.
+    domain: &'static str,
     /// Pool of database connections.
     db: Pool,
 }
@@ -112,10 +118,6 @@ struct SessionData {
 }
 
 impl SessionManager {
-    pub fn new(secret: Vec<u8>, db: Pool) -> SessionManager {
-        SessionManager { secret, db }
-    }
-
     fn validate(ses: &DbSession) -> Validation {
         let now = Utc::now().naive_utc();
 
@@ -144,6 +146,19 @@ impl SessionManager {
         }
 
         Validation::Pass
+    }
+}
+
+impl Default for SessionManager {
+    fn default() -> SessionManager {
+        let config = config::load().expect("configuration should be ready");
+        let db = db::pool().expect("database should be ready");
+
+        SessionManager {
+            secret: config.server.secret.clone(),
+            domain: &config.server.domain,
+            db,
+        }
     }
 }
 
@@ -200,6 +215,7 @@ impl<S> Middleware<S> for SessionManager {
                 new: None,
                 destroy: false,
             });
+            audit::set_actor(audit::Actor::User(session.user));
         }
 
         Ok(Started::Done)
@@ -207,6 +223,8 @@ impl<S> Middleware<S> for SessionManager {
 
     fn response(&self, req: &HttpRequest<S>, mut rsp: HttpResponse) -> Result<Response> {
         if let Some(session) = req.extensions().get::<SessionData>() {
+            audit::set_actor(None);
+
             let now = Utc::now().naive_utc();
             let db = self.db.get()
                 .map_err(|e| ErrorInternalServerError(e.to_string()))?;
@@ -215,7 +233,15 @@ impl<S> Middleware<S> for SessionManager {
                 diesel::delete(&session.existing.unwrap())
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-                rsp.add_cookie(&Cookie::new(COOKIE, ""))?;
+                let cookie = Cookie::build(COOKIE, "")
+                    .domain(self.domain)
+                    .path("/")
+                    .max_age(Duration::zero())
+                    .secure(!cfg!(debug_assertions))
+                    .http_only(!cfg!(debug_assertions))
+                    .same_site(SameSite::Strict)
+                    .finish();
+                rsp.add_cookie(&cookie)?;
             } else if let Some(new) = session.new {
                 if let Some(session) = session.existing {
                     diesel::delete(&session)
@@ -231,9 +257,12 @@ impl<S> Middleware<S> for SessionManager {
                 let value = utils::seal(&self.secret, session.id)
                     .expect("sealing session ID");
                 let cookie = Cookie::build(COOKIE, base64::encode(&value))
+                    .domain(self.domain)
+                    .path("/")
                     .max_age(Duration::days(MAX_DURATION))
                     .secure(!cfg!(debug_assertions))
                     .http_only(!cfg!(debug_assertions))
+                    .same_site(SameSite::Strict)
                     .finish();
                 rsp.add_cookie(&cookie)?;
             } else if let Some(session) = session.existing {

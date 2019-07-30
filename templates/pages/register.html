@@ -1,6 +1,11 @@
 {% extends "_base.html" %}
 {% block body %}
     <form method="post">
+        <h1>
+            {% filter translate(key="register-title") %}
+                Create account
+            {% endfilter %}
+        </h1>
         {% if error %}
             <div class="error">{{ _(key="register-error", code=error) }}</div>
         {% endif %}

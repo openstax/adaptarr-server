@@ -1,6 +1,11 @@
 {% extends "_base.html" %}
 {% block body %}
     <form method="post">
+        <h1>
+            {% filter translate(key="login-title") %}
+                Welcome to Adaptarr!
+            {% endfilter %}
+        </h1>
         {% if error %}
             <div class="error">{{ _(key="login-error", code=error) }}</div>
         {% endif %}

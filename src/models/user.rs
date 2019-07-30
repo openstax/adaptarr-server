@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use bitflags::bitflags;
 use diesel::{
     Connection as _Connection,
@@ -11,6 +12,7 @@ use serde::Serialize;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -109,12 +111,14 @@ impl User {
     /// Create a new user.
     pub fn create(
         dbcon: &Connection,
+        actor: Option<i32>,
         email: &str,
         name: &str,
         password: &str,
         is_super: bool,
         language: &str,
         permissions: PermissionBits,
+        role: Option<&Role>,
     ) -> Result<User, CreateUserError> {
         if name.is_empty() {
             return Err(CreateUserError::EmptyName);
@@ -141,7 +145,7 @@ impl User {
                 .execute(dbcon)
                 .map_err(CreateUserError::Internal)?;
 
-            diesel::insert_into(users::table)
+            let data = diesel::insert_into(users::table)
                 .values(db::NewUser {
                     email,
                     name,
@@ -154,10 +158,21 @@ impl User {
                     } else {
                         permissions.bits()
                     },
+                    role: role.map(|r| r.id),
                 })
-                .get_result::<db::User>(dbcon)
-                .map(|data| User { data, role: None })
-                .map_err(Into::into)
+                .get_result::<db::User>(dbcon)?;
+
+            let actor = actor.unwrap_or(data.id);
+            audit::log_db_actor(
+                dbcon, actor, "users", data.id, "create", LogNewUser {
+                    email,
+                    name,
+                    is_super,
+                    language,
+                    permissions: data.permissions,
+                });
+
+            Ok(User { data, role: None })
         })
     }
 
@@ -262,6 +277,8 @@ impl User {
             diesel::delete(sessions::table.filter(sessions::user.eq(self.id)))
                 .execute(dbcon)?;
 
+            audit::log_db(dbcon, "users", self.id, "change-password", ());
+
             // Update credentials.
             diesel::update(&self.data)
                 .set(db::PasswordChange {
@@ -282,6 +299,9 @@ impl User {
         self.data = diesel::update(&self.data)
             .set(users::name.eq(name))
             .get_result::<db::User>(dbcon)?;
+
+        audit::log_db(dbcon, "users", self.id, "set-name", name);
+
         Ok(())
     }
 
@@ -296,6 +316,8 @@ impl User {
             .get_result::<db::User>(dbcon)?;
 
         self.data = data;
+
+        audit::log_db(dbcon, "users", self.id, "change-language", language);
 
         Ok(())
     }
@@ -315,6 +337,9 @@ impl User {
             | self.role.as_ref().map_or(PermissionBits::empty(), Role::permissions);
 
         let data = dbcon.transaction(|| {
+            audit::log_db(
+                dbcon, "users", self.id, "set-permissions", permissions.bits());
+
             // Since we might be removing a permission we also need to update
             // user's sessions.
             diesel::update(sessions::table.filter(
@@ -354,6 +379,8 @@ impl User {
         };
 
         let data = dbcon.transaction(|| {
+            audit::log_db(dbcon, "users", self.id, "set-role", role_id);
+
             // Since user's previous role might have had more permissions
             // we also need to update user's sessions.
             diesel::update(sessions::table.filter(
@@ -388,20 +415,16 @@ impl std::ops::Deref for User {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindUserError {
     /// Creation failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Internal(#[cause] DbError),
+    Internal(#[cause] #[from] DbError),
     /// No user found for given email address.
     #[fail(display = "No such user")]
     #[api(code = "user:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindUserError ;
-    DbError => |e| FindUserError::Internal(e),
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -422,49 +445,60 @@ pub enum CreateUserError {
     EmptyPassword,
 }
 
-impl_from! { for CreateUserError ;
-    DbError => |e| match e {
-        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
-            => CreateUserError::Duplicate,
-        _ => CreateUserError::Internal(e),
-    },
+impl From<DbError> for CreateUserError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)
+                => CreateUserError::Duplicate,
+            _ => CreateUserError::Internal(e),
+        }
+    }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum UserAuthenticateError {
     /// Authentication failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Internal(#[cause] DbError),
+    Internal(#[cause] #[from] DbError),
     /// No user found for given email address.
     #[fail(display = "No such user")]
     #[api(code = "user:not-found", status = "NOT_FOUND")]
     NotFound,
     /// Provided password was not valid for the user.
     #[fail(display = "Bad password")]
-    #[api(code = "user:authenticate:bad-password", status = "BAD_REQUEST")]
+    #[api(code = "user:authenticate:bad-password", status = "FORBIDDEN")]
     BadPassword,
 }
 
-impl_from! { for UserAuthenticateError ;
-    DbError => |e| UserAuthenticateError::Internal(e),
-    FindUserError => |e| match e {
-        FindUserError::Internal(e) => UserAuthenticateError::Internal(e),
-        FindUserError::NotFound => UserAuthenticateError::NotFound,
-    },
+impl From<FindUserError> for UserAuthenticateError {
+    fn from(e: FindUserError) -> Self {
+        match e {
+            FindUserError::Internal(e) => UserAuthenticateError::Internal(e),
+            FindUserError::NotFound => UserAuthenticateError::NotFound,
+        }
+    }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum ChangePasswordError {
     /// Authentication failed due to a database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Internal(#[cause] DbError),
+    Internal(#[cause] #[from] DbError),
     #[fail(display = "Password cannot be empty")]
     #[api(code = "user:change-password:empty", status = "BAD_REQUEST")]
     EmptyPassword,
 }
 
-impl_from! { for ChangePasswordError ;
-    DbError => |e| ChangePasswordError::Internal(e),
+#[derive(Serialize)]
+struct LogNewUser<'a> {
+    email: &'a str,
+    name: &'a str,
+    is_super: bool,
+    language: &'a str,
+    // XXX: we serialize permissions as bits as rmp-serde currently works as
+    // a human-readable format, and serializes PermissionBits as an array of
+    // strings.
+    permissions: i32,
 }

@@ -1,4 +1,5 @@
 use actix::prelude::*;
+use adaptarr_macros::From;
 use bytes::Bytes;
 use chrono::NaiveDateTime;
 use diesel::{prelude::*, result::Error as DbError};
@@ -113,20 +114,14 @@ pub struct NewMessage {
     pub message: Bytes,
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum NewMessageError {
     #[fail(display = "malformed message: {}", _0)]
-    Validation(#[cause] ValidationError),
+    Validation(#[cause] #[from] ValidationError),
     #[fail(display = "internal error")]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     #[fail(display = "internal error")]
-    DbPool(#[cause] r2d2::Error),
-}
-
-impl_from! { for NewMessageError ;
-    ValidationError => |e| NewMessageError::Validation(e),
-    DbError => |e| NewMessageError::Database(e),
-    r2d2::Error => |e| NewMessageError::DbPool(e),
+    DbPool(#[cause] #[from] r2d2::Error),
 }
 
 impl Message for NewMessage {
@@ -199,17 +194,12 @@ pub struct GetHistory {
     pub number: u16,
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum GetHistoryError {
     #[fail(display = "internal error")]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     #[fail(display = "internal error")]
-    DbPool(#[cause] r2d2::Error),
-}
-
-impl_from! { for GetHistoryError ;
-    DbError => |e| GetHistoryError::Database(e),
-    r2d2::Error => |e| GetHistoryError::DbPool(e),
+    DbPool(#[cause] #[from] r2d2::Error),
 }
 
 impl Message for GetHistory {

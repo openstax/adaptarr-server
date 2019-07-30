@@ -1,4 +1,5 @@
 use actix_web::ws::CloseCode;
+use adaptarr_macros::From;
 use bitflags::bitflags;
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use chrono::NaiveDateTime;
@@ -243,26 +244,16 @@ pub trait MessageBody: Sized {
     fn read(from: Bytes) -> Result<Self, ParseMessageError>;
 }
 
+#[derive(From)]
 pub enum AnyMessage {
-    Connected(Connected),
-    NewMessage(NewMessage),
-    SendMessage(SendMessage),
-    GetHistory(GetHistory),
+    Connected(#[from] Connected),
+    NewMessage(#[from] NewMessage),
+    SendMessage(#[from] SendMessage),
+    GetHistory(#[from] GetHistory),
     UnknownEvent,
-    MessageReceived(MessageReceived),
-    MessageInvalid(MessageInvalid),
-    HistoryEntries(HistoryEntries),
-}
-
-impl_from! { for AnyMessage ;
-    Connected => |e| AnyMessage::Connected(e),
-    NewMessage => |e| AnyMessage::NewMessage(e),
-    SendMessage => |e| AnyMessage::SendMessage(e),
-    GetHistory => |e| AnyMessage::GetHistory(e),
-    UnknownEvent => |_| AnyMessage::UnknownEvent,
-    MessageReceived => |e| AnyMessage::MessageReceived(e),
-    MessageInvalid => |e| AnyMessage::MessageInvalid(e),
-    HistoryEntries => |e| AnyMessage::HistoryEntries(e),
+    MessageReceived(#[from] MessageReceived),
+    MessageInvalid(#[from] MessageInvalid),
+    HistoryEntries(#[from] HistoryEntries),
 }
 
 impl AnyMessage {

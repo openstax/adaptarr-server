@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use actix::SystemService;
 use diesel::{
     Connection as _Connection,
@@ -5,11 +6,13 @@ use diesel::{
     result::Error as DbError,
 };
 use failure::Fail;
+use itertools::Itertools;
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -25,6 +28,7 @@ use crate::{
         },
         types::SlotPermission,
     },
+    events::{DraftAdvanced, EventManager, ProcessEnded, ProcessCancelled},
     permissions::PermissionBits,
     processing::{ProcessDocument, TargetProcessor},
 };
@@ -33,7 +37,7 @@ use super::{
     Module,
     User,
     document::{Document, PublicData as DocumentData},
-    editing::{Step, StepData, Version, slot::FillSlotError},
+    editing::{Step, StepData, Slot, Version, slot::FillSlotError},
 };
 
 #[derive(Debug)]
@@ -51,6 +55,8 @@ pub struct PublicData {
     pub permissions: Option<Vec<SlotPermission>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub step: Option<StepData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub books: Option<Vec<Uuid>>,
 }
 
 impl Draft {
@@ -115,8 +121,20 @@ impl Draft {
     /// Delete this draft.
     pub fn delete(self, dbconn: &Connection) -> Result<(), DbError> {
         dbconn.transaction(|| {
+            let members = draft_slots::table
+                .filter(draft_slots::draft.eq(self.data.module))
+                .select(draft_slots::user)
+                .get_results::<i32>(dbconn)?;
+
             diesel::delete(&self.data).execute(dbconn)?;
             self.document.delete(dbconn)?;
+
+            audit::log_db(dbconn, "drafts", self.data.module, "delete", ());
+
+            EventManager::notify(members, ProcessCancelled {
+                module: self.data.module,
+            });
+
             Ok(())
         })
     }
@@ -159,6 +177,7 @@ impl Draft {
             step: self.get_step(dbconn)?
                 .get_public(dbconn, Some((self.data.module, user)))
                 .map(Some)?,
+            books: self.get_books(dbconn).map(Some)?,
         })
     }
 
@@ -170,6 +189,7 @@ impl Draft {
             document: self.document.get_public(),
             permissions: None,
             step: None,
+            books: None,
         }
     }
 
@@ -191,12 +211,18 @@ impl Draft {
             return Ok(true);
         }
 
-        draft_slots::table
+        let member = draft_slots::table
             .select(diesel::dsl::count(draft_slots::user))
             .filter(draft_slots::draft.eq(self.data.module)
                 .and(draft_slots::user.eq(user.id)))
             .get_result::<i64>(dbconn)
-            .map(|c| c > 0)
+            .map(|c| c > 0)?;
+        if member {
+            return Ok(true);
+        }
+
+        let could_assign = Slot::free_in_draft_for(dbconn, self, user.role)?;
+        Ok(could_assign)
     }
 
     /// Check that a user currently possesses specified slot permissions.
@@ -223,24 +249,33 @@ impl Draft {
     /// a new file will be created.
     pub fn write_file(&self, dbconn: &Connection, name: &str, file: &File)
     -> Result<(), DbError> {
-        if name == "index.cnxml" {
-            diesel::update(&*self.document)
-                .set(documents::index.eq(file.id))
-                .execute(dbconn)?;
-            return Ok(());
-        }
+        dbconn.transaction(|| {
+            audit::log_db(
+                dbconn, "drafts", self.data.module, "write-file", LogWrite {
+                    name,
+                    file: file.id,
+                });
 
-        diesel::insert_into(document_files::table)
-            .values(&db::NewDocumentFile {
-                document: self.document.id,
-                name,
-                file: file.id,
-            })
-            .on_conflict((document_files::document, document_files::name))
-            .do_update()
-            .set(document_files::file.eq(file.id))
-            .execute(dbconn)?;
-        Ok(())
+            if name == "index.cnxml" {
+                diesel::update(&*self.document)
+                    .set(documents::index.eq(file.id))
+                    .execute(dbconn)?;
+                return Ok(());
+            }
+
+            diesel::insert_into(document_files::table)
+                .values(&db::NewDocumentFile {
+                    document: self.document.id,
+                    name,
+                    file: file.id,
+                })
+                .on_conflict((document_files::document, document_files::name))
+                .do_update()
+                .set(document_files::file.eq(file.id))
+                .execute(dbconn)?;
+
+            Ok(())
+        })
     }
 
     /// Delete a file from this draft.
@@ -249,12 +284,17 @@ impl Draft {
             .filter(document_files::document.eq(self.document.id)
                 .and(document_files::name.eq(name))))
             .execute(dbconn)?;
+
+        audit::log_db(dbconn, "drafts", self.data.module, "delete-file", name);
+
         Ok(())
     }
 
     /// Change title of this draft's document.
     pub fn set_title(&mut self, dbconn: &Connection, title: &str) -> Result<(), DbError> {
-        self.document.set_title(dbconn, title)
+        self.document.set_title(dbconn, title)?;
+        audit::log_db(dbconn, "drafts", self.data.module, "set-title", title);
+        Ok(())
     }
 
     /// Advance this draft to the next editing step.
@@ -296,6 +336,11 @@ impl Draft {
             // ending the editing process.
 
             if next.is_final(dbconn)? {
+                let members = draft_slots::table
+                    .filter(draft_slots::draft.eq(self.data.module))
+                    .select(draft_slots::user)
+                    .get_results::<i32>(dbconn)?;
+
                 diesel::update(
                     modules::table
                         .filter(modules::id.eq(self.data.module)))
@@ -311,20 +356,50 @@ impl Draft {
                     .filter(modules::id.eq(self.data.module))
                     .get_result::<db::Module>(dbconn)?;
 
+                EventManager::notify(members, ProcessEnded {
+                    module: self.data.module,
+                    version: self.data.document,
+                });
+
+                audit::log_db_actor(
+                    dbconn, user, "drafts", self.data.module, "finish", LogFinish {
+                        link: (link.from, link.to),
+                        next: next.id,
+                        document: self.data.document,
+                    });
+
                 return Ok(AdvanceResult::Finished(
                     Module::from_db(module, self.document)));
             }
 
-            // Otherwise we are advancing normally. First fill in all empty
-            // slots:
+            // Otherwise we are advancing normally.
+
+            audit::log_db_actor(
+                dbconn, user, "drafts", self.data.module, "advance", LogAdvance {
+                    link: (link.from, link.to),
+                    next: next.id,
+                });
+
+            // Get users' permissions in the next step. We do it before filling
+            // slots to avoid sending two notifications to newly assigned users.
+            let permissions = draft_slots::table
+                .inner_join(edit_process_step_slots::table
+                    .on(draft_slots::slot.eq(edit_process_step_slots::slot)))
+                .filter(draft_slots::draft.eq(self.data.module)
+                    .and(edit_process_step_slots::step.eq(next.id)))
+                .order_by(draft_slots::user)
+                .get_results::<(db::DraftSlot, db::EditProcessStepSlot)>(dbconn)?
+                .into_iter()
+                .group_by(|(slot, _)| slot.user);
+
+            // First fill in all empty slots:
 
             let slots = next.get_slot_seating(dbconn, self.data.module)?;
 
             for (slot, _, seating) in slots {
                 if seating.is_none() {
-                    slot.fill(dbconn, self.data.module)
+                    slot.fill(dbconn, &self)
                         .map_err(|e| AdvanceDraftError::FillSlot(slot.id, e))?;
-                    // TODO: send notifications
                 }
             }
 
@@ -333,6 +408,19 @@ impl Draft {
             self.data = diesel::update(&self.data)
                 .set(drafts::step.eq(next.id))
                 .get_result(dbconn)?;
+
+            for (user, permissions) in permissions.into_iter() {
+                let permissions = permissions
+                    .map(|(_, p)| p.permission)
+                    .collect();
+
+                EventManager::notify(user, DraftAdvanced {
+                    module: self.data.module,
+                    document: self.document.id,
+                    step: next.id,
+                    permissions,
+                });
+            }
 
             Ok(AdvanceResult::Advanced(self))
         })
@@ -347,20 +435,16 @@ impl std::ops::Deref for Draft {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindDraftError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No draft found matching given criteria.
     #[fail(display = "No such draft")]
     #[api(code = "draft:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindDraftError ;
-    DbError => |e| FindDraftError::Database(e),
 }
 
 pub enum AdvanceResult {
@@ -370,19 +454,19 @@ pub enum AdvanceResult {
     Finished(Module),
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum AdvanceDraftError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Specified slot doesn't exist or has no permissions in current step.
     #[fail(display = "Requested slot doesn't exist in this step")]
     #[api(code = "draft:advance:bad-slot", status = "BAD_REQUEST")]
     BadSlot,
     /// User making request does not occupy the slot they is trying to use.
     #[fail(display = "User doesn't occupy requested slot")]
-    #[api(code = "draft:advance:bad-user", status = "BAD_REQUEST")]
+    #[api(code = "draft:advance:bad-user", status = "FORBIDDEN")]
     BadUser,
     /// Specified link does not exist.
     #[fail(display = "Requested link doesn't exist")]
@@ -393,6 +477,21 @@ pub enum AdvanceDraftError {
     FillSlot(i32, #[cause] FillSlotError),
 }
 
-impl_from! { for AdvanceDraftError ;
-    DbError => |e| AdvanceDraftError::Database(e),
+#[derive(Serialize)]
+struct LogWrite<'a> {
+    name: &'a str,
+    file: i32,
+}
+
+#[derive(Serialize)]
+struct LogFinish {
+    link: (i32, i32),
+    next: i32,
+    document: i32,
+}
+
+#[derive(Serialize)]
+struct LogAdvance {
+    link: (i32, i32),
+    next: i32,
 }

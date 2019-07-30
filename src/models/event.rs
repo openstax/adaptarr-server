@@ -42,7 +42,8 @@ impl Event {
 
     /// Load this event's data.
     pub fn load(&self) -> EventData {
-        rmps::from_slice(&self.data.data).expect("can't unpack event data")
+        EventData::load(&self.data.kind, &self.data.data)
+            .expect("can't unpack event data")
     }
 
     /// Change this event's unread state.
@@ -76,9 +77,11 @@ pub enum FindEventError {
     NotFound,
 }
 
-impl_from! { for FindEventError ;
-    DbError => |e| match e {
-        DbError::NotFound => FindEventError::NotFound,
-        e => FindEventError::Database(e),
-    },
+impl From<DbError> for FindEventError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::NotFound => FindEventError::NotFound,
+            e => FindEventError::Database(e),
+        }
+    }
 }

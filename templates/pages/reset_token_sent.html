@@ -1,6 +1,8 @@
 {% extends "_base.html" %}
 {% block body %}
+    <div class="rounded-bg">
     {% filter translate(key="reset-message-sent") %}
         <p>Instructions have been sent.</p>
     {% endfilter %}
+    </div>
 {% endblock body %}

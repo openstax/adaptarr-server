@@ -1,7 +1,8 @@
 //! Commands for managing users.
 
 use diesel::Connection as _;
-use failure::Fail;
+use failure::{Error, Fail};
+use futures::future::{self, Either, Future, IntoFuture};
 use std::{collections::HashMap, str::FromStr};
 use structopt::StructOpt;
 
@@ -39,12 +40,12 @@ pub enum Command {
     Modify(ModifyOpts),
 }
 
-pub fn main(cfg: &Config, opts: Opts) -> Result<()> {
+pub fn main(cfg: &Config, opts: Opts) -> impl Future<Item = (), Error = Error> {
     match opts.command {
-        Command::List => list(cfg),
-        Command::Add(opts) => add_user(cfg, opts),
-        Command::Invite(opts) => invite(cfg, opts),
-        Command::Modify(opts) => modify(cfg, opts),
+        Command::List => Either::A(future::result(list(cfg))),
+        Command::Add(opts) => Either::A(future::result(add_user(cfg, opts))),
+        Command::Invite(opts) => Either::B(future::result(invite(cfg, opts)).flatten()),
+        Command::Modify(opts) => Either::A(future::result(modify(cfg, opts))),
     }
 }
 
@@ -93,18 +94,24 @@ pub struct AddOpts {
     /// User's preferred language.
     #[structopt(long = "language", default_value = "en")]
     language: LanguageTag,
+    /// User's role.
+    #[structopt(long = "role")]
+    role: Option<RoleArg>,
 }
 
 pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(&cfg)?;
+    let role = opts.role.map(|r| r.get(&db)).transpose()?.and_then(std::convert::identity);
     let user = User::create(
         &db,
+        None,
         &opts.email,
         &opts.name,
         &opts.password,
         opts.is_super,
         opts.language.as_str(),
         PermissionBits::normal(),
+        role.as_ref(),
     )?;
 
     println!("Created user {}", user.id);
@@ -119,16 +126,21 @@ pub struct InviteOpts {
     /// Language in which to send invitation
     #[structopt(long = "lang")]
     language: LanguageTag,
+    /// User's role.
+    #[structopt(long = "role")]
+    role: Option<RoleArg>,
 }
 
-pub fn invite(cfg: &Config, opts: InviteOpts) -> Result<()> {
+pub fn invite(cfg: &Config, opts: InviteOpts)
+-> Result<impl Future<Item = (), Error = Error>> {
     let i18n = I18n::load()?;
     let locale = match i18n.find_locale(&opts.language) {
         Some(locale) => locale,
         None => return Err(InviteError::NoSuchLocale(opts.language).into()),
     };
     let db = db::connect(&cfg)?;
-    let invite = Invite::create(&db, &opts.email)?;
+    let role = opts.role.map(|r| r.get(&db)).transpose()?.and_then(std::convert::identity);
+    let invite = Invite::create(&db, &opts.email, role.as_ref())?;
     let code = invite.get_code(&cfg);
 
     println!("Invitation code: {}", code);
@@ -142,7 +154,7 @@ pub fn invite(cfg: &Config, opts: InviteOpts) -> Result<()> {
         code,
     );
 
-    Mailer::send(
+    Ok(Mailer::send(
         opts.email.as_str(),
         "invite",
         "mail-invite-subject",
@@ -151,9 +163,7 @@ pub fn invite(cfg: &Config, opts: InviteOpts) -> Result<()> {
             email: &opts.email,
         },
         locale,
-    );
-
-    Ok(())
+    ).into_future())
 }
 
 #[derive(Debug, Fail)]

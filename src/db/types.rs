@@ -12,19 +12,33 @@ pub enum SlotPermission {
     /// Permission holder can edit the document.
     ///
     /// This permission can only be granted to one slot. This permission cannot
-    /// be granted if [`SlotPermission::ProposeChanges`] is also granted.
+    /// be granted if [`SlotPermission::ProposeChanges`] or
+    /// [`SlotPermission::AcceptChanges`] is also granted.
     Edit,
     /// Permission holder can propose changes to the document.
     ///
     /// This permission can only be granted to one slot. This permission cannot
-    /// be granted if [`SlotPermission::Edit`] is also granted.
+    /// be granted if [`SlotPermission::Edit`] or
+    /// [`SlotPermission::AcceptChanges`] is also granted.
     ProposeChanges,
     /// Permission holder can accept changes proposed by a user with permission
     /// [`SlotPermission::ProposeChanges`].
     ///
-    /// This permission can only be granted if [`SlotPermission::ProposeChanges`]
-    /// is also granted.
+    /// This permission can only be granted to one slot. This permission cannot
+    /// be granted if [`SlotPermission::Edit`] or
+    /// [`SlotPermission::ProposeChanges`] is also granted.
     AcceptChanges
+}
+
+impl SlotPermission {
+    /// Does this permission allow editing documents?
+    pub fn allows_editing(self) -> bool {
+        match self {
+            SlotPermission::Edit | SlotPermission::ProposeChanges |
+            SlotPermission::AcceptChanges => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for SlotPermission {

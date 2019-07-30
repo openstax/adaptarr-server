@@ -4,7 +4,7 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
-    http::Method,
+    http::{Method, StatusCode},
 };
 use chrono::NaiveDateTime;
 use failure::Fail;
@@ -17,6 +17,7 @@ use crate::{
     models::{
         Invite,
         Role,
+        draft::{Draft, PublicData as DraftData},
         user::{Fields, User, PublicData, UserAuthenticateError},
     },
     permissions::{InviteUser, PermissionBits},
@@ -36,19 +37,22 @@ pub fn routes(app: App<State>) -> App<State> {
     app
         .api_route("/users", Method::GET, list_users)
         .scope("/users", |scope| scope
-        .api_route("/invite", Method::POST, create_invitation)
-        .resource("/{id}", |r| {
-            r.get().api_with(get_user);
-            r.put().api_with(modify_user);
-        })
-        .api_route("/me/password", Method::PUT, modify_password)
-        .route("/me/session", Method::GET, get_session))
+            .api_route("/invite", Method::POST, create_invitation)
+            .resource("/{id}", |r| {
+                r.get().api_with(get_user);
+                r.put().api_with(modify_user);
+            })
+            .api_route("/{id}/drafts", Method::GET, list_user_drafts)
+            .api_route("/me/password", Method::PUT, modify_password)
+            .route("/me/session", Method::GET, get_session)
+        )
 }
 
 #[derive(Debug, Deserialize)]
 pub struct InviteParams {
     email: String,
     language: LanguageTag,
+    role: Option<i32>,
 }
 
 /// Get list of all users.
@@ -92,13 +96,17 @@ pub fn list_users(
 pub fn create_invitation(
     state: actix_web::State<State>,
     _session: Session<InviteUser>,
-    params: Json<InviteParams>,
+    params: FormOrJson<InviteParams>,
 ) -> Result<HttpResponse, Error> {
     let locale = state.i18n.find_locale(&params.language)
         .ok_or(NoSuchLocaleError)?;
 
     let db = state.db.get()?;
-    let invite = Invite::create(&*db, &params.email)?;
+    let role = match params.role {
+        None => None,
+        Some(id) => Role::by_id(&*db, id).map(Some)?,
+    };
+    let invite = Invite::create(&*db, &params.email, role.as_ref())?;
 
     let code = invite.get_code(&state.config);
     // TODO: get URL from Actix.
@@ -108,7 +116,7 @@ pub fn create_invitation(
         code,
     );
 
-    Mailer::send(
+    Mailer::do_send(
         params.email.as_str(),
         "invite",
         "mail-invite-subject",
@@ -119,7 +127,7 @@ pub fn create_invitation(
         locale,
     );
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::ACCEPTED))
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -163,6 +171,7 @@ pub struct UserUpdate {
     permissions: Option<PermissionBits>,
     #[serde(default, deserialize_with = "de_optional_null")]
     role: Option<Option<i32>>,
+    name: Option<String>,
 }
 
 /// Update user information.
@@ -196,6 +205,14 @@ pub fn modify_user(
             user.set_language(dbcon, &locale.code)?;
         }
 
+        if let Some(name) = form.name {
+            if !id.is_current() {
+                permissions.require(PermissionBits::EDIT_USER)?;
+            }
+
+            user.set_name(dbcon, &name)?;
+        }
+
         if let Some(new_perms) = form.permissions {
             permissions.require(PermissionBits::EDIT_USER_PERMISSIONS)?;
             user.set_permissions(dbcon, new_perms)?;
@@ -224,6 +241,34 @@ pub fn modify_user(
     }
 
     Ok(Json(user.get_public(fields)))
+}
+
+/// Get list of drafts a given user has access to.
+///
+/// ## Method
+///
+/// ```text
+/// GET /users/:id/drafts
+/// ```
+pub fn list_user_drafts(
+    state: actix_web::State<State>,
+    session: Session,
+    path: Path<UserId>,
+) -> Result<Json<Vec<DraftData>>, Error> {
+    let db = state.db.get()?;
+    let sesusr = session.user(&*db)?;
+
+    if !path.is_current() {
+        sesusr.permissions(true).require(PermissionBits::MANAGE_PROCESS)?;
+    }
+
+    let user = path.get_user(&*state, &session)?;
+    let drafts = Draft::all_of(&*db, user.id)?;
+
+    drafts.into_iter().map(|d| d.get_public(&*db, user.id))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Json)
+        .map_err(From::from)
 }
 
 #[derive(Debug, Deserialize)]
@@ -263,7 +308,7 @@ pub fn modify_password(
     // Changing password invalidates all sessions.
     Session::<Normal>::create(&req, &user, false);
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 #[derive(ApiError, Debug, Fail)]

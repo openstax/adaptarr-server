@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{Connection as _, prelude::*, result::Error as DbError};
 use failure::Fail;
 use serde::Serialize;
@@ -100,18 +101,14 @@ impl std::ops::Deref for Conversation {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindConversationError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No conversation found matching given criteria.
     #[fail(display = "No such conversation")]
     #[api(code = "conversation:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindConversationError ;
-    DbError => |e| FindConversationError::Database(e),
 }

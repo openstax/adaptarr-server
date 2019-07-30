@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use actix_web::{
     App,
     FromRequest,
@@ -28,16 +29,32 @@ pub trait ApiError: Fail {
     fn code(&self) -> Option<&str>;
 }
 
+/// This implementation is required to make `#[cause]` on a `Box<dyn ApiError>`
+/// work.
+impl Fail for Box<dyn ApiError> {
+    fn name(&self) -> Option<&str> {
+        (**self).name()
+    }
+
+    fn cause(&self) -> Option<&dyn Fail> {
+        (**self).cause()
+    }
+
+    fn backtrace(&self) -> Option<&failure::Backtrace> {
+        (**self).backtrace()
+    }
+}
+
 /// A wrapper around many types of errors, including user-facing [`ApiError`]s
 /// as well as many other errors that should not be reported to the user, such
 /// as database connection errors.
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum Error {
     #[fail(display = "{}", _0)]
-    Api(Box<dyn ApiError>),
+    Api(#[cause] Box<dyn ApiError>),
     /// Generic system error.
     #[fail(display = "{}", _0)]
-    System(#[cause] std::io::Error),
+    System(#[cause] #[from] std::io::Error),
     /// Error communicating with the database.
     ///
     /// Note that this variant also includes errors related to missing record,
@@ -49,10 +66,10 @@ pub enum Error {
     ///     .ok_or_else(|| MyApiError::NotFound)?
     /// ```
     #[fail(display = "{}", _0)]
-    Db(#[cause] diesel::result::Error),
+    Db(#[cause] #[from] diesel::result::Error),
     /// Error obtaining database connection for the pool.
     #[fail(display = "{}", _0)]
-    DbPool(#[cause] r2d2::Error),
+    DbPool(#[cause] #[from] r2d2::Error),
     /// Error rendering template.
     ///
     /// Note that due to [`tera::Error`] currently being `!Send + !Sync` it
@@ -61,10 +78,10 @@ pub enum Error {
     Template(String),
     /// Error sending messages between actors.
     #[fail(display = "{}", _0)]
-    ActixMailbox(#[cause] actix::MailboxError),
+    ActixMailbox(#[cause] #[from] actix::MailboxError),
     /// Error reading message payload.
     #[fail(display = "{}", _0)]
-    Payload(#[cause] actix_web::error::PayloadError),
+    Payload(#[cause] #[from] actix_web::error::PayloadError),
 }
 
 impl<T: ApiError> From<T> for Error {
@@ -73,13 +90,17 @@ impl<T: ApiError> From<T> for Error {
     }
 }
 
-impl_from! { for Error ;
-    std::io::Error => |e| Error::System(e),
-    diesel::result::Error => |e| Error::Db(e),
-    r2d2::Error => |e| Error::DbPool(e),
-    tera::Error => |e| Error::Template(e.to_string()),
-    actix::MailboxError => |e| Error::ActixMailbox(e),
-    actix_web::error::PayloadError => |e| Error::Payload(e),
+impl From<tera::Error> for Error {
+    fn from(e: tera::Error) -> Self {
+        let mut msg = String::new();
+        for (inx, err) in e.iter().enumerate() {
+            if inx > 0 {
+                msg.push_str(": ");
+            }
+            msg.push_str(&err.to_string());
+        }
+        Error::Template(msg)
+    }
 }
 
 impl ResponseError for Error {
@@ -125,8 +146,6 @@ impl<R: Responder> Responder for ApiResult<R> {
             ApiResult::Error(e) => e,
         };
 
-        capture_error(req, &err);
-
         match err {
             Error::Api(err) => Ok(AsyncResult::ok({
                 if let Some(code) = err.code() {
@@ -136,13 +155,16 @@ impl<R: Responder> Responder for ApiResult<R> {
                             raw: err.to_string(),
                         })
                 } else {
-                    error!("{}", err);
+                    capture_error(req, &err);
                     HttpResponse::new(err.status())
                 }
             })),
-            Error::Payload(e) => Err(e.into()),
+            Error::Payload(err) => {
+                capture_error(req, &err);
+                Err(err.into())
+            }
             _ => Ok(AsyncResult::ok({
-                error!("{}", err);
+                capture_error(req, &err);
                 HttpResponse::InternalServerError()
                     .finish()
             })),
@@ -350,7 +372,7 @@ where
 }
 
 /// Capture an error and report it to Sentry.io.
-fn capture_error<S>(req: &HttpRequest<S>, error: &Error) {
-    Hub::from_request(req)
-        .capture_event(event_from_fail(error));
+fn capture_error<S, F: Fail>(req: &HttpRequest<S>, error: &F) {
+    error!("{}", error);
+    Hub::from_request(req).capture_event(event_from_fail(error));
 }

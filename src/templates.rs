@@ -118,7 +118,7 @@ pub struct ResetMailArgs<'a> {
 #[derive(Serialize)]
 pub struct NotifyMailArgs<'a> {
     /// List of new events to include in the email.
-    pub events: &'a [(crate::events::Kind, Vec<crate::events::ExpandedEvent>)],
+    pub events: &'a [(crate::events::Group, Vec<crate::events::ExpandedEvent>)],
     // /// Various URLs which can be used in the email.
     pub urls: NotifyMailArgsUrls<'a>,
 }

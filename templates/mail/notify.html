@@ -14,8 +14,12 @@
 
         {% if group == "assigned" %}
             {% set header = "mail-notify-group-header-assigned" %}
-        {% elif group == "new-resource" %}
-            {% set header = "mail-notify-group-header-new-resource" %}
+        {% elif group == "process-ended" %}
+            {% set header = "mail-notify-group-header-process-ended" %}
+        {% elif group == "slot-assignment" %}
+            {% set header = "mail-notify-group-header-slot-assignment" %}
+        {% elif group == "draft-advanced" %}
+            {% set header = "mail-notify-group-header-draft-advanced" %}
         {% else %}
             {% set_global num_unknown = num_unknown + count %}
             {% continue %}
@@ -39,13 +43,41 @@
                     bookurl=event.book.url,
                     bookcount=event.book.count
                 ) %}
-            {% elif event.kind == "new-resource" %}
+            {% elif event.kind == "process-ended" %}
                 {% set message = _(
-                    key="mail-notify-event-new-resource",
-                    actorname=event.who.name,
-                    actorurl=event.who.url,
-                    resourcename=event.resource.name,
-                    resourceurl=event.resource.url
+                    key="mail-notify-event-process-ended",
+                    moduletitle=event.module.title,
+                    moduleurl=event.module.url
+                ) %}
+            {% elif event.kind == "process-cancelled" %}
+                {% set message = _(
+                    key="mail-notify-event-process-cancelled",
+                    moduletitle=event.module.title,
+                    moduleurl=event.module.url
+                ) %}
+            {% elif event.kind == "slot-filled" %}
+                {% set message = _(
+                    key="mail-notify-event-slot-filled",
+                    drafttitle=event.draft.title,
+                    drafturl=event.draft.url,
+                    slotname=event.slot.name
+                ) %}
+            {% elif event.kind == "slot-vacated" %}
+                {% set message = _(
+                    key="mail-notify-event-slot-vacated",
+                    drafttitle=event.draft.title,
+                    drafturl=event.draft.url,
+                    slotname=event.slot.name
+                ) %}
+            {% elif event.kind == "draft-advanced" %}
+                {% set message = _(
+                    key="mail-notify-event-draft-advanced",
+                    drafttitle=event.draft.title,
+                    drafturl=event.draft.url,
+                    stepname=event.step.name,
+                    booktitle=event.book.title,
+                    bookurl=event.book.url,
+                    bookcount=event.book.count
                 ) %}
             {% endif %}
 

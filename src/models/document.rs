@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -8,6 +9,7 @@ use serde::Serialize;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -58,15 +60,29 @@ impl Document {
                 })
                 .get_result::<db::Document>(dbconn)?;
 
+            let mut new_files = Vec::new();
+
             for (name, file) in files {
-                diesel::insert_into(document_files::table)
+                let file = diesel::insert_into(document_files::table)
                     .values(&db::NewDocumentFile {
                         document: data.id,
                         name: name.as_ref(),
                         file: file.id,
                     })
-                    .execute(dbconn)?;
+                    .get_result::<db::DocumentFile>(dbconn)?;
+
+                new_files.push(LogNewFile {
+                    name: file.name,
+                    file: file.file,
+                });
             }
+
+            audit::log_db(dbconn, "documents", data.id, "create", LogNewDocument {
+                title,
+                language,
+                index: index.id,
+                files: new_files,
+            });
 
             Ok(Document { data })
         })
@@ -145,18 +161,28 @@ impl std::ops::Deref for Document {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum GetFileError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No such file.
     #[fail(display = "No such file")]
     #[api(code = "file:not-found", status = "NOT_FOUND")]
     NotFound,
 }
 
-impl_from! { for GetFileError ;
-    DbError => |e| GetFileError::Database(e),
+#[derive(Serialize)]
+struct LogNewDocument<'a> {
+    title: &'a str,
+    language: &'a str,
+    index: i32,
+    files: Vec<LogNewFile>,
+}
+
+#[derive(Serialize)]
+struct LogNewFile {
+    name: String,
+    file: i32,
 }

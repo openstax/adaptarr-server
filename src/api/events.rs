@@ -16,7 +16,7 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
-    http::Method,
+    http::{StatusCode, Method},
     ws::{self, WebsocketContext},
 };
 use chrono::NaiveDateTime;
@@ -105,7 +105,7 @@ pub fn update_notifiation(
 
     event.set_unread(&*db, update.unread)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 /// Get a stream of events for current user.
@@ -176,7 +176,7 @@ impl Handler<events::NewEvent> for Listener {
             id,
             kind: event.kind(),
             timestamp,
-            data: event,
+            data: (*event).clone(),
         }).unwrap());
     }
 }

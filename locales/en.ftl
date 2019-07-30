@@ -8,6 +8,8 @@ locale-name = English
 
 ## Login page
 
+login-title = Welcome to { -brand-name }
+
 login-field-email = E-Mail address
 
 login-field-password = Password
@@ -51,13 +53,15 @@ logout-message = <p>You have been logged out.</p>
 
 ## Registration page
 
+register-title = Create account
+
 register-field-name = Name
 
 register-field-password = Password
 
 register-field-repeat-password = Password
 
-register-submit = Register
+register-submit = Create
 
 # Variables:
 # - $code (string): error code
@@ -195,8 +199,6 @@ mail-reset-after-button =
 mail-notify-subject = Information on progress of work
 
 mail-notify-footer =
-    Thank you for participating in out project.
-
     Sincerely 
     The { -org-name } team
 
@@ -214,12 +216,12 @@ mail-notify-group-header-assigned = Information on assignment of modules:
 # - $booktitle (string): Title of one of books in which the module is used
 # - $bookurl (string): URL to the book $booktitle
 mail-notify-event-assigned-text =
-    { $actorname } assigned you the module “{ $moduletitle }” ({ $moduleurl }).
-    { $bookcount ->
+    { $actorname } assigned you the module “{ $moduletitle }” ({
+    $moduleurl }). { $bookcount ->
         [0] This module is not used in any books.
         [1] This module is used in book “{ $booktitle }” ({ $bookurl }).
-       *[other] This module is used in { $bookcount } books, including
-            “{ $booktitle }” ({ $bookurl }).
+       *[other] This module is used in { $bookcount } books, including “{
+            $booktitle }” ({ $bookurl }).
     }
 mail-notify-event-assigned =
     { -mail-url(url: $actorurl, text: $actorname) } assigned you the module
@@ -231,6 +233,107 @@ mail-notify-event-assigned =
             { -mail-url(url: $bookurl, text: $booktitle) }.
     }
 
+# Header displayed before notifications about editing process finishing for
+# drafts.
+mail-notify-group-header-process-ended =
+    Information on conclusion of editing works:
+
+# Notification about an editing process being finished for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module for whose draft the process ended
+# - $moduleurl (string): URL to the module $moduletitle
+mail-notify-event-process-ended-text =
+    We are happy to inform that work on module “{ $moduletitle }” ({
+    $moduleurl }) has successfully concluded.
+mail-notify-event-process-ended =
+    We are happy to inform that work on module {
+        -mail-url(url: $moduleurl, text: $moduletitle)
+    } has successfully concluded.
+
+# Notification about an editing process being cancelled for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module for whose draft the process was
+#   cancelled
+# - $moduleurl (string): URL to the module $moduletitle
+mail-notify-event-process-cancelled-text =
+    Editing works on module “{ $moduletitle }” ({ $moduleurl
+    }) have been stopped.
+mail-notify-event-process-cancelled =
+    Editing works on module { -mail-url(url: $moduleurl, text: $moduletitle)
+    } have been stopped.
+
+# Header displayed before notifications about user being assigned to or removed
+# from a slot in an editing process.
+mail-notify-group-header-slot-assignment =
+    Information on assignment of work:
+
+# Notification about user being assigned to a slot in an editing process for
+# a draft.
+#
+# Variables:
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
+# - $slotname (string): name of the slot to which the user was assigned
+mail-notify-event-slot-filled-text =
+    You have been assigned the role of { $slotname } for module “{ $drafttitle
+    }” ({ $drafturl }).
+mail-notify-event-slot-filled =
+    You have been assigned the role of { $slotname } for module {
+    -mail-url(url: $drafturl, text: $drafttitle) }.
+
+# Notification about user being removed from a slot in an editing process for
+# a draft.
+#
+# Variables:
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
+# - $slotname (string): name of the slot to which the user was assigned
+mail-notify-event-slot-vacated-text =
+    Your role of { $slotname } for module “{ $drafttitle }” ({ $drafturl
+    }) has been assigned to another user.
+mail-notify-event-slot-vacated =
+    Your role of { $slotname } for module {
+        -mail-url(url: $drafturl, text: $drafttitle)
+    } has been assigned to another user.
+
+# Header displayed before notifications about drafts moving between steps.
+mail-notify-group-header-draft-advanced =
+    Information on progress of documents through editing processes:
+
+# Notification about a draft moving between steps.
+#
+# Variable:
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
+# - $stepname (string): name of the step to which draft has moved
+# - $bookcount (number): number of books in which the module is used
+# - $booktitle (string): title of one of books in which the module is used
+# - $bookurl (string): URL to the book $booktitle
+mail-notify-event-draft-advanced-text =
+    You are asked to perform the the work of { $stepname } on module “{
+    $drafttitle }” ({ $drafturl }). { $bookcount ->
+        [0] This module is not used in any books.
+        [1] This module is used in book “{ $booktitle }” ({ $bookurl }).
+       *[other] This module is used in { $bookcount } books, including “{
+            $booktitle }” ({ $bookurl }).
+    }
+mail-notify-event-draft-advanced =
+    You are asked to perform the work of { $stepname } on module {
+        -mail-url(url: $drafturl, text: $drafttitle)
+    }. { $bookcount ->
+        [0] This module is not used in any books.
+        [1] This module is used in book {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+       *[other] This module is used in { $bookcount } books, including
+            { -mail-url(url: $bookurl, text: $booktitle) }.
+    }
+-mail-notify-unknown-text =
+    You can see { $count ->
+        [1] it
+       *[other] them
+    } in the notification centre ({ $url }).
 -mail-notify-unknown =
     You can see { $count ->
         [1] it
@@ -243,6 +346,12 @@ mail-notify-event-assigned =
 # Variables:
 # - $count (number): Number of unknown notifications
 # - $notification_centre_url (string): URL of the notifications centre
+mail-notify-also-unknown-events-text =
+    And { $count ->
+        [1] one other event
+       *[other] { $count } other events
+    } which we could not represent in this email. {
+        -mail-notify-unknown-text(count: $count, url: $notification_centre_url) }
 mail-notify-also-unknown-events =
     And { $count ->
         [1] one other event
@@ -256,6 +365,12 @@ mail-notify-also-unknown-events =
 # Variables:
 # - $count (number): Number of unknown notifications
 # - $notification_centre_url (string): URL of the notifications centre
+mail-notify-only-unknown-events-text =
+    We want to inform you of { $count ->
+        [1] one new event
+       *[other] { $count } new events
+    } which we could not represent in this email. {
+        -mail-notify-unknown-text(count: $count, url: $notification_centre_url) }
 mail-notify-only-unknown-events =
     We want to inform you of { $count ->
         [1] one new event

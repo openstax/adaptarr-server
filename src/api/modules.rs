@@ -7,7 +7,6 @@ use actix_web::{
     Path,
     Responder,
     http::Method,
-    pred,
 };
 use futures::{Future, Stream, future};
 use serde::{Deserialize, Serialize, de::Deserializer};
@@ -34,7 +33,7 @@ use super::{
     RouterExt,
     State,
     session::Session,
-    util::FormOrJson,
+    util::{ContentType, Created, FormOrJson},
 };
 
 /// Configure routes.
@@ -43,7 +42,7 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/modules", |r| {
             r.get().api_with(list_modules);
             r.post()
-                .filter(pred::Header("Content-Type", "application/json"))
+                .filter(ContentType::from_mime(&mime::APPLICATION_JSON))
                 .api_with(create_module);
             r.post()
                 .api_with_async(create_module_from_zip);
@@ -105,7 +104,7 @@ pub fn create_module(
     state: actix_web::State<State>,
     _session: Session<EditModule>,
     data: Json<NewModule>,
-) -> Result<Json<ModuleData>> {
+) -> Result<Created<String, Json<ModuleData>>> {
     let db = state.db.get()?;
 
     let content = format!(
@@ -120,12 +119,17 @@ pub fn create_module(
         tera::escape_html(&data.title),
     );
 
-    let index = File::from_data(&*db, &state.config, &content)?;
+    let index = File::from_data(
+        &*db, &state.config, &content, Some(&*crate::models::file::CNXML_MIME))?;
 
     let module = Module::create::<&str, _>(
         &*db, &data.title, &data.language, index, std::iter::empty())?;
 
-    module.get_public(&*db).map(Json).map_err(Into::into)
+    let public = module.get_public(&*db)?;
+    let location = format!("{}/api/v1/modules/{}",
+        state.config.server.domain, module.id());
+
+    Ok(Created(location, Json(public)))
 }
 
 pub struct NewModuleZip {
@@ -150,18 +154,26 @@ from_multipart! {
 /// ```
 pub fn create_module_from_zip(
     state: actix_web::State<State>,
-    _session: Session<EditModule>,
+    session: Session<EditModule>,
     data: Multipart<NewModuleZip>,
-) -> impl Future<Item = Json<ModuleData>, Error = Error> {
+) -> impl Future<Item = Created<String, Json<ModuleData>>, Error = Error> {
     let NewModuleZip { title, file } = data.into_inner();
-    state.importer.send(ImportModule { title, file })
+    state.importer.send(ImportModule {
+        title,
+        file,
+        actor: session.user_id().into(),
+    })
         .from_err()
         .and_then(|r| future::result(r).from_err())
         .and_then(move |module| -> Result<_, Error> {
             let db = state.db.get()?;
             module.get_public(&*db).map_err(Into::into)
         })
-        .map(Json)
+        .map(|p| {
+            let location = format!("{}/api/v1/modules/{}",
+                crate::config::load().unwrap().server.domain, p.id);
+            Created(location, Json(p))
+        })
 }
 
 /// Get a module by ID.
@@ -201,7 +213,7 @@ pub fn begin_process(
     session: Session<ManageProcess>,
     id: Path<Uuid>,
     data: FormOrJson<BeginProcess>,
-) -> Result<Json<DraftData>> {
+) -> Result<Created<String, Json<DraftData>>> {
     let db = state.db.get()?;
     let data = data.into_inner();
     let module = Module::by_id(&*db, id.into_inner())?;
@@ -216,8 +228,11 @@ pub fn begin_process(
         .collect::<Result<Vec<_>, Error>>()?;
 
     let draft = module.begin_process(&*db, &version, slots)?;
+    let public = draft.get_public(&*db, session.user_id())?;
+    let location = format!("{}/api/v1/drafts/{}",
+        state.config.server.domain, draft.module_id());
 
-    draft.get_public(&*db, session.user_id()).map(Json).map_err(Into::into)
+    Ok(Created(location, Json(public)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -234,7 +249,7 @@ pub struct ModuleUpdate {
 pub fn replace_module(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
-    _session: Session<EditModule>,
+    session: Session<EditModule>,
     id: Path<Uuid>,
 ) -> impl Future<Item = Json<ModuleData>, Error = Error> {
     future::result(
@@ -262,7 +277,11 @@ pub fn replace_module(
                 .map(|file| (db, module, file))
         })
         .and_then(move |(db, module, file)| {
-            state.importer.send(ReplaceModule { module, file })
+            state.importer.send(ReplaceModule {
+                module,
+                file,
+                actor: session.user_id().into(),
+            })
                 .map_err(Error::from)
                 .and_then(|r| future::result(r).from_err())
                 .map(|ok| (db, ok))

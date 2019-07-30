@@ -5,7 +5,7 @@ use actix_web::{
     HttpResponse,
     Json,
     Path,
-    pred,
+    http::StatusCode,
 };
 use futures::{Future, Stream, future};
 use serde::Deserialize;
@@ -33,6 +33,7 @@ use super::{
     RouteExt,
     State,
     session::Session,
+    util::{Created, ContentType},
 };
 
 /// Configure routes.
@@ -41,14 +42,14 @@ pub fn routes(app: App<State>) -> App<State> {
         .resource("/books", |r| {
             r.get().api_with(list_books);
             r.post()
-                .filter(pred::Header("Content-Type", "application/json"))
+                .filter(ContentType::from_mime(&mime::APPLICATION_JSON))
                 .api_with(create_book);
             r.post().api_with_async(create_book_from_zip);
         })
         .resource("/books/{id}", |r| {
             r.get().api_with(get_book);
             r.put()
-                .filter(pred::Header("Content-Type", "application/json"))
+                .filter(ContentType::from_mime(&mime::APPLICATION_JSON))
                 .api_with(update_book);
             r.put().api_with_async(replace_book);
             r.delete().api_with(delete_book);
@@ -101,10 +102,12 @@ pub fn create_book(
     state: actix_web::State<State>,
     _session: Session<EditBook>,
     form: Json<NewBook>,
-) -> Result<Json<BookData>> {
+) -> Result<Created<String, Json<BookData>>> {
     let db = state.db.get()?;
     let book = Book::create(&*db, &form.title)?;
-    Ok(Json(book.get_public()))
+    let location = format!("{}/api/v1/books/{}",
+        state.config.server.domain, book.id);
+    Ok(Created(location, Json(book.get_public())))
 }
 
 pub struct NewBookZip {
@@ -129,14 +132,22 @@ from_multipart! {
 /// ```
 pub fn create_book_from_zip(
     state: actix_web::State<State>,
-    _session: Session<EditBook>,
+    session: Session<EditBook>,
     data: Multipart<NewBookZip>,
-) -> impl Future<Item = Json<BookData>, Error = Error> {
+) -> impl Future<Item = Created<String, Json<BookData>>, Error = Error> {
     let NewBookZip { title, file } = data.into_inner();
-    state.importer.send(ImportBook { title, file })
+    state.importer.send(ImportBook {
+        title,
+        file,
+        actor: session.user_id().into(),
+    })
         .from_err()
         .and_then(|r| future::result(r).from_err())
-        .map(|book| Json(book.get_public()))
+        .map(|book| {
+            let location = format!("{}/api/v1/books/{}",
+                crate::config::load().unwrap().server.domain, book.id);
+            Created(location, Json(book.get_public()))
+        })
 }
 
 /// Get a book by ID.
@@ -168,6 +179,7 @@ pub struct BookChange {
 ///
 /// ```text
 /// PUT /books/:id
+/// Content-Type: application/json
 /// ```
 pub fn update_book(
     state: actix_web::State<State>,
@@ -183,10 +195,17 @@ pub fn update_book(
     Ok(Json(book.get_public()))
 }
 
+/// Replace contents of a book.
+///
+/// ## Method
+///
+/// ```text
+/// PUT /books/:id
+/// ```
 pub fn replace_book(
     req: HttpRequest<State>,
     state: actix_web::State<State>,
-    _session: Session<EditBook>,
+    session: Session<EditBook>,
     id: Path<Uuid>,
 ) -> impl Future<Item = Json<BookData>, Error = Error> {
     future::result(
@@ -210,7 +229,11 @@ pub fn replace_book(
                 .map(|file| (book, file))
         })
         .and_then(move |(book, file)| {
-            state.importer.send(ReplaceBook { book, file })
+            state.importer.send(ReplaceBook {
+                book,
+                file,
+                actor: session.user_id().into(),
+            })
                 .from_err()
         })
         .and_then(|r| future::result(r).from_err())
@@ -234,7 +257,7 @@ pub fn delete_book(
 
     book.delete(&*db)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 /// Get book's contents as a tree.
@@ -277,14 +300,15 @@ pub fn create_part(
     _session: Session<EditBook>,
     book: Path<Uuid>,
     tree: Json<NewTreeRoot>,
-) -> Result<Json<Tree>> {
+) -> Result<Created<String, Json<Tree>>> {
     let db = state.db.get()?;
     let NewTreeRoot { tree, parent, index } = tree.into_inner();
     let parent = BookPart::by_id(&*db, *book, parent)?;
+    let tree = parent.create_tree(&*db, index, tree)?;
+    let location = format!("{}/api/v1/books/{}/parts/{}",
+        state.config.server.domain, book, tree.number);
 
-    parent.create_tree(&*db, index, tree)
-        .map(Json)
-        .map_err(Into::into)
+    Ok(Created(location, Json(tree)))
 }
 
 /// Inspect a single part of a book.
@@ -292,7 +316,7 @@ pub fn create_part(
 /// ## Method
 ///
 /// ```text
-/// GET /book/:id/parts/:number
+/// GET /books/:id/parts/:number
 /// ```
 pub fn get_part(
     state: actix_web::State<State>,
@@ -326,7 +350,7 @@ pub fn delete_part(
     BookPart::by_id(&*db, book, id)?
         .delete(&*db)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
 #[derive(Debug, Deserialize)]
@@ -347,7 +371,7 @@ pub struct PartLocation {
 /// ## Method
 ///
 /// ```text
-/// PUT /book/:id/parts/:number
+/// PUT /books/:id/parts/:number
 /// ```
 pub fn update_part(
     state: actix_web::State<State>,
@@ -379,5 +403,5 @@ pub fn update_part(
         Ok(())
     })?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }

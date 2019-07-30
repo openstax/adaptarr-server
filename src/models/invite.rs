@@ -1,20 +1,26 @@
-use chrono::{Duration, Utc};
+use adaptarr_macros::From;
+use chrono::{Duration, Utc, NaiveDateTime};
 use diesel::{
     Connection as _Connection,
     prelude::*,
     result::Error as DbError,
 };
 use failure::Fail;
+use serde::Serialize;
 
 use crate::{
     ApiError,
     Config,
+    audit,
     db::{
         Connection,
         models as db,
         schema::{invites, users},
     },
-    models::user::{User, CreateUserError},
+    models::{
+        role::{Role, FindRoleError},
+        user::{User, CreateUserError},
+    },
     permissions::PermissionBits,
     utils,
 };
@@ -27,7 +33,8 @@ pub struct Invite {
 
 impl Invite {
     /// Create a new invitation for a given email address.
-    pub fn create(dbcon: &Connection, email: &str) -> Result<Invite, CreateInviteError> {
+    pub fn create(dbcon: &Connection, email: &str, role: Option<&Role>)
+    -> Result<Invite, CreateInviteError> {
         dbcon.transaction(|| {
             let user = users::table
                 .filter(users::email.eq(email))
@@ -38,14 +45,21 @@ impl Invite {
                 return Err(CreateInviteError::UserExists);
             }
 
-            diesel::insert_into(invites::table)
+            let data = diesel::insert_into(invites::table)
                 .values(db::NewInvite {
                     email,
                     expires: Utc::now().naive_utc() + Duration::days(7),
+                    role: role.map(|r| r.id),
                 })
-                .get_result::<db::Invite>(dbcon)
-                .map(|data| Invite { data })
-                .map_err(Into::into)
+                .get_result::<db::Invite>(dbcon)?;
+
+            audit::log_db(dbcon, "invites", data.id, "create", LogNewInvite {
+                email,
+                expires: data.expires,
+                role: data.role,
+            });
+
+            Ok(Invite { data })
         })
     }
 
@@ -86,15 +100,32 @@ impl Invite {
         password: &str,
         language: &str,
     ) -> Result<User, CreateUserError> {
-        User::create(
+        let role = match self.data.role {
+            None => None,
+            Some(id) => match Role::by_id(dbconn, id) {
+                Ok(role) => Some(role),
+                Err(FindRoleError::Database(db))=>
+                    return Err(CreateUserError::Internal(db)),
+                Err(FindRoleError::NotFound) =>
+                    panic!("database inconsistency: no role for invite"),
+            },
+        };
+
+        let user = User::create(
             dbconn,
+            None,
             &self.email,
             name,
             password,
             false,
             language,
             PermissionBits::normal(),
-        )
+            role.as_ref(),
+        )?;
+
+        audit::log_db_actor(dbconn, user.id, "invites", self.id, "fulfil", ());
+
+        Ok(user)
     }
 }
 
@@ -106,7 +137,7 @@ impl std::ops::Deref for Invite {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum CreateInviteError {
     /// There is already an account associated with the email address given.
     #[fail(display = "User exists")]
@@ -115,14 +146,10 @@ pub enum CreateInviteError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
 }
 
-impl_from! { for CreateInviteError ;
-    DbError => |e| CreateInviteError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FromCodeError {
     /// Invitation has expired or was already used.
     #[fail(display = "Invitation expired")]
@@ -131,19 +158,20 @@ pub enum FromCodeError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Code was not valid base64.
     #[fail(display = "Invalid base64: {}", _0)]
     #[api(code = "invitation:invalid", status = "BAD_REQUEST")]
-    Decoding(#[cause] base64::DecodeError),
+    Decoding(#[cause] #[from] base64::DecodeError),
     /// Code could not be unsealed.
     #[fail(display = "Unsealing error: {}", _0)]
     #[api(code = "invitation:invalid", status = "BAD_REQUEST")]
-    Unsealing(#[cause] utils::UnsealingError),
+    Unsealing(#[cause] #[from] utils::UnsealingError),
 }
 
-impl_from! { for FromCodeError ;
-    DbError => |e| FromCodeError::Database(e),
-    base64::DecodeError => |e| FromCodeError::Decoding(e),
-    utils::UnsealingError => |e| FromCodeError::Unsealing(e),
+#[derive(Serialize)]
+struct LogNewInvite<'a> {
+   email: &'a str,
+   expires: NaiveDateTime,
+   role: Option<i32>,
 }

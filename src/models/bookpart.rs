@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -9,6 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -48,7 +50,7 @@ enum Variant<Part> {
 
 #[derive(Debug, Serialize)]
 pub struct Tree {
-    number: i32,
+    pub number: i32,
     title: String,
     #[serde(flatten)]
     part: Variant<Tree>,
@@ -90,6 +92,10 @@ impl BookPart {
         }
 
         diesel::delete(&self.data).execute(dbconn)?;
+
+        audit::log_db(
+            dbconn, "books", self.data.book, "delete-part", self.data.id);
+
         Ok(())
     }
 
@@ -162,6 +168,9 @@ impl BookPart {
                 .and(book_parts::parent.eq(self.data.id))
                 .and(book_parts::id.ne(0))))
             .execute(dbconn)?;
+
+        audit::log_db(dbconn, "books", self.data.book, "clear-part", self.data.id);
+
         Ok(())
     }
 
@@ -209,7 +218,7 @@ impl BookPart {
                 .set(book_parts::index.eq(book_parts::index + 1))
                 .execute(dbconn)?;
 
-            diesel::insert_into(book_parts::table)
+            let data = diesel::insert_into(book_parts::table)
                 .values(&db::NewBookPart {
                     book: self.data.book,
                     title,
@@ -217,9 +226,18 @@ impl BookPart {
                     parent: self.data.id,
                     index,
                 })
-                .get_result::<db::BookPart>(dbconn)
-                .map_err(Into::into)
-                .map(|data| BookPart { data })
+                .get_result::<db::BookPart>(dbconn)?;
+
+            audit::log_db(dbconn, "books", self.data.book, "create-part",
+                LogCreate {
+                    part: data.id,
+                    parent: self.data.id,
+                    index,
+                    title,
+                    module: module.map(|m| m.id()),
+                });
+
+            Ok(BookPart { data })
         })
     }
 
@@ -280,6 +298,9 @@ impl BookPart {
             .set(book_parts::title.eq(title))
             .execute(dbconn)?;
 
+        audit::log_db(dbconn, "books", self.data.book, "set-part-title",
+            LogSetTitle { part: self.data.id, title });
+
         self.data.title = title.to_owned();
 
         Ok(())
@@ -324,6 +345,13 @@ impl BookPart {
                 .set(book_parts::index.eq(book_parts::index - 1))
                 .execute(dbconn)?;
 
+            audit::log_db(dbconn, "books", self.data.book, "reparent-part",
+                LogReparent {
+                    part: self.data.id,
+                    parent: new.id,
+                    index,
+                });
+
             Ok(data)
         })?;
 
@@ -339,107 +367,109 @@ impl std::ops::Deref for BookPart {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindBookPartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No module found matching given criteria.
     #[fail(display = "No such module")]
     #[api(internal)]
     NotFound,
 }
 
-impl_from! { for FindBookPartError ;
-    DbError => |e| FindBookPartError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum DeletePartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Deleting group 0 is not possible.
     #[fail(display = "Cannot delete group 0")]
     #[api(code = "bookpart:delete:is-root", status = "BAD_REQUEST")]
     RootGroup,
 }
 
-impl_from! { for DeletePartError ;
-    DbError => |e| DeletePartError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum GetPartsError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// This part is a module, it has no parts of its own.
     #[fail(display = "Module has no parts")]
     #[api(code = "bookpart:get-parts:is-module", status = "BAD_REQUEST")]
     IsAModule,
 }
 
-impl_from! { for GetPartsError ;
-    DbError => |e| GetPartsError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum CreatePartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// This part is a module, it has no parts of its own.
     #[fail(display = "Module has no parts")]
     #[api(code = "bookpart:create-part:is-module", status = "BAD_REQUEST")]
     IsAModule,
 }
 
-impl_from! { for CreatePartError ;
-    DbError => |e| CreatePartError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum RealizeTemplateError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// This part is a module, it has no parts of its own.
     #[fail(display = "Module has no parts")]
     #[api(code = "bookpart:create-part:is-module", status = "BAD_REQUEST")]
     IsAModule,
     #[fail(display = "Module not found: {}", _0)]
-    ModuleNotFound(#[cause] FindModuleError),
+    ModuleNotFound(#[cause] #[from] FindModuleError),
     #[fail(display = "Part could not be created: {}", _0)]
     CreatePart(#[cause] CreatePartError),
 }
 
-impl_from! { for RealizeTemplateError ;
-    DbError => |e| RealizeTemplateError::Database(e),
-    FindModuleError => |e| RealizeTemplateError::ModuleNotFound(e),
-    CreatePartError => |e| match e {
-        CreatePartError::Database(e) => RealizeTemplateError::Database(e),
-        _ => RealizeTemplateError::CreatePart(e),
-    },
+impl From<CreatePartError> for RealizeTemplateError {
+    fn from(e: CreatePartError) -> Self {
+        match e {
+            CreatePartError::Database(e) => RealizeTemplateError::Database(e),
+            _ => RealizeTemplateError::CreatePart(e),
+        }
+    }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum ReparentPartError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// New parent is a module, it has no parts of its own.
     #[fail(display = "Parent cannot be a module")]
     #[api(code = "bookpart:reparent:is-module", status = "BAD_REQUEST")]
     IsAModule,
 }
 
-impl_from! { for ReparentPartError ;
-    DbError => |e| ReparentPartError::Database(e),
+#[derive(Serialize)]
+struct LogSetTitle<'a> {
+    part: i32,
+    title: &'a str,
+}
+
+#[derive(Serialize)]
+struct LogCreate<'a> {
+    part: i32,
+    parent: i32,
+    index: i32,
+    title: &'a str,
+    module: Option<Uuid>,
+}
+
+#[derive(Serialize)]
+struct LogReparent {
+    part: i32,
+    parent: i32,
+    index: i32,
 }

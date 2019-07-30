@@ -1,8 +1,11 @@
 use actix::System;
-use std::{env, mem};
+use failure::Error;
+use futures::{IntoFuture, future};
+use sentry::protocol::Event;
+use std::{env, mem, sync::Arc};
 use structopt::StructOpt;
 
-use crate::{Result, config::Config};
+use crate::{Result, audit, config::Config};
 
 mod document;
 mod role;
@@ -11,6 +14,7 @@ mod user;
 mod util;
 
 #[derive(StructOpt)]
+#[structopt(raw(version = r#"env!("VERSION")"#))]
 struct Opts {
     #[structopt(subcommand)]
     command: Command,
@@ -38,6 +42,10 @@ pub fn main() -> Result<()> {
     setup_sentry(&config)?;
     setup_logging(&config.logging)?;
 
+    // Run validation after sentry and logging setup so that they can catch bugs
+    // in validation.
+    config.validate()?;
+
     match opts.command {
         Command::Start => server::start(config),
         Command::Document(opts) => with_system(document::main, config, opts),
@@ -51,8 +59,10 @@ fn setup_sentry(config: &Config) -> Result<()> {
         env::set_var("RUST_BACKTRACE", "1");
         mem::forget(sentry::init((sentry.dsn.as_str(), sentry::ClientOptions {
             trim_backtraces: true,
+            debug: cfg!(debug_assertions),
             release: Some(env!("CARGO_PKG_VERSION").into()),
             server_name: Some(config.server.domain.clone().into()),
+            before_send: Some(Arc::new(Box::new(before_send_event_to_sentry))),
             .. Default::default()
         })));
         sentry::integrations::panic::register_panic_handler();
@@ -78,19 +88,25 @@ fn setup_logging(config: &crate::config::Logging) -> Result<()> {
 }
 
 /// Run a function in a context of an Actix system.
-fn with_system<F, O, R>(f: F, config: &Config, opts: O) -> R
+fn with_system<F, O, I>(f: F, config: &Config, opts: O)
+-> Result<I::Item, Error>
 where
-    F: FnOnce(&Config, O) -> R,
+    F: FnOnce(&Config, O) -> I,
+    I: IntoFuture,
+    I::Error: Send + Sync,
+    Error: From<I::Error>,
 {
-    let system = System::new("adaptarr::cli");
+    System::new("adaptarr::cli")
+        .block_on(future::lazy(|| {
+            audit::set_actor(audit::Actor::System);
+            f(config, opts)
+        }))
+        .map_err(From::from)
+}
 
-    let r = f(config, opts);
-
-    // Send stop signal to the system. Without this system.run() will hang
-    // forever.
-    System::current().stop();
-    // Process all pending messages.
-    system.run();
-
-    r
+fn before_send_event_to_sentry(mut ev: Event<'static>) -> Option<Event<'static>> {
+    if let Some(ref mut request) = ev.request {
+        request.headers.remove("cookie");
+    }
+    Some(ev)
 }

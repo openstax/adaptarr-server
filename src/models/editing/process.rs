@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _,
     prelude::*,
@@ -9,6 +10,7 @@ use std::ops::Deref;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         models as db,
@@ -71,6 +73,8 @@ impl Process {
                 })
                 .get_result::<db::EditProcess>(dbcon)?;
 
+            audit::log_db(dbcon, "edit-processes", process.id, "create", ());
+
             Version::create(dbcon, Self::from_db(process), structure)
         })
     }
@@ -84,6 +88,7 @@ impl Process {
     /// Note that only processes which have never been used can be deleted.
     pub fn delete(self, dbcon: &Connection) -> Result<(), DbError> {
         diesel::delete(&self.data).execute(dbcon)?;
+        audit::log_db(dbcon, "edit-processes", self.id, "delete", ());
         Ok(())
     }
 
@@ -125,6 +130,9 @@ impl Process {
         self.data = diesel::update(&self.data)
             .set(edit_processes::name.eq(name))
             .get_result(dbcon)?;
+
+        audit::log_db(dbcon, "edit-processes", self.id, "set-name", name);
+
         Ok(())
     }
 }
@@ -137,18 +145,14 @@ impl Deref for Process {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindProcessError {
     /// Database error.
     #[api(internal)]
     #[fail(display = "Database error: {}", _0)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No process found matching given criteria.
     #[api(code = "edit-process:not-found", status = "NOT_FOUND")]
     #[fail(display = "No such process")]
     NotFound,
-}
-
-impl_from! { for FindProcessError ;
-    DbError => |e| FindProcessError::Database(e),
 }

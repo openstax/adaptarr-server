@@ -1,5 +1,6 @@
-use serde::{Deserialize, Deserializer};
 use lettre_email::Mailbox;
+use serde::{Deserialize, Deserializer, de};
+use std::fmt;
 
 /// Mail system configuration.
 #[derive(Clone, Debug, Deserialize)]
@@ -12,6 +13,14 @@ pub struct Config {
     pub transport: Transports,
 }
 
+impl Config {
+    /// Validate configuration correctness.
+    pub fn validate(&self) -> Result<(), failure::Error> {
+        super::transport::from_config(self)?;
+        Ok(())
+    }
+}
+
 /// Mail transport configuration.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "transport", rename_all = "lowercase")]
@@ -20,6 +29,21 @@ pub enum Transports {
     Log,
     /// Use the `sendmail(1)` command.
     Sendmail,
+    /// Use SMTP
+    Smtp(SmtpConfig),
+}
+
+/// SMTP configuration.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SmtpConfig {
+    /// The host name to connect to.
+    pub host: String,
+    #[serde(default)]
+    /// The port to connect to.
+    pub port: Option<u16>,
+    /// Should we force TLS?
+    pub use_tls: UseTls,
 }
 
 fn de_mailbox<'de, D>(d: D) -> std::result::Result<Mailbox, D::Error>
@@ -31,7 +55,7 @@ where
 
 struct MailboxVisitor;
 
-impl<'de> serde::de::Visitor<'de> for MailboxVisitor {
+impl<'de> de::Visitor<'de> for MailboxVisitor {
     type Value = Mailbox;
 
     fn expecting(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -40,11 +64,58 @@ impl<'de> serde::de::Visitor<'de> for MailboxVisitor {
 
     fn visit_str<E>(self, v: &str) -> std::result::Result<Mailbox, E>
     where
-        E: serde::de::Error,
+        E: de::Error,
     {
-        use serde::de::Unexpected;
-
         v.parse()
-            .map_err(|_| E::invalid_value(Unexpected::Str(v), &"an email address"))
+            .map_err(|_| E::invalid_value(
+                de::Unexpected::Str(v), &"an email address"))
+    }
+}
+
+fn true_value() -> bool {
+    true
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UseTls {
+    /// Do not use TLS.
+    No,
+    /// Try to use TLS and fall back to unencrypted if TLS is not supported.
+    Yes,
+    /// Always use TLS.
+    Strict,
+}
+
+impl Default for UseTls {
+    fn default() -> Self {
+        UseTls::Yes
+    }
+}
+
+impl<'de> Deserialize<'de> for UseTls {
+    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        de.deserialize_bool(UseTlsVisitor)
+    }
+}
+
+struct UseTlsVisitor;
+
+impl<'de> de::Visitor<'de> for UseTlsVisitor {
+    type Value = UseTls;
+
+    fn expecting(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "true, false, or strict")
+    }
+
+    fn visit_bool<E>(self, v: bool) -> Result<UseTls, E> {
+        Ok(if v { UseTls::Yes } else { UseTls::No })
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<UseTls, E> {
+        match v {
+            "strict" | "always" => Ok(UseTls::Strict),
+            _ => Err(E::invalid_value(
+                de::Unexpected::Str(v), &"true, false, or strict")),
+        }
     }
 }

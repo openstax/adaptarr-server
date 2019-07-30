@@ -1,3 +1,4 @@
+use adaptarr_macros::From;
 use diesel::{
     Connection as _Connection,
     prelude::*,
@@ -9,6 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     ApiError,
+    audit,
     db::{
         Connection,
         functions::duplicate_document,
@@ -24,6 +26,7 @@ use crate::{
             xref_targets,
         },
     },
+    events::{EventManager, SlotFilled},
     processing::TargetProcessor,
 };
 use super::{
@@ -117,6 +120,10 @@ impl Module {
                     document: document.id,
                 })
                 .get_result::<db::Module>(dbconn)?;
+
+            audit::log_db(dbconn, "modules", data.id, "create", LogNewModule {
+                document: document.id,
+            });
 
             Ok(Module::from_db(data, document))
         })?;
@@ -222,12 +229,36 @@ impl Module {
                 .get_result::<db::Draft>(dbconn)?;
 
             diesel::insert_into(draft_slots::table)
-                .values(slots)
+                .values(&slots)
                 .execute(dbconn)?;
 
             let document = documents::table
                 .filter(documents::id.eq(draft.document))
                 .get_result::<db::Document>(dbconn)?;
+
+            audit::log_db(
+                dbconn, "documents", document.id, "clone-from", self.document.id);
+
+            audit::log_db(
+                dbconn, "modules", self.data.id, "begin-process", version.id);
+
+            audit::log_db(dbconn, "drafts", draft.module, "create", LogNewDraft {
+                from: self.data.id,
+                document: document.id,
+            });
+
+            for slot in slots {
+                EventManager::notify(slot.user, SlotFilled {
+                    slot: slot.slot,
+                    module: self.data.id,
+                    document: document.id,
+                });
+                audit::log_db(
+                    dbconn, "drafts", self.data.id, "fill-slot", LogFill {
+                        slot: slot.slot,
+                        user: slot.user,
+                    });
+            }
 
             Ok(Draft::from_db(draft, Document::from_db(document)))
         })
@@ -260,6 +291,9 @@ impl Module {
                 .set(modules::document.eq(document.id))
                 .execute(dbconn)?;
 
+            audit::log_db(
+                dbconn, "modules", self.data.id, "replace-content", document.id);
+
             self.document = document;
 
             Ok(())
@@ -279,20 +313,16 @@ impl std::ops::Deref for Module {
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum FindModuleError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// No module found matching given criteria.
     #[fail(display = "No such module")]
     #[api(code = "module:not-found", status = "NOT_FOUND")]
     NotFound,
-}
-
-impl_from! { for FindModuleError ;
-    DbError => |e| FindModuleError::Database(e),
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -311,42 +341,55 @@ pub enum BeginProcessError {
     BadSlot(i32, i32),
 }
 
-impl_from! { for BeginProcessError ;
-    DbError => |e| match e {
-        DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) =>
-            BeginProcessError::Exists,
-        _ => BeginProcessError::Database(e),
+impl From<DbError> for BeginProcessError {
+    fn from(e: DbError) -> Self {
+        match e {
+            DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) =>
+                BeginProcessError::Exists,
+            _ => BeginProcessError::Database(e),
+        }
     }
 }
 
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum ReplaceModuleError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// Module has drafts.
     #[fail(display = "Module with drafts cannot be replaced")]
     #[api(code = "module:replace:has-draft", status = "BAD_REQUEST")]
     HasDrafts,
 }
 
-impl_from! { for ReplaceModuleError ;
-    DbError => |e| ReplaceModuleError::Database(e),
-}
-
-#[derive(ApiError, Debug, Fail)]
+#[derive(ApiError, Debug, Fail, From)]
 pub enum GetXrefTargetsError {
     /// Database error.
     #[fail(display = "Database error: {}", _0)]
     #[api(internal)]
-    Database(#[cause] DbError),
+    Database(#[cause] #[from] DbError),
     /// List of cross-reference targets is yet to be generated for this module.
     #[fail(display = "List of cross references is not yet ready for this module")]
     #[api(code = "module:xref:not-ready", status = "SERVICE_UNAVAILABLE")]
     NotReady,
 }
 
-impl_from! { for GetXrefTargetsError ;
-    DbError => |e| GetXrefTargetsError::Database(e),
+#[derive(Serialize)]
+struct LogNewModule {
+    document: i32,
+}
+
+#[derive(Serialize)]
+struct LogFill {
+    slot: i32,
+    user: i32,
+}
+
+#[derive(Serialize)]
+struct LogNewDraft {
+    /// Module from which this draft was derived.
+    from: Uuid,
+    /// Document containing the first version of this draft.
+    document: i32,
 }

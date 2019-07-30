@@ -8,6 +8,8 @@ locale-name = Polski
 
 ## Login page
 
+login-title = Witaj w { -brand-name }
+
 login-field-email = Adres e-mail
 
 login-field-password = Hasło
@@ -51,13 +53,15 @@ logout-message = <p>Został/aś wylogowany/a.</p>
 
 ## Registration page
 
+register-title = Utwórz konto
+
 register-field-name = Imię
 
 register-field-password = Hasło
 
 register-field-repeat-password = Hasło
 
-register-submit = Zarejestruj
+register-submit = Utwórz
 
 # Variables:
 # - $code (string): error code
@@ -192,8 +196,6 @@ mail-reset-after-button =
 mail-notify-subject = Powiadomienie o postępie prac
 
 mail-notify-footer =
-    Dziękujemy za udział w naszym projekcie.
-
     Pozdrawiamy, 
     Zespół { -org-name }
 
@@ -212,12 +214,13 @@ mail-notify-group-header-assigned =
 # - $booktitle (string): Title of one of books in which the module is used
 # - $bookurl (string): URL to the book $booktitle
 mail-notify-event-assigned-text =
-    Moduł „{ $moduletitle }” ({ $moduleurl }) zostaje przekazany przez
-    użytkownika { $actorurl } do wykonania prac. { $bookcount ->
+    Moduł „{ $moduletitle }” ({ $moduleurl
+    }) zostaje przekazany przez użytkownika { $actorname
+    } do wykonania prac. { $bookcount ->
         [0] Moduł nie jest wykorzystywany w żadnej książce.
         [1] Moduł jest wykorzystywany w książce „{ $booktitle }” ({ $bookurl }).
-       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w
-            „{ $booktitle }” ({ $bookurl }).
+       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w „{
+            $booktitle }” ({ $bookurl }).
     }
 mail-notify-event-assigned =
     Moduł {
@@ -232,6 +235,109 @@ mail-notify-event-assigned =
             -mail-url(url: $bookurl, text: $booktitle) }.
     }
 
+# Header displayed before notifications about editing process finishing for
+# drafts.
+mail-notify-group-header-process-ended =
+    Informacja o zakończeniu prac redakcyjnych:
+
+# Notification about an editing process being finished for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module for whose draft the process ended
+# - $moduleurl (string): URL to the module $moduletitle
+mail-notify-event-process-ended-text =
+    Z radością informujemy, że kończymy prace redakcyjne nad modułem „{
+    $moduletitle }” ({ $moduleurl }).
+mail-notify-event-process-ended =
+    Z radością informujemy, że kończymy prace redakcyjne nad modułem {
+    -mail-url(url: $moduleurl, text: $moduletitle) }.
+
+# Notification about an editing process being cancelled for a draft.
+#
+# Variables:
+# - $moduletitle (string): title of the module for whose draft the process was
+#   cancelled
+# - $moduleurl (string): URL to the module $moduletitle
+mail-notify-event-process-cancelled-text =
+    Proces redakcyjny dla modułu „{ $moduletitle }” ({ $moduleurl
+    }) został zatrzymany.
+mail-notify-event-process-cancelled =
+    Proces redakcyjny dla modułu {
+    -mail-url(url: $moduleurl, text: $moduletitle) } został zatrzymany.
+
+# Header displayed before notifications about user being assigned to or removed
+# from a slot in an editing process.
+mail-notify-group-header-slot-assignment =
+    Informacja o przydzieleniu zadań:
+
+# Notification about user being assigned to a slot (or slots) in an editing
+# process for a draft.
+#
+# Variables:
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
+# - $slotname (string): name of the slot to which the user was assigned
+mail-notify-event-slot-filled-text =
+    Została przydzielona Ci rola { $slotname } modułu „{ $drafttitle }” ({
+    $drafturl }).
+mail-notify-event-slot-filled =
+    Została przydzielona Ci rola { $slotname } modułu {
+    -mail-url(url: $drafturl, text: $drafttitle) }.
+
+# Notification about user being removed from a slot in an editing process for
+# a draft.
+#
+# Variables:
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
+# - $slotname (string): name of the slot to which the user was assigned
+mail-notify-event-slot-vacated-text =
+    Dotychczas przydzielona Ci rola { $slotname } modułu „{ $drafttitle }” ({
+    $drafturl }) została przekazana innemu użytkownikowi.
+mail-notify-event-slot-vacated =
+    Dotychczas przydzielona Ci rola { $slotname
+    } modułu {
+        -mail-url(url: $drafturl, text: $drafttitle)
+    } została przekazana innemu użytkownikowi.
+
+# Header displayed before notifications about drafts moving between steps.
+mail-notify-group-header-draft-advanced =
+    Informacja o przepływie dokumentów w procesach redakcyjnych:
+
+# Notification about a draft moving between steps.
+#
+# Variable:
+# - $drafttitle (string): title of the draft in which the user was assigned
+# - $drafturl (string): URL to the draft $drafttitle
+# - $stepname (string): name of the step to which draft has moved
+# - $bookcount (number): number of books in which the module is used
+# - $booktitle (string): title of one of books in which the module is used
+# - $bookurl (string): URL to the book $booktitle
+mail-notify-event-draft-advanced-text =
+    Moduł „{ $drafttitle }” ({ $drafturl
+    }) zostaje przekazany z prośbą o wykonanie prac w zakresie: { $stepname
+    }. { $bookcount ->
+        [0] Moduł nie jest wykorzystywany w żadnej książce.
+        [1] Moduł jest wykorzystywany w książce „{ $booktitle }” ({ $bookurl }).
+       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w „{
+            $booktitle }” ({ $bookurl }).
+    }
+mail-notify-event-draft-advanced =
+    Moduł { -mail-url(url: $drafturl, text: $drafttitle)
+    } zostaje przekazany z prośbą o wykonanie prac w zakresie: { $stepname
+    }. { $bookcount ->
+        [0] Moduł nie jest wykorzystywany w żadnej książce.
+        [1] Moduł jest wykorzystywany w książce {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+       *[other] Moduł jest wykorzystywany w { $bookcount } książkach, w tym w {
+            -mail-url(url: $bookurl, text: $booktitle) }.
+    }
+
+-mail-notify-unknown-text =
+    Możesz zapoznać się z { $count ->
+        [1] nim
+       *[other] nimi
+    } w centrum powiadomień ({ $url }).
 -mail-notify-unknown =
     Możesz zapoznać się z { $count ->
         [1] nim
@@ -244,6 +350,13 @@ mail-notify-event-assigned =
 # Variables:
 # - $count (number): Number of unknown notifications
 # - $notification_centre_url (string): URL of the notifications centre
+mail-notify-also-unknown-events-text =
+    Oraz { $count ->
+        [1] jedno inne zdarzenie którego
+        [few] { $count} inne zdarzenia których
+       *[many] { $count } innych zdarzeń których
+    } nie jesteśmy w stanie przedstawić w wiadomości e-mail. {
+        -mail-notify-unknown-text(count: $count, url: $notification_centre_url) }
 mail-notify-also-unknown-events =
     Oraz { $count ->
         [1] jedno inne zdarzenie którego
@@ -258,6 +371,12 @@ mail-notify-also-unknown-events =
 # Variables:
 # - $count (number): Number of unknown notifications
 # - $notification_centre_url (string): URL of the notifications centre
+mail-notify-only-unknown-events-text =
+    Chcemy Cię poinformować o { $count ->
+        [1] jednym zdarzeniu którego
+       *[other] { $count } zdarzeniach których
+    } nie jesteśmy w stanie przedstawić w wiadomości e-mail. {
+        -mail-notify-unknown-text(count: $count, url: $notification_centre_url) }
 mail-notify-only-unknown-events =
     Chcemy Cię poinformować o { $count ->
         [1] jednym zdarzeniu którego

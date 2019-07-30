@@ -8,10 +8,12 @@ use actix_web::{
     middleware::Logger,
     pred,
 };
+use sentry_actix::SentryMiddleware;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
+    audit,
     i18n::{LanguageTag, Locale},
     mail::Mailer,
     models::{
@@ -31,14 +33,10 @@ use super::{
 };
 
 pub fn app(state: State) -> App<State> {
-    let sessions = SessionManager::new(
-        state.config.server.secret.clone(),
-        state.db.clone(),
-    );
-
     App::with_state(state)
+        .middleware(SentryMiddleware::new())
         .middleware(Logger::default())
-        .middleware(sessions)
+        .middleware(SessionManager::default())
         .resource("/login", |r| {
             r.get().api_with(login);
             r.post().api_with(do_login);
@@ -159,6 +157,8 @@ pub fn do_login(
         },
     };
 
+    audit::log_db_actor(&*db, user.id, "users", user.id, "authenticate", ());
+
     // NOTE: This will automatically remove any session that may still exist,
     // we don't have to do it manually here.
     Session::<Normal>::create(&req, &user, false);
@@ -228,6 +228,8 @@ pub fn do_elevate(
         );
     }
 
+    audit::log_db(&*db, "users", user.id, "elevate", ());
+
     Session::<Normal>::create(&req, &user, true);
 
     Ok(HttpResponse::SeeOther()
@@ -279,6 +281,8 @@ pub fn do_elevate_json(
         return Ok(HttpResponse::BadRequest()
             .json(ElevationResult::Error { message }));
     }
+
+    audit::log_db(&*db, "users", user.id, "elevate", ());
 
     Session::<Normal>::create(&req, &user, true);
 
@@ -383,7 +387,7 @@ pub fn do_reset(
 
             let user_locale = state.i18n.find_locale(&user.language())
                 .unwrap_or(locale);
-            Mailer::send(
+            Mailer::do_send(
                 email.as_str(),
                 "reset",
                 "mail-reset-subject",
