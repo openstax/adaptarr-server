@@ -2,12 +2,16 @@ use actix::prelude::*;
 use actix_web::ws::{self, CloseCode, WebsocketContext};
 use std::time::Duration;
 
+use crate::db::models as db;
 use super::{
     broker::{self, Broker, Connect, Disconnect, Event, NewMessageError},
     protocol::{
+        AnyMessage,
         Connected,
         CookieGenerator,
         Flags,
+        GetHistory,
+        HistoryEntries,
         Kind,
         Message,
         MessageInvalid,
@@ -58,6 +62,37 @@ impl Client {
                     })),
                 Err(err) => {
                     error!("Could not deliver new message: {}", err);
+                    ctx.close(Some(CloseCode::Error.into()));
+                }
+            })
+            .maybe_suspend(flags, ctx);
+    }
+
+    /// Handle request for a slice of conversation's history.
+    fn get_history(&mut self, msg: Message, ctx: &mut <Self as Actor>::Context) {
+        let data = match msg.parse_body::<GetHistory>() {
+            Ok(data) => data,
+            Err(_) => return ctx.close(Some(CloseCode::Other(4000).into())),
+        };
+        let flags = msg.flags;
+
+        Broker::from_registry()
+            .send(broker::GetHistory {
+                conversation: self.conversation,
+                from: data.from,
+                number: data.number,
+            })
+            .into_actor(self)
+            .then(success_or_disconnect)
+            .map(|r, _, ctx| match r {
+                Ok(events) => {
+                    let entries = serialize_events(events);
+                    ctx.binary(Message::build(msg.cookie, HistoryEntries {
+                        entries,
+                    }))
+                }
+                Err(err) => {
+                    error!("Could not retrieve history: {}", err);
                     ctx.close(Some(CloseCode::Error.into()));
                 }
             })
@@ -122,6 +157,8 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for Client {
         match Kind::from_u16(msg.kind) {
             // Client wants to send a message.
             Some(Kind::SendMessage) => self.send_message(msg, ctx),
+            // Client wants a slice of conversation's history.
+            Some(Kind::GetHistory) => self.get_history(msg, ctx),
             // Client did not understand an event we sent them. We must handle
             // this response since it might be mandated by the event, and we
             // need to mark it as received.
@@ -187,4 +224,16 @@ where
             self.spawn(ctx)
         }
     }
+}
+
+fn serialize_events(events: Vec<db::ConversationEvent>) -> Vec<AnyMessage> {
+    events.into_iter().map(|event| match event.kind.as_str() {
+        "new-message" => NewMessage {
+            id: event.id,
+            user: event.author.unwrap(),
+            timestamp: event.timestamp,
+            message: event.data.into(),
+        }.into(),
+        _ => unreachable!(),
+    }).collect()
 }

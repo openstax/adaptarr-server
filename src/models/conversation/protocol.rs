@@ -4,6 +4,8 @@ use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use chrono::NaiveDateTime;
 use failure::Fail;
 
+use super::util::{BufExt, BufMutExt};
+
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct Cookie(u32);
@@ -45,12 +47,16 @@ pub enum Kind {
     NewMessage = 1,
     /// Client requests to add a message to the conversation.
     SendMessage = 2,
+    /// Client requests a slice of conversation's history.
+    GetHistory = 3,
     /// Sent as a response to an unrecognised event.
     UnknownEvent = 0x8000,
     /// Message has been successfully added to the conversation.
     MessageReceived = 0x8001,
     /// Message was not valid.
     MessageInvalid = 0x8002,
+    /// History entries are being returned.
+    HistoryEntries = 0x8003,
 }
 
 impl Kind {
@@ -70,9 +76,11 @@ impl Kind {
             0 => Some(Kind::Connected),
             1 => Some(Kind::NewMessage),
             2 => Some(Kind::SendMessage),
+            3 => Some(Kind::GetHistory),
             0x8000 => Some(Kind::UnknownEvent),
             0x8001 => Some(Kind::MessageReceived),
             0x8002 => Some(Kind::MessageInvalid),
+            0x8003 => Some(Kind::HistoryEntries),
             _ => None,
         }
     }
@@ -189,6 +197,8 @@ impl ParseHeaderError {
 pub enum ParseMessageError {
     /// Message body was too short.
     Underflow(/* expected at least */ usize, /* got */ usize),
+    /// Message contained nested data of an unknown kind.
+    UnknownKind(u16),
     /// Message body was invalid.
     Other(Box<dyn Fail>),
 }
@@ -231,6 +241,56 @@ pub trait MessageBody: Sized {
 
     /// Read body of this message from a buffer.
     fn read(from: Bytes) -> Result<Self, ParseMessageError>;
+}
+
+pub enum AnyMessage {
+    Connected(Connected),
+    NewMessage(NewMessage),
+    SendMessage(SendMessage),
+    GetHistory(GetHistory),
+    UnknownEvent,
+    MessageReceived(MessageReceived),
+    MessageInvalid(MessageInvalid),
+    HistoryEntries(HistoryEntries),
+}
+
+impl_from! { for AnyMessage ;
+    Connected => |e| AnyMessage::Connected(e),
+    NewMessage => |e| AnyMessage::NewMessage(e),
+    SendMessage => |e| AnyMessage::SendMessage(e),
+    GetHistory => |e| AnyMessage::GetHistory(e),
+    UnknownEvent => |_| AnyMessage::UnknownEvent,
+    MessageReceived => |e| AnyMessage::MessageReceived(e),
+    MessageInvalid => |e| AnyMessage::MessageInvalid(e),
+    HistoryEntries => |e| AnyMessage::HistoryEntries(e),
+}
+
+impl AnyMessage {
+    pub fn kind(&self) -> Kind {
+        match *self {
+            AnyMessage::Connected(_) => Kind::Connected,
+            AnyMessage::NewMessage(_) => Kind::NewMessage,
+            AnyMessage::SendMessage(_) => Kind::SendMessage,
+            AnyMessage::GetHistory(_) => Kind::GetHistory,
+            AnyMessage::UnknownEvent => Kind::UnknownEvent,
+            AnyMessage::MessageReceived(_) => Kind::MessageReceived,
+            AnyMessage::MessageInvalid(_) => Kind::MessageInvalid,
+            AnyMessage::HistoryEntries(_) => Kind::HistoryEntries,
+        }
+    }
+
+    pub fn write(self, into: &mut BytesMut) {
+        match self {
+            AnyMessage::Connected(msg) => msg.write(into),
+            AnyMessage::NewMessage(msg) => msg.write(into),
+            AnyMessage::SendMessage(msg) => msg.write(into),
+            AnyMessage::GetHistory(msg) => msg.write(into),
+            AnyMessage::UnknownEvent => UnknownEvent.write(into),
+            AnyMessage::MessageReceived(msg) => msg.write(into),
+            AnyMessage::MessageInvalid(msg) => msg.write(into),
+            AnyMessage::HistoryEntries(msg) => msg.write(into),
+        }
+    }
 }
 
 /// First event sent from the server to the client when connection is
@@ -315,6 +375,37 @@ impl MessageBody for SendMessage {
     }
 }
 
+/// Send by client to request a slice of conversation's history.
+pub struct GetHistory {
+    /// Reference event's ID.
+    pub from: Option<i32>,
+    /// Number of events preceding reference to retrieve.
+    pub number: u16,
+}
+
+impl MessageBody for GetHistory {
+    fn kind() -> Kind { Kind::GetHistory }
+    fn flags(&self) -> Flags { Flags::RESPONSE_REQUIRED }
+    fn length(&self) -> usize { 6 }
+
+    fn write(self, into: &mut BytesMut) {
+        into.put_i32_le(self.from.unwrap_or(0));
+        into.put_u16_le(self.number);
+    }
+
+    fn read(from: Bytes) -> Result<Self, ParseMessageError> {
+        let mut buf = from.into_buf();
+
+        let from = buf.get_i32_le();
+        let number = buf.get_u16_le();
+
+        Ok(GetHistory {
+            from: if from == 0 { None } else { Some(from) },
+            number,
+        })
+    }
+}
+
 /// Send in a response to a unrecognised event which didn't need to be
 /// processed.
 pub struct UnknownEvent;
@@ -367,5 +458,63 @@ impl MessageBody for MessageInvalid {
         };
 
         Ok(MessageInvalid { message })
+    }
+}
+
+/// Structure representing body of a _0x8003 history entries_ response.
+pub struct HistoryEntries {
+    pub entries: Vec<AnyMessage>,
+}
+
+impl MessageBody for HistoryEntries {
+    fn kind() -> Kind { Kind::HistoryEntries }
+
+    fn length(&self) -> usize {
+        // 2 bytes for number of entries + 2 bytes for each entry's type.
+        2 + 2 * self.entries.len()
+    }
+
+    fn write(self, into: &mut BytesMut) {
+        into.put_u16_le(self.entries.len() as u16);
+
+        let mut buf = BytesMut::new();
+
+        for entry in self.entries {
+            let kind = entry.kind();
+
+            buf.clear();
+            entry.write(&mut buf);
+
+            let lebsize = ((buf.len() as f64).log2() / 7f64).ceil() as usize;
+            into.reserve(2 + lebsize + buf.len());
+            into.put_u16_le(kind as u16);
+            into.put_leb128(buf.len() as u64);
+            into.extend_from_slice(&buf);
+        }
+    }
+
+    fn read(from: Bytes) -> Result<Self, ParseMessageError> {
+        let mut entries = Vec::new();
+        let mut buf = (&from).into_buf();
+        let count = buf.get_u16_le();
+
+        for _ in 0..count {
+            let kind = buf.get_u16_le();
+            let kind = Kind::from_u16(kind)
+                .ok_or(ParseMessageError::UnknownKind(kind))?;
+            let length = buf.get_leb128();
+
+            let start = buf.position();
+            let end = start + length;
+            let body = from.slice(start as usize, end as usize);
+            buf.set_position(end);
+
+            entries.push(match kind {
+                Kind::NewMessage => NewMessage::read(body)?.into(),
+                _ => return Err(ParseMessageError::UnknownKind(kind as u16)),
+            });
+        }
+
+        Ok(HistoryEntries { entries })
     }
 }

@@ -4,6 +4,7 @@ mod conversation;
 mod event;
 mod format;
 mod protocol;
+mod util;
 
 pub use self::{
     client::Client,

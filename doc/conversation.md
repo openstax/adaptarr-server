@@ -95,6 +95,15 @@ an offset to the start of message. Current format has 18 bytes and contains:
 Sent by the client to add a new message to the conversation. The body contains
 a single [conversation message](#conversation-messages).
 
+#### 0x0003 Get history
+
+Sent by the client to request a fragment of conversation's history. Body
+specifies requested range of entries as the ID of newest known event (4 byte
+integer) and number of events (2 byte integer). Node that server may return
+fewer events than requested (e.g. because of rate limiting, or just because
+there aren't as many events). Zero can be used instead of a reference event's ID
+to request newest events.
+
 
 
 ### Responses
@@ -116,6 +125,21 @@ Sent in response to 0x0001 if the message failed validation. Message body is
 a UTF-8 encoded string describing the problem. This is only intended as an aid
 in debugging a client application and may not be included in a response sent by
 a production server.
+
+#### 0x8003 History entries
+
+Send in response to 0x0003. History is returned as a list of significant
+messages (that is messages which affect the conversation), such as the client
+would have received had it been connected when they were first emitted.
+
+The message body contains number of messages (2 byte integer) followed by
+history entries. Each entry begins with message's type (2 byte integer, the same
+as described in this document), it's length ([LEB128]), and then entry's body as
+it would be sent in a standalone message. There are no gaps or padding between
+entries.
+
+Messages included in history as of this version are: [0x0001 New message](
+#0x0001-new-message).
 
 
 

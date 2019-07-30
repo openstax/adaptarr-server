@@ -188,3 +188,59 @@ pub struct Event {
 impl Message for Event {
     type Result = ();
 }
+
+/// Request for slice of a conversation's history.
+pub struct GetHistory {
+    /// Conversation from which to retrieve history.
+    pub conversation: i32,
+    /// ID of an event relative to which to search.
+    pub from: Option<i32>,
+    /// Number of events to retrieve.
+    pub number: u16,
+}
+
+#[derive(Debug, Fail)]
+pub enum GetHistoryError {
+    #[fail(display = "internal error")]
+    Database(#[cause] DbError),
+    #[fail(display = "internal error")]
+    DbPool(#[cause] r2d2::Error),
+}
+
+impl_from! { for GetHistoryError ;
+    DbError => |e| GetHistoryError::Database(e),
+    r2d2::Error => |e| GetHistoryError::DbPool(e),
+}
+
+impl Message for GetHistory {
+    type Result = Result<Vec<db::ConversationEvent>, GetHistoryError>;
+}
+
+impl Handler<GetHistory> for Broker {
+    type Result = Result<Vec<db::ConversationEvent>, GetHistoryError>;
+
+    fn handle(&mut self, msg: GetHistory, _: &mut Self::Context) -> Self::Result {
+        let db = self.pool.get()?;
+
+        match msg.from {
+            Some(id) => db.transaction(|| {
+                let reference = conversation_events::table
+                    .filter(conversation_events::conversation.eq(msg.conversation)
+                        .and(conversation_events::id.eq(id)))
+                    .get_result::<db::ConversationEvent>(&*db)?;
+
+                conversation_events::table
+                    .filter(conversation_events::conversation.eq(msg.conversation)
+                        .and(conversation_events::timestamp.le(reference.timestamp)))
+                    .order_by(conversation_events::timestamp.desc())
+                    .limit(msg.number.min(128) as i64)
+                    .get_results(&*db)
+            }),
+            None => conversation_events::table
+                .filter(conversation_events::conversation.eq(msg.conversation))
+                .order_by(conversation_events::timestamp.desc())
+                .limit(msg.number.min(128) as i64)
+                .get_results(&*db),
+        }.map_err(From::from)
+    }
+}
