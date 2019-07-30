@@ -1,7 +1,8 @@
 use actix_web::ws::CloseCode;
 use bitflags::bitflags;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use chrono::NaiveDateTime;
+use failure::Fail;
 
 #[derive(Debug)]
 #[repr(transparent)]
@@ -117,21 +118,26 @@ impl Message {
     }
 
     /// Parse a message header.
-    pub fn parse(msg: Bytes) -> Result<Message, ParseMessageError> {
+    pub fn parse(msg: Bytes) -> Result<Message, ParseHeaderError> {
         if msg.len() < 8 {
-            return Err(ParseMessageError::Underflow);
+            return Err(ParseHeaderError::Underflow);
         }
 
         let cookie = u32::from_le_bytes([msg[0], msg[1], msg[2], msg[3]]);
         let kind = u16::from_le_bytes([msg[4], msg[5]]);
         let flags = Flags::from_bits(u16::from_le_bytes([msg[6], msg[7]]))
-            .ok_or(ParseMessageError::BadFlags)?;
+            .ok_or(ParseHeaderError::BadFlags)?;
         let body = msg.slice_from(8);
 
         Ok(Message {
             cookie: Cookie(cookie),
             kind, flags, body,
         })
+    }
+
+    /// Parse body of this message.
+    pub fn parse_body<B: MessageBody>(&self) -> Result<B, ParseMessageError> {
+        B::read(self.body.clone())
     }
 
     /// Write this message into the provided buffer.
@@ -162,25 +168,38 @@ impl Message {
 }
 
 #[derive(Clone, Copy)]
-pub enum ParseMessageError {
+pub enum ParseHeaderError {
     /// Message has fewer than 8 bytes.
     Underflow,
     /// Message specified unknown flags.
     BadFlags,
 }
 
-impl ParseMessageError {
+impl ParseHeaderError {
     /// Get WebSocket close code to use when terminating as a result of this
     /// error.
     pub fn close_code(&self) -> CloseCode {
         match self {
-            ParseMessageError::Underflow => CloseCode::Other(4000),
-            ParseMessageError::BadFlags => CloseCode::Other(4004),
+            ParseHeaderError::Underflow => CloseCode::Other(4000),
+            ParseHeaderError::BadFlags => CloseCode::Other(4004),
         }
     }
 }
 
-pub trait MessageBody {
+pub enum ParseMessageError {
+    /// Message body was too short.
+    Underflow(/* expected at least */ usize, /* got */ usize),
+    /// Message body was invalid.
+    Other(Box<dyn Fail>),
+}
+
+impl<E: Fail> From<E> for ParseMessageError {
+    fn from(e: E) -> Self {
+        ParseMessageError::Other(Box::new(e))
+    }
+}
+
+pub trait MessageBody: Sized {
     /// What kind of message is this?
     fn kind() -> Kind;
 
@@ -209,6 +228,9 @@ pub trait MessageBody {
     /// The buffer will have at least [`MessageBody::length()`] bytes allocated.
     /// Implementations are allowed to write out more data.
     fn write(self, into: &mut BytesMut);
+
+    /// Read body of this message from a buffer.
+    fn read(from: Bytes) -> Result<Self, ParseMessageError>;
 }
 
 /// Structure representing the body of a _0x0001 new message_ event.
@@ -243,6 +265,24 @@ impl MessageBody for NewMessage {
         buf.put_i64_le(self.timestamp.timestamp());
         buf.extend_from_slice(&self.message);
     }
+
+    fn read(from: Bytes) -> Result<Self, ParseMessageError> {
+        let mut buf = (&from).into_buf();
+        let length = buf.get_u16_le() as usize;
+
+        if length < 18 {
+            return Err(ParseMessageError::Underflow(18, length));
+        }
+
+        let id = buf.get_i32_le();
+        let user = buf.get_i32_le();
+        let timestamp = NaiveDateTime::from_timestamp(buf.get_i64_le(), 0);
+
+        Ok(NewMessage {
+            id, user, timestamp,
+            message: from.slice_from(length),
+        })
+    }
 }
 
 /// Structure representing the body of a _0x8001 message received_ response.
@@ -258,6 +298,12 @@ impl MessageBody for MessageReceived {
     fn write(self, buf: &mut BytesMut) {
         buf.put_i32_le(self.id);
     }
+
+    fn read(from: Bytes) -> Result<Self, ParseMessageError> {
+        Ok(MessageReceived {
+            id: from.into_buf().get_i32_le(),
+        })
+    }
 }
 
 /// Structure representing the body of a _0x8002 message invalid_ response.
@@ -271,5 +317,15 @@ impl MessageBody for MessageInvalid {
     fn write(self, buf: &mut BytesMut) {
         buf.extend_from_slice(
             self.message.as_ref().map_or(&[], String::as_bytes));
+    }
+
+    fn read(from: Bytes) -> Result<Self, ParseMessageError> {
+        let message = if from.is_empty() {
+            None
+        } else {
+            Some(String::from_utf8(from.as_ref().to_vec())?)
+        };
+
+        Ok(MessageInvalid { message })
     }
 }
