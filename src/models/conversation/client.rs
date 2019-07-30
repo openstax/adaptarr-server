@@ -5,6 +5,7 @@ use std::time::Duration;
 use super::{
     broker::{self, Broker, Connect, Disconnect, Event, NewMessageError},
     protocol::{
+        Connected,
         CookieGenerator,
         Flags,
         Kind,
@@ -12,6 +13,7 @@ use super::{
         MessageInvalid,
         MessageReceived,
         NewMessage,
+        UnknownEvent,
     },
 };
 
@@ -76,11 +78,7 @@ impl Actor for Client {
             .into_actor(self)
             .then(success_or_disconnect)
             .map(|_, actor, ctx| {
-                ctx.binary(Message::header(
-                    actor.cookie.next(),
-                    Kind::Connected,
-                    Flags::empty(),
-                ).to_bytes());
+                ctx.binary(Message::build(actor.cookie.next(), Connected {}));
             })
             .wait(ctx);
 
@@ -134,11 +132,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for Client {
             // We don't know this message type and need not process it, or we
             // know this message but are not supposed to receive it
             // (e.g. Kind::Connected).
-            _ => return ctx.binary(Message::header(
-                msg.cookie,
-                Kind::UnknownEvent,
-                Flags::empty(),
-            ).to_bytes()),
+            _ => return ctx.binary(Message::build(msg.cookie, UnknownEvent)),
         };
     }
 }

@@ -233,6 +233,17 @@ pub trait MessageBody: Sized {
     fn read(from: Bytes) -> Result<Self, ParseMessageError>;
 }
 
+/// First event sent from the server to the client when connection is
+/// established.
+pub struct Connected {
+}
+
+impl MessageBody for Connected {
+    fn kind() -> Kind { Kind::Connected }
+    fn write(self, _: &mut BytesMut) {}
+    fn read(_: Bytes) -> Result<Self, ParseMessageError> { Ok(Connected {}) }
+}
+
 /// Structure representing the body of a _0x0001 new message_ event.
 pub struct NewMessage {
     /// Message's ID.
@@ -283,6 +294,35 @@ impl MessageBody for NewMessage {
             message: from.slice_from(length),
         })
     }
+}
+
+/// Sent by the client to add a new message to the conversation.
+pub struct SendMessage {
+    pub message: Bytes,
+}
+
+impl MessageBody for SendMessage {
+    fn kind() -> Kind { Kind::SendMessage }
+    fn flags(&self) -> Flags { Flags::MUST_PROCESS | Flags::RESPONSE_REQUIRED }
+    fn length(&self) -> usize { self.message.len() }
+
+    fn write(self, into: &mut BytesMut) {
+        into.copy_from_slice(&self.message);
+    }
+
+    fn read(from: Bytes) -> Result<Self, ParseMessageError> {
+        Ok(SendMessage { message: from })
+    }
+}
+
+/// Send in a response to a unrecognised event which didn't need to be
+/// processed.
+pub struct UnknownEvent;
+
+impl MessageBody for UnknownEvent {
+    fn kind() -> Kind { Kind::UnknownEvent }
+    fn write(self, _: &mut BytesMut) {}
+    fn read(_: Bytes) -> Result<Self, ParseMessageError> { Ok(UnknownEvent) }
 }
 
 /// Structure representing the body of a _0x8001 message received_ response.
