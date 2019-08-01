@@ -69,18 +69,23 @@ impl Conversation {
         })
     }
 
+    /// Get list of IDs of users who are members of this conversation.
+    pub fn get_members(&self, db: &Connection) -> Result<Vec<i32>, DbError> {
+        conversation_members::table
+            .filter(conversation_members::conversation.eq(self.id))
+            .order_by(conversation_members::user.asc())
+            .select(conversation_members::user)
+            .get_results(db)
+    }
+
     /// Get the public portion of this conversation's data.
     pub fn get_public(&self, db: &Connection) -> Result<PublicData, DbError> {
         let db::Conversation { id, .. } = self.data;
 
-        let members = conversation_members::table
-            .filter(conversation_members::conversation.eq(id))
-            .get_results::<db::ConversationMember>(db)?
-            .into_iter()
-            .map(|member| member.user)
-            .collect();
-
-        Ok(PublicData { id, members })
+        Ok(PublicData {
+            id,
+            members: self.get_members(db)?,
+        })
     }
 
     /// Check whether a user can access a conversation.

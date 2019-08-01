@@ -13,21 +13,59 @@ use crate::{
         format::{self, Error as ValidationError},
     },
 };
+use super::conversation::FindConversationError;
 
 /// Broker messages and events to users.
 pub struct Broker {
     /// Mapping from conversation ID to a list of listeners for that
     /// conversation.
-    listeners: HashMap<i32, Vec<Listener>>,
+    conversations: HashMap<i32, Conversation>,
     pool: Pool,
 }
 
 impl Default for Broker {
     fn default() -> Self {
         Self {
-            listeners: HashMap::new(),
+            conversations: HashMap::new(),
             pool: crate::db::pool().expect("database should be initialized"),
         }
+    }
+}
+
+struct Conversation {
+    /// List of IDs of users who are members of this conversation.
+    members: Vec<i32>,
+    /// List of listeners currently observing this conversation.
+    listeners: Listeners,
+}
+
+/// Wrapper around a `Vec` which keeps its elements sorted (like a `BTreeSet`,
+/// but also implements `retain`, and is slower).
+#[derive(Default)]
+struct Listeners(Vec<Listener>);
+
+impl Listeners {
+    fn insert(&mut self, listener: Listener) {
+        let inx = match self.0.binary_search_by_key(&listener.user, |l| l.user) {
+            Ok(inx) => inx,
+            Err(inx) => inx,
+        };
+        self.0.insert(inx, listener);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&Listener) -> bool,
+    {
+        self.0.retain(f)
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Listener> {
+        self.0.iter()
     }
 }
 
@@ -58,21 +96,58 @@ pub struct Connect {
     pub addr: Recipient<Event>,
 }
 
+#[derive(Debug, Fail, From)]
+pub enum ConnectError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] #[from] DbError),
+    /// Database pool error.
+    #[fail(display = "database pool error: {}", _0)]
+    Pool(#[cause] #[from] r2d2::Error),
+    /// No conversation found matching given criteria.
+    #[fail(display = "No such conversation")]
+    NotFound,
+}
+
+impl From<FindConversationError> for ConnectError {
+    fn from(e: FindConversationError) -> Self {
+        match e {
+            FindConversationError::Database(e) => ConnectError::Database(e),
+            FindConversationError::NotFound => ConnectError::NotFound,
+        }
+    }
+}
+
 impl Message for Connect {
-    type Result = ();
+    type Result = Result<(), ConnectError>;
 }
 
 impl Handler<Connect> for Broker {
-    type Result = ();
+    type Result = Result<(), ConnectError>;
 
-    fn handle(&mut self, msg: Connect, _: &mut Self::Context) {
+    fn handle(&mut self, msg: Connect, _: &mut Self::Context) -> Self::Result {
         let Connect { user, conversation, addr } = msg;
 
         // TODO: verify the user can access this conversation
 
-        self.listeners.entry(conversation)
-            .or_default()
-            .push(Listener { user, addr });
+        // entry.try_insert_with
+        let conversation = match self.conversations.entry(conversation) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                let db = self.pool.get()?;
+                let conversation = super::Conversation::by_id(&*db, conversation)?;
+                let members = conversation.get_members(&*db)?;
+
+                entry.insert(Conversation {
+                    members: members,
+                    listeners: Listeners::default(),
+                })
+            }
+        };
+
+        conversation.listeners.insert(Listener { user, addr });
+
+        Ok(())
     }
 }
 
@@ -94,10 +169,10 @@ impl Handler<Disconnect> for Broker {
     fn handle(&mut self, msg: Disconnect, _: &mut Self::Context) {
         let Disconnect { conversation, addr } = msg;
 
-        if let Entry::Occupied(mut entry) = self.listeners.entry(conversation) {
-            entry.get_mut().retain(|l| l.addr != addr);
+        if let Entry::Occupied(mut entry) = self.conversations.entry(conversation) {
+            entry.get_mut().listeners.retain(|l| l.addr != addr);
 
-            if entry.get().is_empty() {
+            if entry.get().listeners.is_empty() {
                 entry.remove();
             }
         }
@@ -122,6 +197,8 @@ pub enum NewMessageError {
     Database(#[cause] #[from] DbError),
     #[fail(display = "internal error")]
     DbPool(#[cause] #[from] r2d2::Error),
+    #[fail(display = "client is not connected to requested conversation")]
+    NotConnected,
 }
 
 impl Message for NewMessage {
@@ -132,33 +209,70 @@ impl Handler<NewMessage> for Broker {
     type Result = Result<i32, NewMessageError>;
 
     fn handle(&mut self, msg: NewMessage, ctx: &mut Self::Context) -> Self::Result {
-        let NewMessage { conversation, user, message } = msg;
+        let NewMessage { conversation: conversation_id, user: author, message } = msg;
+
+        let conversation = self.conversations.get(&conversation_id)
+            .ok_or(NewMessageError::NotConnected)?;
 
         let validation = format::validate(&message)?;
 
         let db = self.pool.get()?;
         let event = EventModel::new_message_in(
-            &*db, conversation, user, &validation)?;
+            &*db, conversation_id, author, &validation)?;
         let db::ConversationEvent {
             id, timestamp, data, ..
         } = event.into_db();
 
         let event = Event {
-            id, conversation, user, timestamp,
+            id, timestamp,
+            user: author,
+            conversation: conversation_id,
             message: Bytes::from(data),
         };
 
-        for listener in self.listeners.get(&conversation).into_iter().flatten() {
-            if let Err(err) = listener.addr.do_send(event.clone()) {
-                error!("Can't send message to user {} in conversation {}: {}",
-                    listener.user, conversation, err);
-                ctx.notify(Disconnect {
-                    conversation,
-                    addr: listener.addr.clone(),
+        let mut listeners = conversation.listeners.iter();
+        let mut members = conversation.members.iter();
+
+        let mut listener = listeners.next();
+        let mut member = members.next();
+
+        while let Some(lst) = listener {
+            while let Some(&user) = member {
+                if user >= lst.user {
+                    break
+                }
+
+                // TODO: emit event
                 });
+
+                member = members.next();
             }
 
-            // TODO: notify users who aren't currently connected to conversation
+            let user = lst.user;
+
+            while let Some(lst) = listener {
+                if lst.user != user {
+                    break;
+                }
+
+                if let Err(err) = lst.addr.do_send(event.clone()) {
+                    error!("Can't send message to user {} in conversation {}: {}",
+                        lst.user, conversation_id, err);
+                    ctx.notify(Disconnect {
+                        conversation: conversation_id,
+                        addr: lst.addr.clone(),
+                    });
+                }
+
+                listener = listeners.next();
+            }
+
+            member = members.next();
+        }
+
+        while let Some(user) = member {
+            // TODO: emit event
+            member = members.next();
         }
 
         Ok(event.id)

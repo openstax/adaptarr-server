@@ -112,8 +112,13 @@ impl Actor for Client {
             })
             .into_actor(self)
             .then(success_or_disconnect)
-            .map(|_, actor, ctx| {
-                ctx.binary(Message::build(actor.cookie.next(), Connected {}));
+            .map(|r, actor, ctx| {
+                match r {
+                    Ok(()) => ctx.binary(
+                        Message::build(actor.cookie.next(), Connected {})),
+                    Err(_) =>
+                        ctx.close(Some(CloseCode::Error.into())),
+                }
             })
             .wait(ctx);
 
