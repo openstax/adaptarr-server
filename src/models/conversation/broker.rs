@@ -8,6 +8,7 @@ use std::collections::hash_map::{Entry, HashMap};
 
 use crate::{
     db::{Pool, models as db, schema::conversation_events},
+    events::{EventManager, NewMessage as NewMessageEvent},
     models::conversation::{
         event::Event as EventModel,
         format::{self, Error as ValidationError},
@@ -242,7 +243,10 @@ impl Handler<NewMessage> for Broker {
                     break
                 }
 
-                // TODO: emit event
+                EventManager::notify(user, NewMessageEvent {
+                    author,
+                    conversation: conversation_id,
+                    message: id,
                 });
 
                 member = members.next();
@@ -271,7 +275,12 @@ impl Handler<NewMessage> for Broker {
         }
 
         while let Some(user) = member {
-            // TODO: emit event
+            EventManager::notify(*user, NewMessageEvent {
+                author,
+                conversation: conversation_id,
+                message: id,
+            });
+
             member = members.next();
         }
 

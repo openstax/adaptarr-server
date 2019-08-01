@@ -1,4 +1,6 @@
+use adaptarr_macros::From;
 use diesel::{prelude::*, result::Error as DbError};
+use failure::Fail;
 
 use crate::db::{Connection, models as db, schema::conversation_events};
 use super::format::Validation;
@@ -12,6 +14,16 @@ impl Event {
     /// Construct `Event` from its database counterpart.
     pub(super) fn from_db(data: db::ConversationEvent) -> Self {
         Self { data }
+    }
+
+    /// Find a conversation event by ID.
+    pub fn by_id(db: &Connection, id: i32) -> Result<Self, FindEventError> {
+        conversation_events::table
+            .filter(conversation_events::id.eq(id))
+            .get_result(db)
+            .optional()?
+            .map(Self::from_db)
+            .ok_or(FindEventError::NotFound)
     }
 
     /// Get underlying database model.
@@ -44,4 +56,14 @@ impl std::ops::Deref for Event {
     fn deref(&self) -> &db::ConversationEvent {
         &self.data
     }
+}
+
+#[derive(Debug, Fail, From)]
+pub enum FindEventError {
+    /// Database error.
+    #[fail(display = "Database error: {}", _0)]
+    Database(#[cause] #[from] DbError),
+    /// No event found matching given criteria.
+    #[fail(display = "No such event")]
+    NotFound,
 }

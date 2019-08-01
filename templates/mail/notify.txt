@@ -15,6 +15,8 @@
     {%- set header = "mail-notify-group-header-slot-assignment" -%}
 {%- elif group == "draft-advanced" -%}
     {%- set header = "mail-notify-group-header-draft-advanced" -%}
+{%- elif group == "conversation" -%}
+    {%- set header = "mail-notify-group-header-conversation" -%}
 {%- else -%}
     {%- set_global num_unknown = num_unknown + count -%}
     {%- continue -%}
@@ -81,6 +83,15 @@
     bookurl=event.book.url,
     bookcount=event.book.count
 ) }}
+{%- elif event.kind == "new-message" %}
+
+{{ _(
+    key="mail-notify-event-new-message-text",
+    authorname=event.author.name,
+    authorurl=event.author.url
+) }}
+
+{{ event.message.text }}
 {%- endif -%}
 
 {%- endfor -%}

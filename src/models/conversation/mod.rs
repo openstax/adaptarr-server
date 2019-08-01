@@ -14,4 +14,5 @@ pub use self::{
         FindConversationError,
         PublicData as ConversationData,
     },
+    event::{Event, FindEventError},
 };
