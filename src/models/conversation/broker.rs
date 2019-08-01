@@ -10,7 +10,7 @@ use crate::{
     db::{Pool, models as db, schema::conversation_events},
     models::conversation::{
         event::Event as EventModel,
-        format::{self, ValidationError},
+        format::{self, Error as ValidationError},
     },
 };
 
