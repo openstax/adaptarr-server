@@ -335,7 +335,7 @@ impl Handler<GetHistory> for Broker {
     fn handle(&mut self, msg: GetHistory, _: &mut Self::Context) -> Self::Result {
         let db = self.pool.get()?;
 
-        match msg.from {
+        let mut events = match msg.from {
             Some(id) => db.transaction(|| {
                 let reference = conversation_events::table
                     .filter(conversation_events::conversation.eq(msg.conversation)
@@ -348,12 +348,15 @@ impl Handler<GetHistory> for Broker {
                     .order_by(conversation_events::timestamp.desc())
                     .limit(msg.number.min(128) as i64)
                     .get_results(&*db)
-            }),
+            })?,
             None => conversation_events::table
                 .filter(conversation_events::conversation.eq(msg.conversation))
                 .order_by(conversation_events::timestamp.desc())
                 .limit(msg.number.min(128) as i64)
-                .get_results(&*db),
-        }.map_err(From::from)
+                .get_results(&*db)?,
+        };
+
+        events.reverse();
+        Ok(events)
     }
 }
