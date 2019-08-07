@@ -238,7 +238,6 @@ pub enum ExpandedEvent {
         book: ExpandedBooks,
     },
     NewMessage {
-        conversation: ExpandedConversation,
         author: ExpandedUser,
         message: ExpandedMessage,
     }
@@ -291,13 +290,9 @@ pub struct ExpandedStep {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ExpandedConversation {
-    /// Conversation's URL.
-    pub url: String,
-}
-
-#[derive(Debug, Serialize)]
 pub struct ExpandedMessage {
+    /// URL to the message.
+    pub url: String,
     /// Message rendered as plain text with no formatting.
     pub text: String,
     /// Conversation rendered as HTML for email (this differs form a normal
@@ -552,14 +547,13 @@ fn expand_new_message(config: &Config, dbcon: &Connection, ev: NewMessage)
         ),
     }.into_db();
 
+    let message_url = format!("https://{}/conversations/{}#{}",
+        config.server.domain, ev.conversation, message.id);
+
     Ok(ExpandedEvent::NewMessage {
-        conversation: ExpandedConversation {
-            url: format!("https://{}/conversations/{}#{}",
-                config.server.domain, ev.conversation, message.id),
-        },
         author: expand_user(config, dbcon, ev.author)?,
         message: message_format::render(
-            &message.data.into(), MessageRenderer::new(dbcon),
+            &message.data.into(), MessageRenderer::new(dbcon, message_url),
         ).expect("Inconsistent database: conversation contains an invalid \
             message"),
     })
@@ -571,12 +565,13 @@ struct MessageRenderer<'a> {
     html: String,
     format: Vec<Format>,
     first_para: bool,
+    message_url: String,
 }
 
 impl<'a> MessageRenderer<'a> {
-    fn new(dbcon: &'a Connection) -> Self {
+    fn new(dbcon: &'a Connection, message_url: String) -> Self {
         MessageRenderer {
-            dbcon,
+            dbcon, message_url,
             text: String::new(),
             html: String::new(),
             format: Vec::new(),
@@ -684,6 +679,7 @@ impl<'a> message_format::Renderer for MessageRenderer<'a> {
         self.text.truncate(end);
 
         ExpandedMessage {
+            url: self.message_url,
             text: self.text,
             html: self.html,
         }

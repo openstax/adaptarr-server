@@ -88,7 +88,8 @@
 {{ _(
     key="mail-notify-event-new-message-text",
     authorname=event.author.name,
-    authorurl=event.author.url
+    authorurl=event.author.url,
+    messageurl=event.message.url
 ) }}
 
 {{ event.message.text }}

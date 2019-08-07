@@ -85,12 +85,13 @@
                 {{ m::expand_paras(paras=_(
                     key="mail-notify-event-new-message",
                     authorname=event.author.name,
-                    authorurl=event.author.url
+                    authorurl=event.author.url,
+                    messageurl=event.message.url
                 )) }}
                 <tr>
                     <td style="padding: 0 14px 10px 14px;">
                         <a
-                            href="{{ event.conversation.url }}"
+                            href="{{ event.message.url }}"
                             target="_blank"
                             rel="noopener"
                             style="text-decoration: none; color: inherit; display: block;"
