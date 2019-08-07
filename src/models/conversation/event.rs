@@ -43,7 +43,7 @@ impl Event {
                 conversation,
                 kind: "new-message",
                 author: Some(author),
-                data: message.body,
+                data: message.body.as_ref(),
             })
             .get_result(db)
             .map(Event::from_db)

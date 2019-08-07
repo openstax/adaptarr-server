@@ -1,7 +1,10 @@
 use adaptarr_macros::From;
 use bitflags::bitflags;
+use bytes::{Buf, Bytes};
 use failure::Fail;
-use std::{io::Read, str::Utf8Error};
+use std::str::Utf8Error;
+
+use super::util::{BufExt, ReadBytes};
 
 /// Known frame types.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -63,13 +66,13 @@ bitflags! {
 
 /// Result of message validation.
 #[derive(Default)]
-pub struct Validation<'a> {
+pub struct Validation {
     /// List of users mentioned in this message.
     pub mentions: Vec<i32>,
     /// Portion of the input data containing the message.
-    pub body: &'a [u8],
+    pub body: Bytes,
     /// Remaining bytes not interpreted as part of the message.
-    pub rest: &'a [u8],
+    pub rest: Bytes,
 }
 
 #[derive(Debug, Fail, From)]
@@ -86,6 +89,8 @@ pub enum Error {
     #[fail(display = "expected frame type {:?} to have {} bytes, but found {}",
         _0, _1, _2)]
     FrameLength(Frame, usize, usize),
+    #[fail(display = "frame {:?} contains {} extra bytes", _0, _1)]
+    FrameTooLong(Frame, usize),
     #[fail(display = "message contains unknown frame {}", _0)]
     UnknownFrame(u64),
     #[fail(display = "{:?} is not a valid root frame", _0)]
@@ -100,28 +105,9 @@ pub enum Error {
     NonAsciiUrl,
 }
 
-/// Read a single LEB128 value from a reader.
-fn leb128<R: Read>(mut r: R) -> Result<u64, Error> {
-    let mut buf = [0; 1];
-    let mut v = 0u64;
-
-    loop {
-        r.read_exact(&mut buf)?;
-        v = v.checked_shl(7)
-            .and_then(|v| v.checked_add(u64::from(buf[0] & 0x7f)))
-            .ok_or(Error::Leb128Overflow)?;
-
-        if buf[0] & 0x80 == 0 {
-            break
-        }
-    }
-
-    Ok(v)
-}
-
 /// Read a stream of frames.
-fn frames(mut bytes: &[u8])
--> impl Iterator<Item = Result<(Frame, &[u8]), Error>> {
+fn frames<'b>(mut bytes: ReadBytes<'b>)
+-> impl Iterator<Item = Result<(Frame, ReadBytes<'b>), Error>> + 'b {
     std::iter::from_fn(move || {
         if bytes.is_empty() {
             None
@@ -132,24 +118,22 @@ fn frames(mut bytes: &[u8])
 }
 
 /// Read a single frame.
-fn read_frame<'a>(bytes: &mut &'a [u8])
--> Result<(Frame, &'a [u8]), Error> {
-    let ty = leb128(&mut *bytes)?;
+fn read_frame<'b>(body: &mut ReadBytes<'b>)
+-> Result<(Frame, ReadBytes<'b>), Error> {
+    let ty = body.get_leb128();
     let ty = Frame::from_u64(ty).ok_or(Error::UnknownFrame(ty))?;
-    let size = leb128(&mut *bytes)? as usize;
+    let size = body.get_leb128() as usize;
 
-    if size > bytes.len() {
-        Err(Error::FrameOverflow(ty, size, bytes.len()))
+    if size > body.remaining() {
+        Err(Error::FrameOverflow(ty, size, body.remaining()))
     } else {
-        let (body, rest) = bytes.split_at(size);
-        *bytes = rest;
-        Ok((ty, body))
+        Ok((ty, body.slice(size)))
     }
 }
 
 /// Validate contents of a user-sent message.
-pub fn validate(message: &[u8]) -> Result<Validation, Error> {
-    let mut read = message;
+pub fn validate(message: &Bytes) -> Result<Validation, Error> {
+    let mut read = ReadBytes::new(message);
     let mut ctx = Validation::default();
     let (ty, body) = read_frame(&mut read)?;
 
@@ -159,14 +143,13 @@ pub fn validate(message: &[u8]) -> Result<Validation, Error> {
 
     validate_frame(&mut ctx, ty, body)?;
 
-    let len = read.as_ptr() as usize - message.as_ptr() as usize;
-    ctx.body = &message[..len];
-    ctx.rest = read;
+    ctx.body = message.slice_to(read.cursor());
+    ctx.rest = read.as_bytes();
     Ok(ctx)
 }
 
 /// Validate a single complex frame.
-fn validate_frame(ctx: &mut Validation, ty: Frame, body: &[u8])
+fn validate_frame(ctx: &mut Validation, ty: Frame, body: ReadBytes)
 -> Result<(), Error> {
     let legal = ty.can_contain();
 
@@ -180,64 +163,67 @@ fn validate_frame(ctx: &mut Validation, ty: Frame, body: &[u8])
         match frame {
             Frame::Message =>
                 unreachable!("There are no frames that can contain Message"),
-            Frame::Paragraph => validate_frame(ctx, frame, body)?,
-            Frame::Text => validate_text(body)?,
-            Frame::PushFormat | Frame::PopFormat => validate_format(frame, body)?,
-            Frame::Hyperlink => validate_hyperlink(body)?,
-            Frame::Mention => validate_mention(ctx, body)?,
+            Frame::Paragraph => { validate_frame(ctx, frame, body)?; }
+            Frame::Text => { read_text(body)?; }
+            Frame::PushFormat | Frame::PopFormat => { read_format(frame, body)?; }
+            Frame::Hyperlink => { read_hyperlink(body)?; }
+            Frame::Mention => { ctx.mentions.push(read_user_mention(body)?); }
         }
     }
 
     Ok(())
 }
 
-/// Validate a text ([`Frame::Text`]) frame.
-fn validate_text(body: &[u8]) -> Result<(), Error> {
-    std::str::from_utf8(body)?;
-    Ok(())
+/// Read a text ([`Frame::Text`]) frame.
+fn read_text(body: ReadBytes) -> Result<&str, Error> {
+    std::str::from_utf8(body.as_slice()).map_err(From::from)
 }
 
-/// Validate a formatting ([`Frame::PushFormat`] or [`Frame::PopFormat`]) frame.
-fn validate_format(frame: Frame, body: &[u8]) -> Result<(), Error> {
-    if body.len() != 2 {
-        return Err(Error::FrameLength(frame, 2, body.len()));
+/// Read a formatting ([`Frame::PushFormat`] or [`Frame::PopFormat`]) frame.
+fn read_format(frame: Frame, mut body: ReadBytes) -> Result<Format, Error> {
+    if body.remaining() != 2 {
+        return Err(Error::FrameLength(frame, 2, body.remaining()));
     }
 
-    let bits = u16::from_le_bytes([body[0], body[1]]);
+    let bits = body.get_u16_le();
 
     Format::from_bits(bits)
-        .ok_or(Error::UnknownFormat(bits & !Format::all().bits()))?;
-
-    Ok(())
+        .ok_or(Error::UnknownFormat(bits & !Format::all().bits()))
 }
 
-/// Validate a hyperlink ([`Frame::Hyperlink`]) frame.
-fn validate_hyperlink(mut body: &[u8]) -> Result<(), Error> {
-    let len = leb128(&mut body)?;
-    let (label, url) = body.split_at(len as usize);
-    validate_text(label)?;
+/// Read a hyperlink ([`Frame::Hyperlink`]) frame.
+fn read_hyperlink(mut body: ReadBytes) -> Result<(Option<&str>, &str), Error> {
+    let len = body.get_leb128() as usize;
 
-    let url = std::str::from_utf8(url)?;
+    let label = if len == 0 {
+        None
+    } else {
+        Some(read_text(body.slice(len))?)
+    };
+
+    let url = std::str::from_utf8(body.as_slice())?;
     if !url.is_ascii() {
         Err(Error::NonAsciiUrl)
     } else {
-        Ok(())
+        Ok((label, url))
     }
 }
 
-/// Validate a mention ([`Frame::Mention`]) frame.
-fn validate_mention(ctx: &mut Validation, mut body: &[u8])
--> Result<(), Error> {
-    let user = leb128(&mut body)? as i32;
+/// Read a mention ([`Frame::Mention`]) frame.
+fn read_user_mention(mut body: ReadBytes)
+-> Result<i32, Error> {
+    let user = body.get_leb128() as i32;
 
-    ctx.mentions.push(user);
-
-    Ok(())
+    if !body.is_empty() {
+        Err(Error::FrameTooLong(Frame::Mention, body.remaining()))
+    } else {
+        Ok(user)
+    }
 }
 
 /// Read contents of a message.
-pub fn reader(mut message: &[u8]) -> Result<FrameReader, Error> {
-    let (frame, body) = read_frame(&mut message)?;
+pub fn reader(message: &Bytes) -> Result<FrameReader, Error> {
+    let (frame, body) = read_frame(&mut ReadBytes::new(message))?;
 
     if frame != Frame::Message {
         return Err(Error::BadRoot(frame));
@@ -246,20 +232,21 @@ pub fn reader(mut message: &[u8]) -> Result<FrameReader, Error> {
     Ok(FrameReader { frame, body })
 }
 
-pub struct FrameReader<'a> {
+pub struct FrameReader<'b> {
     pub frame: Frame,
-    body: &'a [u8],
+    body: ReadBytes<'b>,
 }
 
-impl<'a> FrameReader<'a> {
-    pub fn iter(self) -> impl Iterator<Item = Result<FrameReader<'a>, Error>> {
-        let legal = self.frame.can_contain();
+impl<'b> FrameReader<'b> {
+    pub fn iter(self) -> impl Iterator<Item = Result<FrameReader<'b>, Error>> {
+        let FrameReader { frame, body } = self;
+        let legal = frame.can_contain();
 
-        frames(self.body).map(move |frame| {
+        frames(body).map(move |frame| {
             let (frame, body) = frame?;
 
             if legal.binary_search(&frame).is_err() {
-                return Err(Error::BadChild(self.frame, frame));
+                return Err(Error::BadChild(frame, frame));
             }
 
             Ok(FrameReader { frame, body })
@@ -268,11 +255,11 @@ impl<'a> FrameReader<'a> {
 }
 
 /// Render a message to a custom renderer.
-pub fn render<R>(message: &[u8], mut renderer: R) -> Result<R::Result, Error>
+pub fn render<R>(message: &Bytes, mut renderer: R) -> Result<R::Result, Error>
 where
     R: Renderer,
 {
-    for frame in reader(message)?.iter() {
+for frame in reader(message)?.iter() {
         let frame = frame?;
 
         match frame.frame {
@@ -308,7 +295,7 @@ where
                             renderer.hyperlink(label, url);
                         }
                         Frame::Mention => {
-                            let user = read_mention(frame.body)?;
+                            let user = read_user_mention(frame.body)?;
                             renderer.mention(user);
                         }
                         _ => unreachable!(),
@@ -358,45 +345,4 @@ pub trait Renderer {
 
     /// Finalize rendering and produce final result.
     fn finish(self) -> Self::Result;
-}
-
-/// Read a text ([`Frame::Text`]) frame.
-fn read_text(body: &[u8]) -> Result<&str, Error> {
-    std::str::from_utf8(body).map_err(From::from)
-}
-
-/// Read a formatting ([`Frame::PushFormat`] or [`Frame::PopFormat`]) frame.
-fn read_format(frame: Frame, body: &[u8]) -> Result<Format, Error> {
-    if body.len() != 2 {
-        return Err(Error::FrameLength(frame, 2, body.len()));
-    }
-
-    let bits = u16::from_le_bytes([body[0], body[1]]);
-
-    Format::from_bits(bits)
-        .ok_or(Error::UnknownFormat(bits & !Format::all().bits()))
-}
-
-/// Read a hyperlink ([`Frame::Hyperlink`]) frame.
-fn read_hyperlink(mut body: &[u8]) -> Result<(Option<&str>, &str), Error> {
-    let len = leb128(&mut body)?;
-    let (label, url) = body.split_at(len as usize);
-
-    let label = if label.is_empty() {
-        None
-    } else {
-        Some(read_text(label)?)
-    };
-
-    let url = std::str::from_utf8(url)?;
-    if !url.is_ascii() {
-        Err(Error::NonAsciiUrl)
-    } else {
-        Ok((label, url))
-    }
-}
-
-/// Read a mention ([`Frame::Mention`]) frame.
-fn read_mention(mut body: &[u8]) -> Result<i32, Error> {
-    leb128(&mut body).map(|x| x as i32)
 }

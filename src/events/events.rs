@@ -559,7 +559,7 @@ fn expand_new_message(config: &Config, dbcon: &Connection, ev: NewMessage)
         },
         author: expand_user(config, dbcon, ev.author)?,
         message: message_format::render(
-            &message.data, MessageRenderer::new(dbcon),
+            &message.data.into(), MessageRenderer::new(dbcon),
         ).expect("Inconsistent database: conversation contains an invalid \
             message"),
     })

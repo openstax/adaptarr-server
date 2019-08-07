@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut};
+use bytes::{Buf, BufMut, Bytes};
 
 pub trait BufExt: Buf {
     fn get_leb128(&mut self) -> u64;
@@ -40,6 +40,77 @@ impl<T: BufMut> BufMutExt for T {
         }
 
         self.put_slice(&[(v & 0xff) as u8]);
+    }
+}
+
+pub struct ReadBytes<'bytes> {
+    bytes: &'bytes Bytes,
+    cursor: usize,
+    limit: usize,
+}
+
+impl<'bytes> ReadBytes<'bytes> {
+    pub fn new(bytes: &'bytes Bytes) -> Self {
+        ReadBytes {
+            bytes,
+            cursor: 0,
+            limit: bytes.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.limit >= self.cursor
+    }
+
+    pub fn get_slice(&mut self, len: usize) -> &'bytes [u8] {
+        assert!(len <= self.remaining());
+        let slice = &self.bytes.as_ref()[..len];
+        self.advance(len);
+        slice
+    }
+
+    pub fn slice(&mut self, len: usize) -> ReadBytes<'bytes> {
+        let slice = ReadBytes {
+            bytes: self.bytes,
+            cursor: self.cursor,
+            limit: len,
+        };
+        self.advance(len);
+        slice
+    }
+
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    /// This is the same as `AsRef::as_ref`, except that the returned slice has
+    /// lifetime of `'bytes` and is not tied to this instance.
+    pub fn as_slice(&self) -> &'bytes [u8] {
+        self.bytes.as_ref()
+    }
+
+    pub fn as_bytes(&self) -> Bytes {
+        self.bytes.slice(self.cursor, self.limit)
+    }
+}
+
+impl<'bytes> AsRef<[u8]> for ReadBytes<'bytes> {
+    fn as_ref(&self) -> &[u8] {
+        self.bytes.as_ref()
+    }
+}
+
+impl<'bytes> Buf for ReadBytes<'bytes> {
+    fn remaining(&self) -> usize {
+        self.limit - self.cursor
+    }
+
+    fn bytes(&self) -> &[u8] {
+        &self.bytes.as_ref()[self.cursor..]
+    }
+
+    fn advance(&mut self, cnt: usize) {
+        self.cursor += cnt;
     }
 }
 
