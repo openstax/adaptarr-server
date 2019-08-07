@@ -368,17 +368,17 @@ This endpoint is only available in elevated sessions with the
 Return detailed information about a process's version, as a JSON object of the
 [`Version`](#version) model.
 
-### `GET /api/v1/processes/versions/:version/:id/slots`
+### `GET /api/v1/processes/:id/versions/:version/:id/slots`
 
 Return list of all slots in a particular version of a process, as a JSON array
 of objects of the [`Slot`](#slot) model.
 
-### `GET /api/v1/processes/versions/:version/:id/slots/:slot`
+### `GET /api/v1/processes/:id/versions/:version/:id/slots/:slot`
 
 Return detailed information about a particular slot in a version of a process,
 as a JSON object of the [`Slot`](#slot) model.
 
-### `PUT /api/v1/processes/versions/:version/:id/slots/:slot`
+### `PUT /api/v1/processes/:id/versions/:version/:id/slots/:slot`
 
 Modify a slot in a particular version of a process. Accepts a JSON object with
 following properties:
@@ -398,19 +398,19 @@ Optional fields may be omitted, in which case the corresponding property will
 remain unchanged. This endpoint is only available in elevated sessions with the
 [`editing-process:edit`](../#p-editing-process-edit) permission.
 
-### `GET /api/v1/processes/versions/:version/:id/steps`
+### `GET /api/v1/processes/:id/versions/:version/:id/steps`
 
-Return list of all steps in the newest version of a process, as a JSON array of
-objects of the [`Step`](#step) model.
+Return list of all steps in a particular version of a process, as a JSON array
+of objects of the [`Step`](#step) model.
 
-### `GET /api/v1/processes/versions/:version/:id/steps/:step`
+### `GET /api/v1/processes/:id/versions/:version/:id/steps/:step`
 
-Return detailed information about a particular step in the newset version of
+Return detailed information about a particular step in the a version of
 a process, as a JSON object of the [`Step`](#step) model.
 
-### `PUT /api/v1/processes/versions/:version/:id/steps/:step`
+### `PUT /api/v1/processes/:id/versions/:version/:id/steps/:step`
 
-Modify a step in the newest version of a process. Accepts a JSON object with
+Modify a step in a particular version of a process. Accepts a JSON object with
 following properties:
 
 ```
@@ -424,19 +424,19 @@ following properties:
 This endpoint is only available in elevated sessions with the
 [`editing-process:edit`](../#p-editing-process-edit) permission.
 
-### `GET /api/v1/processes/versions/:version/:id/steps/:step/links`
+### `GET /api/v1/processes/:id/versions/:version/:id/steps/:step/links`
 
-Return list of all link in a particular step in the newest version of a process,
+Return list of all link in a particular step in a version of a process,
 as a JSON array of objects of the [`Link`](#link) model.
 
-### `GET /api/v1/processes/versions/:version/:id/steps/:step/links/:slot/:target`
+### `GET /api/v1/processes/:id/versions/:version/:id/steps/:step/links/:slot/:target`
 
-Return detailed information about a particular link in a step of the newest
-version of a process, as a JSON object of the [`Link`](#link) model.
+Return detailed information about a particular link in a step of a version of
+a process, as a JSON object of the [`Link`](#link) model.
 
-### `PUT /api/v1/processes/versions/:version/:id/steps/:step/links/:slot/:target`
+### `PUT /api/v1/processes/:id/versions/:version/:id/steps/:step/links/:slot/:target`
 
-Modify a link in the newest version of a process. Accepts a JSON object with
+Modify a link in a particular version of a process. Accepts a JSON object with
 following properties:
 
 ```
