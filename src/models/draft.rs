@@ -37,7 +37,7 @@ use super::{
     Module,
     User,
     document::{Document, PublicData as DocumentData},
-    editing::{Step, StepData, Slot, Version, slot::FillSlotError},
+    editing::{Step, StepData, Slot, Version, step::Seating, slot::FillSlotError},
 };
 
 #[derive(Debug)]
@@ -175,7 +175,7 @@ impl Draft {
             document: self.document.get_public(),
             permissions: self.get_permissions(dbconn, user).map(Some)?,
             step: self.get_step(dbconn)?
-                .get_public(dbconn, Some((self.data.module, user)))
+                .get_public(dbconn, Some(self.data.module), Some(user))
                 .map(Some)?,
             books: self.get_books(dbconn).map(Some)?,
         })
@@ -396,7 +396,7 @@ impl Draft {
 
             let slots = next.get_slot_seating(dbconn, self.data.module)?;
 
-            for (slot, _, seating) in slots {
+            for Seating { slot, user: seating, .. } in slots {
                 if seating.is_none() {
                     slot.fill(dbconn, &self)
                         .map_err(|e| AdvanceDraftError::FillSlot(slot.id, e))?;

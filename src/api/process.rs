@@ -641,7 +641,7 @@ pub fn list_steps_in_version(
 fn list_steps(db: &Connection, version: &Version) -> Result<Json<Vec<StepData>>> {
     version.get_steps(&*db)?
         .iter()
-        .map(|s| s.get_public(&*db, None))
+        .map(|s| s.get_public(&*db, None, None))
         .collect::<Result<Vec<_>, _>>()
         .map(Json)
         .map_err(From::from)
@@ -669,7 +669,7 @@ pub fn get_step_in_version(
 fn get_step(db: &Connection, version: &Version, step: i32)
 -> Result<Json<StepData>> {
     version.get_step(&*db, step)?
-        .get_public(&*db, None)
+        .get_public(&*db, None, None)
         .map(Json)
         .map_err(From::from)
 }
@@ -704,7 +704,7 @@ fn modify_step(db: &Connection, step: &mut Step, data: StepUpdate)
 -> Result<Json<StepData>> {
     step.set_name(db, &data.name)?;
 
-    step.get_public(db, None).map(Json).map_err(From::from)
+    step.get_public(db, None, None).map(Json).map_err(From::from)
 }
 
 /// Get list of all links in a particular step in a version of an editing

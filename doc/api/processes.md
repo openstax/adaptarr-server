@@ -147,6 +147,7 @@ Used to represent a single slot in an editing process.
     id: number,
     process: [number, number],
     name: string,
+    slots: StepSlot[],
     links: Link[],
 }
 ```
@@ -159,7 +160,29 @@ Used to represent a single step in an editing process.
 
 - `name`: step's name;
 
+- `slots`:
+
 - `links`: list of links originating at this step.
+
+### `StepSlot`
+
+```
+{
+    slot: number,
+    permissions: SlotPermission[],
+    user: number | null,
+}
+```
+
+Used to represent assignment of slots to steps.
+
+- `slot`: slot's ID;
+
+- `permissions`: list of permissions a given slot has in a particular step;
+
+- `user`: if this model is returned in context of a draft, this field contains
+  ID of the user currently assigned to `slot` (or `null` if there isn't one).
+  In all other contexts this field is `null`.
 
 ### `Link`
 
