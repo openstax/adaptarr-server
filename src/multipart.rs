@@ -181,7 +181,7 @@ pub enum MultipartError {
     UnexpectedField(String),
     #[fail(display = "Bad data: {}", _0)]
     BadData(#[cause] Box<dyn failure::Fail>),
-    #[fail(display = "Internal error")]
+    #[fail(display = "{}", _0)]
     Internal(#[cause] Box<dyn failure::Fail>),
 }
 
