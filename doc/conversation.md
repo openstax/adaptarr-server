@@ -99,10 +99,10 @@ a single [conversation message](#conversation-messages).
 
 Sent by the client to request a fragment of conversation's history. Body
 specifies requested range of entries as the ID of newest known event (4 byte
-integer) and number of events (2 byte integer). Node that server may return
-fewer events than requested (e.g. because of rate limiting, or just because
-there aren't as many events). Zero can be used instead of a reference event's ID
-to request newest events.
+integer), number of events before (2 byte integer), and number after (2 byte
+integer) this event. Node that server may return fewer events than requested
+(e.g. because of rate limiting, or just because there aren't as many events).
+Zero can be used instead of a reference event's ID to request newest events.
 
 
 
@@ -132,11 +132,15 @@ Send in response to 0x0003. History is returned as a list of significant
 messages (that is messages which affect the conversation), such as the client
 would have received had it been connected when they were first emitted.
 
-The message body contains number of messages (2 byte integer) followed by
-history entries. Each entry begins with message's type (2 byte integer, the same
-as described in this document), it's length ([LEB128]), and then entry's body as
-it would be sent in a standalone message. There are no gaps or padding between
-entries.
+The message body contains number of messages (2 byte integer) before and after
+the reference event, followed by history entries. Each entry begins with
+message's type (2 byte integer, the same as described in this document), it's
+length ([LEB128]), and then entry's body as it would be sent in a standalone
+message. There are no gaps or padding between entries.
+
+If a reference event was specified in the request, it will be included in the
+list of events after it as the first entry. This event is counted towards the
+total number of events.
 
 Messages included in history as of this version are: [0x0001 New message](
 #0x0001-new-message).

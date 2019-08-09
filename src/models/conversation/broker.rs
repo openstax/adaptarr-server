@@ -313,8 +313,10 @@ pub struct GetHistory {
     pub conversation: i32,
     /// ID of an event relative to which to search.
     pub from: Option<i32>,
-    /// Number of events to retrieve.
-    pub number: u16,
+    /// Number of events before reference to retrieve.
+    pub number_before: u16,
+    /// Number of events after reference to retrieve.
+    pub number_after: u16,
 }
 
 #[derive(Debug, Fail, From)]
@@ -325,38 +327,59 @@ pub enum GetHistoryError {
     DbPool(#[cause] #[from] r2d2::Error),
 }
 
+pub struct History {
+    pub before: Vec<db::ConversationEvent>,
+    pub after: Vec<db::ConversationEvent>,
+}
+
 impl Message for GetHistory {
-    type Result = Result<Vec<db::ConversationEvent>, GetHistoryError>;
+    type Result = Result<History, GetHistoryError>;
 }
 
 impl Handler<GetHistory> for Broker {
-    type Result = Result<Vec<db::ConversationEvent>, GetHistoryError>;
+    type Result = Result<History, GetHistoryError>;
 
     fn handle(&mut self, msg: GetHistory, _: &mut Self::Context) -> Self::Result {
         let db = self.pool.get()?;
 
-        let mut events = match msg.from {
-            Some(id) => db.transaction(|| {
-                let reference = conversation_events::table
-                    .filter(conversation_events::conversation.eq(msg.conversation)
-                        .and(conversation_events::id.eq(id)))
-                    .get_result::<db::ConversationEvent>(&*db)?;
+        db.transaction(|| {
+            let mut before;
+            let after;
 
-                conversation_events::table
-                    .filter(conversation_events::conversation.eq(msg.conversation)
-                        .and(conversation_events::timestamp.le(reference.timestamp)))
-                    .order_by(conversation_events::timestamp.desc())
-                    .limit(msg.number.min(128) as i64)
-                    .get_results(&*db)
-            })?,
-            None => conversation_events::table
-                .filter(conversation_events::conversation.eq(msg.conversation))
-                .order_by(conversation_events::timestamp.desc())
-                .limit(msg.number.min(128) as i64)
-                .get_results(&*db)?,
-        };
+            match msg.from {
+                Some(id) => {
+                    let reference = conversation_events::table
+                        .filter(conversation_events::conversation.eq(msg.conversation)
+                            .and(conversation_events::id.eq(id)))
+                        .get_result::<db::ConversationEvent>(&*db)?;
 
-        events.reverse();
-        Ok(events)
+                    before = conversation_events::table
+                        .filter(conversation_events::conversation.eq(msg.conversation)
+                            .and(conversation_events::timestamp.lt(reference.timestamp)))
+                        .order_by(conversation_events::timestamp.desc())
+                        .limit(msg.number_before.min(64) as i64)
+                        .get_results(&*db)?;
+
+                    after = conversation_events::table
+                        .filter(conversation_events::conversation.eq(msg.conversation)
+                            .and(conversation_events::timestamp.ge(reference.timestamp)))
+                        .order_by(conversation_events::timestamp.asc())
+                        .limit((msg.number_after + 1).min(64) as i64)
+                        .get_results(&*db)?;
+                }
+                None => {
+                    before = conversation_events::table
+                        .filter(conversation_events::conversation.eq(msg.conversation))
+                        .order_by(conversation_events::timestamp.desc())
+                        .limit(msg.number_before.min(128) as i64)
+                        .get_results(&*db)?;
+
+                    after = Vec::new();
+                }
+            }
+
+            before.reverse();
+            Ok(History { before, after })
+        })
     }
 }

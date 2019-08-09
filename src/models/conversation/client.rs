@@ -80,15 +80,16 @@ impl Client {
             .send(broker::GetHistory {
                 conversation: self.conversation,
                 from: data.from,
-                number: data.number,
+                number_before: data.number_before,
+                number_after: data.number_after,
             })
             .into_actor(self)
             .then(success_or_disconnect)
             .map(|r, _, ctx| match r {
                 Ok(events) => {
-                    let entries = serialize_events(events);
                     ctx.binary(Message::build(msg.cookie, HistoryEntries {
-                        entries,
+                        before: serialize_events(events.before),
+                        after: serialize_events(events.after),
                     }))
                 }
                 Err(err) => {

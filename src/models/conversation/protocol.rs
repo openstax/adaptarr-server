@@ -371,7 +371,9 @@ pub struct GetHistory {
     /// Reference event's ID.
     pub from: Option<i32>,
     /// Number of events preceding reference to retrieve.
-    pub number: u16,
+    pub number_before: u16,
+    /// Number of events succeeding reference to retrieve.
+    pub number_after: u16,
 }
 
 impl MessageBody for GetHistory {
@@ -381,18 +383,21 @@ impl MessageBody for GetHistory {
 
     fn write(self, into: &mut BytesMut) {
         into.put_i32_le(self.from.unwrap_or(0));
-        into.put_u16_le(self.number);
+        into.put_u16_le(self.number_before);
+        into.put_u16_le(self.number_after);
     }
 
     fn read(from: Bytes) -> Result<Self, ParseMessageError> {
         let mut buf = from.into_buf();
 
         let from = buf.get_i32_le();
-        let number = buf.get_u16_le();
+        let number_before = buf.get_u16_le();
+        let number_after = buf.get_u16_le();
 
         Ok(GetHistory {
             from: if from == 0 { None } else { Some(from) },
-            number,
+            number_before,
+            number_after,
         })
     }
 }
@@ -454,7 +459,8 @@ impl MessageBody for MessageInvalid {
 
 /// Structure representing body of a _0x8003 history entries_ response.
 pub struct HistoryEntries {
-    pub entries: Vec<AnyMessage>,
+    pub before: Vec<AnyMessage>,
+    pub after: Vec<AnyMessage>,
 }
 
 impl MessageBody for HistoryEntries {
@@ -462,15 +468,16 @@ impl MessageBody for HistoryEntries {
 
     fn length(&self) -> usize {
         // 2 bytes for number of entries + 2 bytes for each entry's type.
-        2 + 2 * self.entries.len()
+        4 + 2 * self.before.len() + 2 * self.after.len()
     }
 
     fn write(self, into: &mut BytesMut) {
-        into.put_u16_le(self.entries.len() as u16);
+        into.put_u16_le(self.before.len() as u16);
+        into.put_u16_le(self.after.len() as u16);
 
         let mut buf = BytesMut::new();
 
-        for entry in self.entries {
+        for entry in self.before.into_iter().chain(self.after) {
             let kind = entry.kind();
 
             buf.clear();
@@ -487,9 +494,11 @@ impl MessageBody for HistoryEntries {
     fn read(from: Bytes) -> Result<Self, ParseMessageError> {
         let mut entries = Vec::new();
         let mut buf = (&from).into_buf();
-        let count = buf.get_u16_le();
 
-        for _ in 0..count {
+        let count_before = buf.get_u16_le();
+        let count_after = buf.get_u16_le();
+
+        for _ in 0..(count_before + count_after) {
             let kind = buf.get_u16_le();
             let kind = Kind::from_u16(kind)
                 .ok_or(ParseMessageError::UnknownKind(kind))?;
@@ -506,6 +515,9 @@ impl MessageBody for HistoryEntries {
             });
         }
 
-        Ok(HistoryEntries { entries })
+        Ok(HistoryEntries {
+            after: entries.split_off(count_before as usize),
+            before: entries,
+        })
     }
 }
