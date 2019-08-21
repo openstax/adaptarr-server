@@ -58,7 +58,13 @@ pub struct PublicData {
 pub struct ProcessStatus {
     pub process: i32,
     pub version: i32,
-    pub step: i32,
+    pub step: StepData,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StepData {
+    pub id: i32,
+    pub name: String,
 }
 
 impl Module {
@@ -160,7 +166,10 @@ impl Module {
             .map(|(_, (step, version))| ProcessStatus {
                 process: version.process,
                 version: version.id,
-                step: step.id,
+                step: StepData {
+                    id: step.id,
+                    name: step.name,
+                },
             });
 
         Ok(PublicData {

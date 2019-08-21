@@ -34,24 +34,13 @@ pub struct PublicData {
     number: i32,
     title: String,
     #[serde(flatten)]
-    part: VariantData,
+    part: Variant<i32>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
-enum VariantData {
-    Module(ModuleData),
-    Group {
-        parts: Vec<i32>,
-    },
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "lowercase")]
 enum Variant<Part> {
-    Module {
-        id: Uuid,
-    },
+    Module(ModuleData),
     Group {
         parts: Vec<Part>,
     },
@@ -137,9 +126,9 @@ impl BookPart {
                             "database inconsistency: no module for book part"),
                     })?
                     .get_public(dbconn)
-                    .map(VariantData::Module)?
+                    .map(Variant::Module)?
             } else {
-                VariantData::Group {
+                Variant::Group {
                     parts: self.get_parts(dbconn)
                         .map_err(|e| match e {
                             GetPartsError::Database(e) => e,
@@ -153,7 +142,14 @@ impl BookPart {
     /// Get contents of this group as a tree.
     pub fn get_tree(&self, dbconn: &Connection) -> Result<Tree, DbError> {
         let part = if let Some(id) = self.data.module {
-            Variant::Module { id }
+            Module::by_id(dbconn, id)
+                .map_err(|err| match err {
+                    FindModuleError::Database(err) => err,
+                    FindModuleError::NotFound => panic!(
+                        "database inconsistency: no module for book part"),
+                })?
+                .get_public(dbconn)
+                .map(Variant::Module)?
         } else {
             let parts = book_parts::table
                 .filter(book_parts::book.eq(self.data.book)
@@ -285,9 +281,7 @@ impl BookPart {
                 Ok(Tree {
                     number: part.id,
                     title: title.unwrap_or_else(|| module.title.clone()),
-                    part: Variant::Module {
-                        id: module.id(),
-                    },
+                    part: Variant::Module(module.get_public(dbconn)?),
                 })
             }
             NewTree::Group { title, parts } => {

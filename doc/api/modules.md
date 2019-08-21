@@ -14,7 +14,10 @@
     process: {
         process: number,
         version: number,
-        step: number,
+        step: {
+            id: number,
+            name: string,
+        },
     }?,
 }
 ```
@@ -35,7 +38,9 @@ This model is used throughout the API to describe modules. The fields are
 
 - `process.version`: process's version;
 
-- `process.step`: step this draft is currently at.
+- `process.step.id`: ID of the step this draft is currently at.
+
+- `process.step.name`: `process.step.id`'s name.
 
 
 
