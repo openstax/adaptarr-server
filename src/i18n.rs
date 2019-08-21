@@ -239,11 +239,11 @@ impl FromStr for LanguageTag {
             match chars.next() {
                 None =>
                     return Err(ParseLanguageTagError::ExpectedSubtag(v.len())),
-                Some((_, '0'...'9')) | Some((_, 'a'...'z')) |
-                Some((_, 'A'...'Z')) => loop {
+                Some((_, '0'..='9')) | Some((_, 'a'..='z')) |
+                Some((_, 'A'..='Z')) => loop {
                     match chars.next() {
-                        Some((_, '0'...'9')) | Some((_, 'a'...'z')) |
-                        Some((_, 'A'...'Z')) => {}
+                        Some((_, '0'..='9')) | Some((_, 'a'..='z')) |
+                        Some((_, 'A'..='Z')) => {}
                         Some((_, '-')) => continue 'outer,
                         Some((inx, _)) => return Err(
                             ParseLanguageTagError::ExpectedAlphanum(inx)),
@@ -269,11 +269,11 @@ impl FromStr for LanguageRange {
             match chars.next() {
                 None =>
                     return Err(ParseLanguageTagError::ExpectedSubtag(v.len())),
-                Some((_, '0'...'9')) | Some((_, 'a'...'z')) |
-                Some((_, 'A'...'Z')) => loop {
+                Some((_, '0'..='9')) | Some((_, 'a'..='z')) |
+                Some((_, 'A'..='Z')) => loop {
                     match chars.next() {
-                        Some((_, '0'...'9')) | Some((_, 'a'...'z')) |
-                        Some((_, 'A'...'Z')) => {}
+                        Some((_, '0'..='9')) | Some((_, 'a'..='z')) |
+                        Some((_, 'A'..='Z')) => {}
                         Some((_, '-')) => continue 'outer,
                         Some((inx, _)) => return Err(
                             ParseLanguageTagError::ExpectedAlphanum(inx)),
