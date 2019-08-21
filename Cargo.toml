@@ -43,8 +43,8 @@ r2d2-diesel = "1.0.0"
 rand = "0.7.0"
 ring = "0.13.5"
 rmps = { version = "0.13.7", package = "rmp-serde" }
-rust-argon2 = "0.4.0"
-sentry-actix = "0.15.4"
+rust-argon2 = "0.5.0"
+sentry-actix = "0.16.0"
 serde = "1.0.80"
 serde_derive = "1.0.80"
 serde_json = "1.0.33"
@@ -78,7 +78,7 @@ version = "0.7.0"
 features = ["serde"]
 
 [dependencies.sentry]
-version = "0.15.4"
+version = "0.16.0"
 features = ["with_debug_to_log"]
 
 [patch.crates-io]
