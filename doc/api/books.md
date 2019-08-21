@@ -81,7 +81,6 @@ This model describes structure of a new book part. The fields are:
     number: number,
     title: string,
     kind: 'module' | 'group',
-    id: uuid,
     parts: number[],
 }
 ```
@@ -92,11 +91,11 @@ This model describes structure of a new book part. The fields are:
 
 - `kind`: part's kind;
 
-- `id`: UUID of the module this part represents. Only present when `kind` is
-  `'module'`.
-
 - `parts`: ordered list of IDs of parts in this sub-tree. Only present when
   `kind` is `'group'`.
+
+When `kind` is `'module'`, this model also includes all fields of the
+[`Module`](../modules.md#module) model.
 
 ### `:id`
 

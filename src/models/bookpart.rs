@@ -17,7 +17,7 @@ use crate::{
         schema::book_parts,
     },
 };
-use super::module::{Module, FindModuleError};
+use super::module::{Module, FindModuleError, PublicData as ModuleData};
 
 /// Part of a book.
 ///
@@ -34,7 +34,16 @@ pub struct PublicData {
     number: i32,
     title: String,
     #[serde(flatten)]
-    part: Variant<i32>,
+    part: VariantData,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum VariantData {
+    Module(ModuleData),
+    Group {
+        parts: Vec<i32>,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -121,9 +130,16 @@ impl BookPart {
             number: self.data.id,
             title: self.data.title.clone(),
             part: if let Some(id) = self.data.module {
-                Variant::Module { id }
+                Module::by_id(dbconn, id)
+                    .map_err(|err| match err {
+                        FindModuleError::Database(err) => err,
+                        FindModuleError::NotFound => panic!(
+                            "database inconsistency: no module for book part"),
+                    })?
+                    .get_public(dbconn)
+                    .map(VariantData::Module)?
             } else {
-                Variant::Group {
+                VariantData::Group {
                     parts: self.get_parts(dbconn)
                         .map_err(|e| match e {
                             GetPartsError::Database(e) => e,
