@@ -17,7 +17,7 @@ use crate::{
         schema::book_parts,
     },
 };
-use super::module::{Module, FindModuleError};
+use super::module::{Module, FindModuleError, PublicData as ModuleData};
 
 /// Part of a book.
 ///
@@ -37,12 +37,10 @@ pub struct PublicData {
     part: Variant<i32>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 enum Variant<Part> {
-    Module {
-        id: Uuid,
-    },
+    Module(ModuleData),
     Group {
         parts: Vec<Part>,
     },
@@ -121,7 +119,14 @@ impl BookPart {
             number: self.data.id,
             title: self.data.title.clone(),
             part: if let Some(id) = self.data.module {
-                Variant::Module { id }
+                Module::by_id(dbconn, id)
+                    .map_err(|err| match err {
+                        FindModuleError::Database(err) => err,
+                        FindModuleError::NotFound => panic!(
+                            "database inconsistency: no module for book part"),
+                    })?
+                    .get_public(dbconn)
+                    .map(Variant::Module)?
             } else {
                 Variant::Group {
                     parts: self.get_parts(dbconn)
@@ -137,7 +142,14 @@ impl BookPart {
     /// Get contents of this group as a tree.
     pub fn get_tree(&self, dbconn: &Connection) -> Result<Tree, DbError> {
         let part = if let Some(id) = self.data.module {
-            Variant::Module { id }
+            Module::by_id(dbconn, id)
+                .map_err(|err| match err {
+                    FindModuleError::Database(err) => err,
+                    FindModuleError::NotFound => panic!(
+                        "database inconsistency: no module for book part"),
+                })?
+                .get_public(dbconn)
+                .map(Variant::Module)?
         } else {
             let parts = book_parts::table
                 .filter(book_parts::book.eq(self.data.book)
@@ -269,9 +281,7 @@ impl BookPart {
                 Ok(Tree {
                     number: part.id,
                     title: title.unwrap_or_else(|| module.title.clone()),
-                    part: Variant::Module {
-                        id: module.id(),
-                    },
+                    part: Variant::Module(module.get_public(dbconn)?),
                 })
             }
             NewTree::Group { title, parts } => {
