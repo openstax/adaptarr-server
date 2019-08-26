@@ -1,5 +1,4 @@
 use proc_macro2::TokenStream;
-use syn::Attribute;
 use synstructure::{BindingInfo, Structure};
 
 pub fn derive_from(s: Structure) -> TokenStream {
@@ -43,6 +42,6 @@ fn is_from(bi: &&BindingInfo) -> bool {
     bi.ast()
         .attrs
         .iter()
-        .filter_map(Attribute::interpret_meta)
-        .any(|meta| meta.name() == "from")
+        .filter_map(|attr| attr.parse_meta().ok())
+        .any(|meta| meta.path().is_ident("from"))
 }

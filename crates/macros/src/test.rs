@@ -21,7 +21,7 @@ static DB_CREATED: AtomicBool = AtomicBool::new(false);
 ///
 /// This function should only be placed on a function in crate's root.
 pub fn create_database(_: TokenStream, item: ItemFn) -> Result<TokenStream> {
-    let setup = item.ident.clone();
+    let setup = item.sig.ident.clone();
 
     DB_CREATED.store(true, Ordering::Relaxed);
 
@@ -55,12 +55,12 @@ struct Configurator {
 /// to take parameters of certain types.
 pub fn create_test(mut opts: TestOptions, mut item: ItemFn) -> Result<TokenStream> {
     let vis = item.vis.clone();
-    let name = item.ident.clone();
+    let name = item.sig.ident.clone();
     let attrs = item.attrs.split_off(0);
     let database = test_database(&mut opts)?;
     let configs = configure_tests(&opts.configs);
 
-    make_bounds(&mut item.decl);
+    make_bounds(&mut item.sig);
 
     Ok(quote_spanned! {item.span()=>
         #[test]
@@ -88,7 +88,7 @@ fn test_database(opts: &mut TestOptions) -> Result<TokenStream> {
 
 /// Add where bounds to test functions to ensure `TestResult` and `Fixture` are
 /// implemented.
-fn make_bounds(decl: &mut FnDecl) {
+fn make_bounds(sig: &mut Signature) {
     let mut path = Punctuated::new();
     path.push(Ident::new("crate", Span::call_site()).into());
     path.push(Ident::new("common", Span::call_site()).into());
@@ -107,18 +107,18 @@ fn make_bounds(decl: &mut FnDecl) {
         segments: path,
     };
 
-    let predicates = match decl.generics.where_clause {
+    let predicates = match sig.generics.where_clause {
         Some(ref mut clause) => &mut clause.predicates,
         None => {
-            decl.generics.where_clause = Some(WhereClause {
+            sig.generics.where_clause = Some(WhereClause {
                 where_token: Where { span: Span::call_site() },
                 predicates: Punctuated::new(),
             });
-            &mut decl.generics.where_clause.as_mut().unwrap().predicates
+            &mut sig.generics.where_clause.as_mut().unwrap().predicates
         }
     };
 
-    if let ReturnType::Type(_, ref ty) = decl.output {
+    if let ReturnType::Type(_, ref ty) = sig.output {
         predicates.push(PredicateType {
             lifetimes: None,
             bounded_ty: *ty.clone(),
@@ -132,13 +132,13 @@ fn make_bounds(decl: &mut FnDecl) {
         }.into());
     }
 
-    for arg in &decl.inputs {
+    for arg in &sig.inputs {
         match arg {
-            FnArg::SelfRef(_) | FnArg::SelfValue(_) | FnArg::Inferred(_) => {}
-            FnArg::Ignored(ty) | FnArg::Captured(ArgCaptured { ty, .. }) => {
+            FnArg::Receiver(_) => {}
+            FnArg::Typed(arg) => {
                 predicates.push(PredicateType {
                     lifetimes: None,
-                    bounded_ty: ty.clone(),
+                    bounded_ty: (*arg.ty).clone(),
                     colon_token: Default::default(),
                     bounds: Punctuated::from_iter(iter::once(TraitBound {
                         paren_token: None,

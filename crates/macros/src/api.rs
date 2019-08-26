@@ -47,8 +47,8 @@ pub fn derive_error(s: Structure) -> TokenStream {
 /// of them.
 fn find_ast(attrs: &[Attribute]) -> Result<Option<MetaList>, Error> {
     let mut attrs = attrs.iter()
-        .filter_map(|attr| attr.interpret_meta())
-        .filter(|meta| meta.name() == "api");
+        .filter_map(|attr| attr.parse_meta().ok())
+        .filter(|meta| meta.path().is_ident("api"));
 
     let meta = match attrs.next() {
         Some(meta) => meta,
@@ -99,10 +99,10 @@ fn find_status(v: &VariantInfo) -> Result<TokenStream, Error> {
 
     for item in meta.nested {
         match item {
-            NestedMeta::Meta(Meta::Word(ref id)) if id == "internal" =>
+            NestedMeta::Meta(Meta::Path(ref path)) if path.is_ident("internal") =>
                 internal = Some(item),
-            NestedMeta::Meta(Meta::NameValue(ref nv)) if nv.ident == "code" => (),
-            NestedMeta::Meta(Meta::NameValue(ref nv)) if nv.ident == "status" =>
+            NestedMeta::Meta(Meta::NameValue(ref nv)) if nv.path.is_ident("code") => (),
+            NestedMeta::Meta(Meta::NameValue(ref nv)) if nv.path.is_ident("status") =>
                 status = Some(match nv.lit {
                     Lit::Str(ref s) => Ident::new(&s.value(), s.span()),
                     _ => return Err(Error::new(
@@ -147,11 +147,11 @@ fn find_code(v: &VariantInfo) -> Result<TokenStream, Error> {
 
     for item in meta.nested {
         match item {
-            NestedMeta::Meta(Meta::Word(ref id)) if id == "internal" =>
+            NestedMeta::Meta(Meta::Path(ref path)) if path.is_ident("internal") =>
                 internal = Some(item),
-            NestedMeta::Meta(Meta::NameValue(ref nv)) if nv.ident == "code" =>
+            NestedMeta::Meta(Meta::NameValue(ref nv)) if nv.path.is_ident("code") =>
                 code = Some(nv.lit.clone()),
-            NestedMeta::Meta(Meta::NameValue(ref nv)) if nv.ident == "status" => (),
+            NestedMeta::Meta(Meta::NameValue(ref nv)) if nv.path.is_ident("status") => (),
             _ => return Err(Error::new(
                 item.span(),
                 "expected one of: internal, code, status",
@@ -174,6 +174,6 @@ fn is_cause(bi: &&BindingInfo) -> bool {
     bi.ast()
         .attrs
         .iter()
-        .filter_map(|attr| attr.interpret_meta())
-        .any(|meta| meta.name() == "cause")
+        .filter_map(|attr| attr.parse_meta().ok())
+        .any(|meta| meta.path().is_ident("cause"))
 }
