@@ -6,7 +6,7 @@ use actix_web::{
     Json,
     Path,
     Responder,
-    http::{StatusCode, Method},
+    http::{StatusCode, Method, header::ETAG},
 };
 use failure::Fail;
 use futures::{Future, future};
@@ -353,7 +353,11 @@ pub fn update_file(
         .and_then(move |file| {
             draft.write_file(&*db, &name, &file)
                 .map_err(Into::into)
-                .map(|_| HttpResponse::new(StatusCode::NO_CONTENT))
+                .map(|_|
+                    HttpResponse::NoContent()
+                        .header(ETAG, file.entity_tag())
+                        .finish()
+                )
         }))
 }
 

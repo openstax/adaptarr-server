@@ -18,6 +18,8 @@ use actix_web::{
             IF_MATCH,
             LOCATION,
             HeaderValue,
+            IntoHeaderValue,
+            InvalidHeaderValueBytes,
             ToStrError,
         },
     },
@@ -240,6 +242,18 @@ impl<'a> EntityTag<'a> {
             _ if self.tag == other.tag => TagEquality::Weak,
             _ => TagEquality::None,
         }
+    }
+}
+
+impl<'a> IntoHeaderValue for EntityTag<'a> {
+    type Error = InvalidHeaderValueBytes;
+
+    fn try_into(self) -> Result<HeaderValue, Self::Error> {
+        let v = match self.strength {
+            TagStrength::Strong => format!(r#""{}""#, self.tag),
+            TagStrength::Weak => format!(r#"W/"{}""#, self.tag),
+        };
+        HeaderValue::from_shared(v.into_bytes().into())
     }
 }
 

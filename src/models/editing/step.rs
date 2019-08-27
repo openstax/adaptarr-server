@@ -22,6 +22,7 @@ use crate::{
         },
         types::SlotPermission,
     },
+    utils::and_tuple,
 };
 use super::{
     Slot,
@@ -37,13 +38,28 @@ pub struct Step {
     data: db::EditProcessStep,
 }
 
+#[derive(Debug)]
+pub struct Seating {
+    pub slot: Slot,
+    pub permissions: Vec<SlotPermission>,
+    pub user: Option<i32>,
+}
+
 /// A subset of this step's data that can safely be publicly exposed.
 #[derive(Debug, Serialize)]
 pub struct PublicData {
     pub id: i32,
     pub process: [i32; 2],
     pub name: String,
+    pub slots: Vec<StepSlot>,
     pub links: Vec<LinkData>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StepSlot {
+    pub slot: i32,
+    pub permissions: Vec<SlotPermission>,
+    pub user: Option<i32>,
 }
 
 impl Step {
@@ -122,7 +138,7 @@ impl Step {
     /// Get list of slots, permissions they have during this step, and IDs
     /// of users occupying these slots.
     pub fn get_slot_seating(&self, dbcon: &Connection, draft: Uuid)
-    -> Result<Vec<(Slot, Vec<SlotPermission>, Option<i32>)>, DbError> {
+    -> Result<Vec<Seating>, DbError> {
         let slots = edit_process_step_slots::table
             .inner_join(edit_process_slots::table
                 .left_join(draft_slots::table))
@@ -153,11 +169,11 @@ impl Step {
 
                 // Every group has at least one element, so we know key and
                 // seating cannot be None.
-                (
-                    Slot::from_db(key.unwrap()),
+                Seating {
+                    slot: Slot::from_db(key.unwrap()),
                     permissions,
-                    seating.map(|s| s.user),
-                )
+                    user: seating.map(|s| s.user),
+                }
             })
             .collect();
 
@@ -203,11 +219,35 @@ impl Step {
 
     /// Get the public portion of this step's data. The list can optionally
     /// be limited to just the data visible by a specific slots.
-    pub fn get_public(&self, dbcon: &Connection, slots: Option<(Uuid, i32)>)
-    -> Result<PublicData, DbError> {
+    pub fn get_public(
+        &self,
+        dbcon: &Connection,
+        draft: Option<Uuid>,
+        slots: Option<i32>,
+    ) -> Result<PublicData, DbError> {
         let db::EditProcessStep { id, process: version, ref name, .. } = self.data;
 
-        let links = self.get_links(dbcon, slots)?
+        let seating = if let Some(draft) = draft {
+            self.get_slot_seating(dbcon, draft)?
+                .into_iter()
+                .map(|s| StepSlot {
+                    slot: s.slot.id,
+                    permissions: s.permissions,
+                    user: s.user,
+                })
+                .collect()
+        } else {
+            self.get_slots(dbcon)?
+                .into_iter()
+                .map(|(slot, permissions)| StepSlot {
+                    slot: slot.id,
+                    permissions,
+                    user: None,
+                })
+                .collect()
+        };
+
+        let links = self.get_links(dbcon, and_tuple(draft, slots))?
             .iter()
             .map(Link::get_public)
             .collect();
@@ -221,6 +261,7 @@ impl Step {
             id,
             process: [process, version],
             name: name.clone(),
+            slots: seating,
             links,
         })
     }

@@ -6,7 +6,7 @@ use actix_web::{
     Json,
     Path,
     Responder,
-    http::{StatusCode, header::{ContentDisposition, DispositionType}},
+    http::{StatusCode, header::{ETAG, ContentDisposition, DispositionType}},
 };
 use diesel::Connection as _;
 use futures::{Future, future::{self, Either}};
@@ -218,6 +218,14 @@ pub fn update_resource_content(
     let storage = state.config.storage.path.clone();
 
     Either::B(File::from_stream(state.db.clone(), storage, req.payload(), None)
-        .and_then(move |file| resource.set_file(&*db, &file).map_err(From::from))
-        .map(|_| HttpResponse::new(StatusCode::NO_CONTENT)))
+        .and_then(move |file|
+            resource.set_file(&*db, &file)
+                .map_err(From::from)
+                .map(|_|
+                    HttpResponse::NoContent()
+                        .header(ETAG, file.entity_tag())
+                        .finish()
+                )
+        )
+    )
 }
