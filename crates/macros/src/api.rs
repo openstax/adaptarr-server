@@ -30,13 +30,14 @@ pub fn derive_error(s: Structure) -> TokenStream {
 
     s.gen_impl(quote! {
         extern crate actix_web;
+        use std::borrow::Cow;
 
-        gen impl crate::api::ApiError for @Self {
+        gen impl ApiError for @Self {
             fn status(&self) -> actix_web::http::StatusCode {
                 match *self { #statuses }
             }
 
-            fn code(&self) -> Option<&str> {
+            fn code(&self) -> Option<Cow<str>> {
                 match *self { #codes }
             }
         }
@@ -163,7 +164,7 @@ fn find_code(v: &VariantInfo) -> Result<TokenStream, Error> {
         if let Some(item) = internal {
             Err(Error::new(item.span(), "internal errors can't have codes"))
         } else {
-            Ok(quote!(Some(#code)))
+            Ok(quote!(Some(Cow::Borrowed(#code))))
         }
     } else {
         Ok(quote!(None))
