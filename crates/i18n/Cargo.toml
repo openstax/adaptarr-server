@@ -1,0 +1,19 @@
+[package]
+name = "adaptarr-i18n"
+version = "0.1.0"
+authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+adaptarr-macros = { path = "../macros" }
+adaptarr-util = { path = "../util" }
+failure = "0.1.5"
+fluent-bundle = "0.7.0"
+fluent-syntax = "0.9.0"
+log = "0.4.8"
+tera = "0.11.20"
+unic-langid = "0.4.2"
+
+[dependencies.serde]
+version = "1.0.99"
+features = ["derive"]

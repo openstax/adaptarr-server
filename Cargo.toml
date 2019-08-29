@@ -1,10 +1,10 @@
 [workspace]
 members = [
+    "crates/i18n",
     "crates/macros",
     "crates/util",
 ]
 
 [patch.crates-io]
-fluent = { git = "https://github.com/katalysteducation/fluent-rs.git" }
-fluent-bundle = { git = "https://github.com/katalysteducation/fluent-rs.git" }
-fluent-syntax = { git = "https://github.com/katalysteducation/fluent-rs.git" }
+fluent-bundle = { git = "https://github.com/openstax-poland/fluent-rs.git" }
+fluent-syntax = { git = "https://github.com/openstax-poland/fluent-rs.git" }
