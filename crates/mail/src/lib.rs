@@ -4,5 +4,7 @@ mod transport;
 
 pub use self::{
     config::Config,
-    service::Mailer,
+    service::{Mailer, SendFuture, IntoSubject},
 };
+
+pub use lettre_email::Mailbox;

@@ -1,0 +1,23 @@
+[package]
+name = "adaptarr-mail"
+version = "0.1.0"
+authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix = "0.8.3"
+adaptarr-error = { path = "../error" }
+adaptarr-i18n = { path = "../i18n" }
+adaptarr-util = { path = "../util" }
+failure = "0.1.5"
+fluent-bundle = "0.7.0"
+futures = "0.1.28"
+lazy_static = "1.4.0"
+lettre = "0.9.2"
+lettre_email = "0.9.2"
+log = "0.4.8"
+native-tls = "0.2.3"
+
+[dependencies.serde]
+version = "1.0.99"
+features = ["derive"]

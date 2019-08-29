@@ -3,6 +3,7 @@ members = [
     "crates/error",
     "crates/i18n",
     "crates/macros",
+    "crates/mail",
     "crates/util",
 ]
 

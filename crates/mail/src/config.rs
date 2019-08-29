@@ -1,6 +1,9 @@
 use lettre_email::Mailbox;
 use serde::{Deserialize, Deserializer, de};
 use std::fmt;
+use adaptarr_util::SingleInit;
+
+static CONFIG: SingleInit<&'static Config> = SingleInit::uninit();
 
 /// Mail system configuration.
 #[derive(Clone, Debug, Deserialize)]
@@ -14,10 +17,26 @@ pub struct Config {
 }
 
 impl Config {
+    /// Get global configuration.
+    ///
+    /// ## Panics
+    ///
+    /// This function will panic if called before [`Config::register`].
+    pub fn global() -> &'static Config {
+        CONFIG.get().expect("mailing configuration must be initialized before \
+            calling Config::global")
+    }
+
     /// Validate configuration correctness.
     pub fn validate(&self) -> Result<(), failure::Error> {
         super::transport::from_config(self)?;
         Ok(())
+    }
+
+    /// Register this configuration as the global static configuration
+    /// ([`Config::global`]).
+    pub fn register(&'static self) {
+        CONFIG.get_or_init(|| self);
     }
 }
 
@@ -70,10 +89,6 @@ impl<'de> de::Visitor<'de> for MailboxVisitor {
             .map_err(|_| E::invalid_value(
                 de::Unexpected::Str(v), &"an email address"))
     }
-}
-
-fn true_value() -> bool {
-    true
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

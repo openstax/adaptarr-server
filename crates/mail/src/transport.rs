@@ -10,6 +10,7 @@ use lettre::{
     },
 };
 use lettre_email::{EmailBuilder, Mailbox};
+use log::debug;
 use native_tls::TlsConnector;
 use std::{error::Error as StdError, fmt};
 

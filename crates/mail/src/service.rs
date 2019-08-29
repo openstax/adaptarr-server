@@ -1,11 +1,16 @@
 use actix::{Actor, Context, Handler, Supervised, SystemService, dev::Request};
+use adaptarr_error::Error;
+use adaptarr_i18n::{Locale, RenderError};
+use fluent_bundle::FluentValue;
 use futures::future::{self, Either, Future, IntoFuture};
+use lettre_email::Mailbox;
+use log::error;
 use serde::Serialize;
 use std::collections::HashMap;
-use lettre_email::Mailbox;
 
-use crate::{Result, i18n::Locale, templates::{LocalizedTera, MAILS}};
 use super::transport::{self, Message, Transport};
+
+adaptarr_i18n::localized_templates!(MAILS = "templates/mail/**/*");
 
 pub struct Mailer {
     transport: Box<dyn Transport>,
@@ -20,7 +25,7 @@ impl Mailer {
         template: &str,
         subject: S,
         context: C,
-        locale: &'static Locale<'static>,
+        locale: &'static Locale,
     )
     where
         M: Into<Mailbox>,
@@ -50,7 +55,7 @@ impl Mailer {
         template: &str,
         subject: S,
         context: C,
-        locale: &'static Locale<'static>,
+        locale: &'static Locale,
     ) -> SendFuture
     where
         M: Into<Mailbox>,
@@ -60,33 +65,35 @@ impl Mailer {
         let mailer = Mailer::from_registry();
         let message = match format_message(to, template, subject, context, locale) {
             Ok(message) => message,
-            Err(err) => return SendFuture(Either::A(future::err(err))),
+            Err(err) => return SendFuture(Either::A(future::err(err.into()))),
         };
 
         SendFuture(Either::B(mailer.send(message).map_err(From::from)))
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub struct SendFuture(
     Either<
-        future::FutureResult<(), failure::Error>,
+        future::FutureResult<(), Error>,
         future::MapErr<
             Request<Mailer, Message>,
-            fn(actix::dev::MailboxError) -> failure::Error,
+            fn(actix::dev::MailboxError) -> Error,
         >,
     >
 );
 
 impl IntoFuture for SendFuture {
+    #[allow(clippy::type_complexity)]
     type Future = Either<
-        future::FutureResult<(), failure::Error>,
+        future::FutureResult<(), Error>,
         future::MapErr<
             Request<Mailer, Message>,
-            fn(actix::dev::MailboxError) -> failure::Error,
+            fn(actix::dev::MailboxError) -> Error,
         >,
     >;
     type Item = ();
-    type Error = failure::Error;
+    type Error = Error;
 
     fn into_future(self) -> Self::Future {
         self.0
@@ -98,8 +105,8 @@ fn format_message<M, S, C>(
     template: &str,
     subject: S,
     context: C,
-    locale: &'static Locale<'static>,
-) -> Result<Message>
+    locale: &'static Locale,
+) -> Result<Message, RenderError>
 where
     M: Into<Mailbox>,
     S: IntoSubject,
@@ -112,7 +119,7 @@ where
 
     Ok(Message {
         to: to.into(),
-        subject,
+        subject: subject.to_string(),
         html: MAILS.render_i18n(&template_html, &context, locale)?,
         text: MAILS.render_i18n(&template_text, &context, locale)?,
     })
@@ -120,10 +127,9 @@ where
 
 impl Default for Mailer {
     fn default() -> Self {
-        let config = crate::config::load()
-            .expect("Configuration should be ready when mailer is started");
+        let config = crate::Config::global();
 
-        let transport = transport::from_config(&config.mail)
+        let transport = transport::from_config(config)
             .expect("Transport configuration should already be validated when \
                 mailer is started");
 
@@ -169,11 +175,11 @@ impl<'a> IntoSubject for &'a str {
     }
 }
 
-impl<'a> IntoSubject for (&'a str, &'a HashMap<&str, fluent::FluentValue>) {
+impl<'a> IntoSubject for (&'a str, &'a HashMap<&str, FluentValue<'a>>) {
     fn into_subject(self, locale: &Locale) -> String {
         let (key, args) = self;
         match locale.format(key, args) {
-            Some(subject) => subject,
+            Some(subject) => subject.to_string(),
             None => {
                 error!("Message {} is missing from locale {}",
                     key, locale.code);
