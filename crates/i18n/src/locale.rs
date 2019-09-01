@@ -97,11 +97,11 @@ impl I18n<'static> {
 
             let source = fs::read_to_string(&path)
                 .map_err(|err| LoadLocalesError::LocaleRead(locale.clone(), err))?;
-            let resource = match FluentResource::try_new(source) {
+            let resource = match FluentResource::try_new(source.clone()) {
                 Ok(res) => res,
                 Err((res, errors)) => {
-                    error!("Errors loading locale {}:\n{}",
-                        locale, format_parse_errors(&errors));
+                    error!("Errors loading locale {}:{}",
+                        locale, format_parse_errors(&source, &errors));
 
                     res
                 }
@@ -173,11 +173,15 @@ pub enum LoadLocalesError {
     Fluent(#[cause] #[from] FluentError),
 }
 
-fn format_parse_errors(errors: &[ParserError]) -> String {
+fn format_parse_errors(source: &str, errors: &[ParserError]) -> String {
     let mut result = String::new();
 
     for error in errors.iter() {
-        let _ = write!(result, "\n    {}: {:?}", error.pos.0, error.kind);
+        let line_start = source[..error.pos.0].rfind('\n').unwrap_or(0) + 1;
+        let line = source[..line_start].chars().filter(|c| *c == '\n').count() + 1;
+        let column = error.pos.0 - line_start + 1;
+
+        let _ = write!(result, "\n    {}:{}: {:?}", line, column, error.kind);
     }
 
     result
