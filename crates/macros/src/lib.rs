@@ -9,9 +9,11 @@ use syn::parse_macro_input;
 mod api;
 mod extra;
 mod test;
+mod multipart;
 
 decl_derive!([ApiError, attributes(api)] => api::derive_error);
 decl_derive!([From, attributes(from)] => extra::derive_from);
+decl_derive!([FromMultipart] => multipart::derive_from);
 
 #[proc_macro_attribute]
 pub fn test_database(attr: TokenStream, item: TokenStream) -> TokenStream {

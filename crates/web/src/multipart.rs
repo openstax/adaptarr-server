@@ -15,6 +15,8 @@ use futures::{Future, Stream, future::self};
 use std::{io::Write, str::FromStr};
 use tempfile::{Builder as TempBuilder, NamedTempFile};
 
+pub use adaptarr_macros::FromMultipart;
+
 /// Trait for types which can be loaded from a `multipart/form-data` request.
 pub trait FromMultipart: Sized {
     type Error;
@@ -40,93 +42,6 @@ pub trait FromField: Sized {
     /// or `None` if the field must be present.
     fn default() -> Option<Self> {
         None
-    }
-}
-
-/// Macro that auto-implements [`FromMultipart`] for types.
-#[macro_export]
-macro_rules! from_multipart {
-    {
-        multipart $name:ident via $impl_struct:ident {
-            $(
-                $field:ident : $type:ty
-            ),*
-            $(,)*
-        }
-    } => {
-        struct $impl_struct {
-            $($field : Option<$type>),*
-        }
-
-        impl crate::multipart::FromMultipart for $name
-        where
-            $(
-                $type: crate::multipart::FromField,
-                <$type as crate::multipart::FromField>::Error:
-                    Into<crate::multipart::MultipartError>,
-            )*
-        {
-            type Error = crate::multipart::MultipartError;
-            type Result = Box<dyn futures::Future<
-                Item = Self,
-                Error = Self::Error,
-            >>;
-
-            fn from_multipart<S, F>(fields: S) -> Self::Result
-            where
-                S: futures::Stream<
-                    Item = (String, F),
-                    Error = crate::multipart::MultipartError,
-                > + 'static,
-                F: futures::Stream<
-                    Item = bytes::Bytes,
-                    Error = crate::multipart::MultipartError,
-                > + 'static,
-            {
-                use futures::{Future, future};
-
-                let data = $impl_struct {
-                    $($field: None),*
-                };
-
-                Box::new(
-                    fields
-                    .fold(data, |mut data, (name, body)| {
-                        let f: Box<dyn Future<Item = $impl_struct, Error = crate::multipart::MultipartError>> = match name.as_str() {
-                            $(
-                                stringify!($field) => Box::new(
-                                    <$type as crate::multipart::FromField>
-                                        ::from_field(body)
-                                        .map(|value| {
-                                            data.$field = Some(value);
-                                            data
-                                        })
-                                ),
-                            )*
-                            _ => Box::new(
-                                future::err(
-                                    crate::multipart::MultipartError
-                                        ::UnexpectedField(name))),
-                        };
-                        f
-                    })
-                    .map(|data| {
-                        let $impl_struct { $($field),* } = data;
-
-                        $(
-                            let $field = $field
-                                .or_else(crate::multipart::FromField::default)
-                                .ok_or(
-                                    crate::multipart::MultipartError::FieldMissing(
-                                        stringify!($field)))?;
-                        )*
-
-                        Ok(Self { $($field),* })
-                    })
-                    .and_then(future::result)
-                )
-            }
-        }
     }
 }
 
