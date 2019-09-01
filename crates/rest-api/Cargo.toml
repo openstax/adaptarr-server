@@ -1,0 +1,34 @@
+[package]
+name = "adaptarr-rest-api"
+version = "0.1.0"
+authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix = "0.8.3"
+actix-web = "1.0.7"
+actix-web-actors = "1.0.2"
+adaptarr-error = { path = "../error" }
+adaptarr-i18n = { path = "../i18n" }
+adaptarr-models = { path = "../models" }
+adaptarr-util = { path = "../util" }
+adaptarr-web = { path = "../web" }
+base64 = "0.10.1"
+bytes = "0.4.12"
+diesel = "1.4.2"
+failure = "0.1.5"
+futures = "0.1.28"
+mime = "0.3.13"
+rand = "0.7.0"
+serde_json = "1.0.40"
+tempfile = "3.1.0"
+tera = "0.11.20"
+uuid = "0.7.4"
+
+[dependencies.chrono]
+version = "0.4.7"
+features = ["serde"]
+
+[dependencies.serde]
+version = "1.0.99"
+features = ["derive"]

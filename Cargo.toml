@@ -6,6 +6,7 @@ members = [
     "crates/mail",
     "crates/models",
     "crates/pages",
+    "crates/rest-api",
     "crates/util",
     "crates/web",
 ]

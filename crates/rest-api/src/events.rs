@@ -1,51 +1,40 @@
 use actix::{
     Actor,
-    ActorFuture,
-    AsyncContext,
-    ContextFutureSpawner,
-    Handler,
     Running,
     StreamHandler,
+    Handler,
     SystemService,
+    AsyncContext,
     WrapFuture,
+    ActorFuture,
+    ContextFutureSpawner,
 };
 use actix_web::{
-    App,
-    FromRequest,
     HttpRequest,
     HttpResponse,
-    Json,
-    Path,
-    http::{StatusCode, Method},
-    ws::{self, WebsocketContext},
+    http::StatusCode,
+    web::{self, Payload, Path, Json, ServiceConfig},
 };
+use actix_web_actors::ws::{self, WebsocketContext};
+use adaptarr_models::{Event, Model, events};
+use adaptarr_web::{Database, Session};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::{
-    events,
-    models::Event,
-};
-use super::{
-    Error,
-    State,
-    RouterExt,
-    session::{Session, Normal},
-};
+use crate::Result;
 
 /// Configure routes.
-pub fn routes(app: App<State>) -> App<State> {
+pub fn configure(app: &mut ServiceConfig) {
     app
-        .api_route("/notifications", Method::GET, list_notifications)
-        .api_route("/notifications/{id}", Method::PUT, update_notifiation)
-        .route("/events", Method::GET, event_stream)
+        .route("/notifications", web::get().to(list_notifications))
+        .route("/notifications/{id}", web::put().to(update_notifiation))
+        .route("/events", web::get().to(event_stream))
+    ;
 }
 
-type Result<T, E=Error> = std::result::Result<T, E>;
-
-#[derive(Debug, Serialize)]
-pub struct EventData {
+#[derive(Serialize)]
+struct EventData {
     id: i32,
     kind: &'static str,
     timestamp: NaiveDateTime,
@@ -60,15 +49,12 @@ pub struct EventData {
 /// ```text
 /// GET /notifications
 /// ```
-pub fn list_notifications(
-    state: actix_web::State<State>,
-    session: Session,
-) -> Result<Json<Vec<EventData>>> {
-    let db = state.db.get()?;
-    let events = Event::unread(&*db, session.user)?
+fn list_notifications(db: Database, session: Session)
+-> Result<Json<Vec<EventData>>> {
+    let events = Event::unread(&db, session.user)?
         .into_iter()
         .map(|event| {
-            let data = event.load();
+            let data = event.get_public();
 
             EventData {
                 id: event.id,
@@ -82,8 +68,8 @@ pub fn list_notifications(
     Ok(Json(events))
 }
 
-#[derive(Debug, Deserialize)]
-pub struct EventUpdate {
+#[derive(Deserialize)]
+struct EventUpdate {
     unread: bool,
 }
 
@@ -94,16 +80,13 @@ pub struct EventUpdate {
 /// ```text
 /// PUT /notifications/:id
 /// ```
-pub fn update_notifiation(
-    state: actix_web::State<State>,
+fn update_notifiation(
+    db: Database,
     session: Session,
     id: Path<i32>,
     update: Json<EventUpdate>,
 ) -> Result<HttpResponse> {
-    let db = state.db.get()?;
-    let mut event = Event::by_id(&*db, *id, session.user)?;
-
-    event.set_unread(&*db, update.unread)?;
+    Event::by_id(&db, (*id, session.user))?.set_unread(&*db, update.unread)?;
 
     Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
@@ -118,26 +101,26 @@ pub fn update_notifiation(
 /// ```text
 /// GET /events
 /// ```
-pub fn event_stream(
-    req: HttpRequest<State>,
-    _session: Session,
-) -> Result<HttpResponse, actix_web::error::Error> {
-    ws::start(&req, Listener)
+fn event_stream(req: HttpRequest, session: Session, stream: Payload)
+-> Result<HttpResponse, actix_web::error::Error> {
+    ws::start(Listener { user: session.user }, &req, stream)
 }
 
 /// Stream of events.
-struct Listener;
+struct Listener {
+    user: i32,
+}
 
 impl Actor for Listener {
-    type Context = WebsocketContext<Self, State>;
+    type Context = WebsocketContext<Self>;
 
     /// Register this stream as an event listener.
     fn started(&mut self, ctx: &mut Self::Context) {
-        let session = Session::<Normal>::extract(ctx.request()).unwrap();
+
 
         events::EventManager::from_registry()
             .send(events::RegisterListener {
-                user: session.user,
+                user: self.user,
                 addr: ctx.address().recipient(),
             })
             .into_actor(self)
@@ -150,11 +133,9 @@ impl Actor for Listener {
 
     /// Unregister as an event listener.
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
-        let session = Session::<Normal>::extract(ctx.request()).unwrap();
-
         events::EventManager::from_registry()
             .do_send(events::UnregisterListener {
-                user: session.user,
+                user: self.user,
                 addr: ctx.address().recipient(),
             });
         Running::Stop
@@ -172,7 +153,7 @@ impl Handler<events::NewEvent> for Listener {
 
     fn handle(&mut self, msg: events::NewEvent, ctx: &mut Self::Context) {
         let events::NewEvent { id, timestamp, event } = msg;
-        ctx.text(serde_json::to_vec(&EventData {
+        ctx.text(serde_json::to_string(&EventData {
             id,
             kind: event.kind(),
             timestamp,
