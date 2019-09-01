@@ -90,7 +90,7 @@ data contains ID of the module for which the process has ended.
 {
     module: UUID,
 }
-````
+```
 
 ### `slot-filled` and `slot-vacated`
 
@@ -103,7 +103,7 @@ the slot (`slot`) and the module (`module`).
     slot: number,
     module: UUID,
 }
-````
+```
 
 ### `draft-advanced`
 
@@ -117,4 +117,4 @@ a list of editing permissions the user now possesses (`permissions`).
     step: number,
     permissions: string[],
 }
-````
+```

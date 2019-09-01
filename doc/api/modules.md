@@ -172,7 +172,7 @@ Get contents of a particular file in a module.
 
 #### Status codes
 
-- 404 `fild:not-found`: no file with such name could be found in this module.
+- 404 `file:not-found`: no file with such name could be found in this module.
 
 ### `GET /api/v1/modules/:id/xref-targets`
 
