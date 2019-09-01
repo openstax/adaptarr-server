@@ -1,14 +1,14 @@
 //! Parsing `multipart/form-data`.
 
+use actix_multipart::Field;
 use actix_web::{
     FromRequest,
-    HttpMessage,
     HttpRequest,
     HttpResponse,
     ResponseError,
-    multipart::{Field, MultipartItem},
-    error::PayloadError,
+    dev::Payload,
 };
+use adaptarr_macros::From;
 use bytes::Bytes;
 use failure::Fail;
 use futures::{Future, Stream, future::self};
@@ -44,6 +44,7 @@ pub trait FromField: Sized {
 }
 
 /// Macro that auto-implements [`FromMultipart`] for types.
+#[macro_export]
 macro_rules! from_multipart {
     {
         multipart $name:ident via $impl_struct:ident {
@@ -142,20 +143,25 @@ impl<T> Multipart<T> {
     }
 }
 
-impl<S, T> FromRequest<S> for Multipart<T>
+impl<T> FromRequest for Multipart<T>
 where
-    T: FromMultipart,
+    T: FromMultipart + 'static,
     <T as FromMultipart>::Result: 'static,
     actix_web::Error: From<<T as FromMultipart>::Error>,
 {
+    type Error = actix_web::Error;
+    type Future = Box<dyn Future<Item = Self, Error = actix_web::Error>>;
     type Config = ();
-    type Result = Box<dyn Future<Item = Self, Error = actix_web::Error>>;
 
-    fn from_request(req: &HttpRequest<S>, _: &Self::Config) -> Self::Result {
-        let items = req.multipart()
+    fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
+        let stream = match actix_multipart::Multipart::from_request(req, payload) {
+            Ok(stream) => stream,
+            Err(err) => return Box::new(future::err(err)),
+        };
+
+        let items = stream
             .from_err::<MultipartError>()
-            .map(process_item)
-            .flatten()
+            .and_then(process_field)
             .map(|(name, body)| (
                 name,
                 body.from_err::<MultipartError>(),
@@ -167,7 +173,7 @@ where
     }
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, From)]
 pub enum MultipartError {
     #[fail(display = "Field is missing Content-Disposition header")]
     ContentDispositionMissing,
@@ -179,16 +185,12 @@ pub enum MultipartError {
     FieldMissing(&'static str),
     #[fail(display = "Unexpected field {:?}", _0)]
     UnexpectedField(String),
+    #[fail(display = "Multipart error: {}", _0)]
+    Multipart(#[from] actix_multipart::MultipartError),
     #[fail(display = "Bad data: {}", _0)]
     BadData(#[cause] Box<dyn failure::Fail>),
     #[fail(display = "{}", _0)]
     Internal(#[cause] Box<dyn failure::Fail>),
-}
-
-impl From<actix_web::error::MultipartError> for MultipartError {
-    fn from(e: actix_web::error::MultipartError) -> Self {
-        MultipartError::BadData(Box::new(e))
-    }
 }
 
 impl ResponseError for MultipartError {
@@ -199,44 +201,28 @@ impl ResponseError for MultipartError {
             ContentDispositionMissing | NotFormData | UnnamedField
             | FieldMissing(_) | UnexpectedField(_) =>
                 HttpResponse::BadRequest().body(self.to_string()),
+            Multipart(ref e) => e.error_response(),
             BadData(ref e) => HttpResponse::BadRequest().body(e.to_string()),
             Internal(_) => HttpResponse::InternalServerError().finish(),
         }
     }
 }
 
-/// Process a single multipart item into a stream of fields.
-fn process_item<S>(item: MultipartItem<S>)
-    -> Box<dyn Stream<Item = (String, Field<S>), Error = MultipartError>>
-where
-    S: Stream<Item = Bytes, Error = PayloadError> + 'static,
-{
-    match item {
-        MultipartItem::Field(field) => {
-            let cd = match field.content_disposition() {
-                Some(cd) => cd,
-                None => return Box::new(
-                    future::err(MultipartError::ContentDispositionMissing)
-                        .into_stream()),
-            };
+fn process_field(field: Field) -> impl Future<Item = (String, Field), Error = MultipartError> {
+    let cd = match field.content_disposition() {
+        Some(cd) => cd,
+        None => return future::err(MultipartError::ContentDispositionMissing),
+    };
 
-            if !cd.is_form_data() {
-                return Box::new(
-                    future::err(MultipartError::NotFormData)
-                        .into_stream());
-            }
-
-            Box::new(
-                future::result({
-                    cd.get_name()
-                        .ok_or(MultipartError::UnnamedField)
-                        .map(|name| (name.to_string(), field))
-                })
-                .into_stream()
-            )
-        }
-        MultipartItem::Nested(mp) => Box::new(mp.map(process_item).flatten()),
+    if !cd.is_form_data() {
+        return future::err(MultipartError::NotFormData);
     }
+
+    future::result({
+        cd.get_name()
+            .ok_or(MultipartError::UnnamedField)
+            .map(|name| (name.to_string(), field))
+    })
 }
 
 impl<F: FromField + 'static> FromField for Option<F> {
@@ -283,10 +269,9 @@ impl FromField for NamedTempFile {
     where
         S: Stream<Item = Bytes, Error = MultipartError> + 'static,
     {
-        let config = crate::config::load()
-            .expect("configuration should be loaded at this point");
+        let storage_path = &adaptarr_models::Config::global().storage.path;
 
-        Box::new(future::result(TempBuilder::new().tempfile_in(&config.storage.path))
+        Box::new(future::result(TempBuilder::new().tempfile_in(storage_path))
             .map_err(|e| MultipartError::Internal(Box::new(e)))
             .and_then(|file| field.fold(file, |mut file, chunk| {
                 match file.write_all(chunk.as_ref()) {

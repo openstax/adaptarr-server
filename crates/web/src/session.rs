@@ -2,22 +2,16 @@
 
 use actix_web::{
     HttpRequest,
-    HttpResponse,
+    HttpMessage,
     FromRequest,
-    middleware::{Middleware, Started, Response},
+    cookie::SameSite,
+    dev::{Payload, Service, ServiceRequest, ServiceResponse, Transform},
     error::{ErrorInternalServerError, Result},
     http::Cookie,
 };
-use chrono::{Duration, Utc};
-use cookie::SameSite;
-use diesel::{prelude::*, result::{Error as DbError}};
-use failure::Fail;
-use std::marker::PhantomData;
-
-use crate::{
-    ApiError,
+use adaptarr_error::{ApiError, Error};
+use adaptarr_models::{
     audit,
-    config,
     db::{
         self,
         Connection,
@@ -25,11 +19,15 @@ use crate::{
         models::{Session as DbSession, NewSession, SessionUpdate},
         schema::sessions,
     },
-    models::user::{User, FindUserError},
+    models::{AssertExists, FindModelError, Model, User},
     permissions::{Permission, PermissionBits, RequirePermissionsError},
-    utils,
 };
-use super::{Error, State};
+use chrono::{Duration, Utc};
+use diesel::{prelude::*, result::{Error as DbError}};
+use failure::Fail;
+use futures::{Future, Poll, future::{self, FutureResult}};
+use log::debug;
+use std::{marker::PhantomData, rc::Rc};
 
 /// Name of the cookie carrying session ID.
 const COOKIE: &str = "sesid";
@@ -46,11 +44,10 @@ const INACTIVITY_EXPIRATION: i64 = 7;
 /// a normal session. Defaults to 15 minutes.
 const SUPER_EXPIRATION: i64 = 15;
 
+#[derive(Clone)]
 pub struct SessionManager {
     /// Secret key used to seal and unseal session cookies.
     secret: Vec<u8>,
-    /// Domain for which session cookies are valid.
-    domain: &'static str,
     /// Pool of database connections.
     db: Pool,
 }
@@ -118,6 +115,13 @@ struct SessionData {
 }
 
 impl SessionManager {
+    pub fn new(secret: &[u8]) -> SessionManager {
+        SessionManager {
+            secret: secret.to_vec(),
+            db: db::pool(),
+        }
+    }
+
     fn validate(ses: &DbSession) -> Validation {
         let now = Utc::now().naive_utc();
 
@@ -147,35 +151,20 @@ impl SessionManager {
 
         Validation::Pass
     }
-}
 
-impl Default for SessionManager {
-    fn default() -> SessionManager {
-        let config = config::load().expect("configuration should be ready");
-        let db = db::pool().expect("database should be ready");
-
-        SessionManager {
-            secret: config.server.secret.clone(),
-            domain: &config.server.domain,
-            db,
-        }
-    }
-}
-
-impl<S> Middleware<S> for SessionManager {
-    fn start(&self, req: &HttpRequest<S>) -> Result<Started> {
+    fn before_request(&self, req: &mut ServiceRequest) -> Result<()> {
         let cookie = match req.cookie(COOKIE) {
             Some(cookie) => cookie,
-            None => return Ok(Started::Done),
+            None => return Ok(()),
         };
 
         let mut data = match base64::decode(cookie.value()) {
             Ok(data) => data,
-            Err(_) => return Ok(Started::Done),
+            Err(_) => return Ok(()),
         };
-        let sesid: i32 = match utils::unseal(&self.secret, &mut data) {
+        let sesid: i32 = match adaptarr_util::unseal(&self.secret, &mut data) {
             Ok(sesid) => sesid,
-            Err(_) => return Ok(Started::Done),
+            Err(_) => return Ok(()),
         };
 
         let db = self.db.get()
@@ -189,7 +178,7 @@ impl<S> Middleware<S> for SessionManager {
 
         let session = match session {
             Some(session) => session,
-            None => return Ok(Started::Done),
+            None => return Ok(()),
         };
 
         let pass = match SessionManager::validate(&session) {
@@ -218,11 +207,11 @@ impl<S> Middleware<S> for SessionManager {
             audit::set_actor(audit::Actor::User(session.user));
         }
 
-        Ok(Started::Done)
+        Ok(())
     }
 
-    fn response(&self, req: &HttpRequest<S>, mut rsp: HttpResponse) -> Result<Response> {
-        if let Some(session) = req.extensions().get::<SessionData>() {
+    fn after_request<B>(&self, rsp: &mut ServiceResponse<B>) -> Result<()> {
+        let cookie = rsp.request().extensions().get::<SessionData>().map(|session| -> Result<Option<Cookie>> {
             audit::set_actor(None);
 
             let now = Utc::now().naive_utc();
@@ -233,15 +222,14 @@ impl<S> Middleware<S> for SessionManager {
                 diesel::delete(&session.existing.unwrap())
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
-                let cookie = Cookie::build(COOKIE, "")
-                    .domain(self.domain)
+                Ok(Some(Cookie::build(COOKIE, "")
+                    .domain(rsp.request().app_config().host().to_string())
                     .path("/")
-                    .max_age(Duration::zero())
+                    .max_age_time(Duration::zero())
                     .secure(!cfg!(debug_assertions))
                     .http_only(!cfg!(debug_assertions))
                     .same_site(SameSite::Strict)
-                    .finish();
-                rsp.add_cookie(&cookie)?;
+                    .finish()))
             } else if let Some(new) = session.new {
                 if let Some(session) = session.existing {
                     diesel::delete(&session)
@@ -254,31 +242,93 @@ impl<S> Middleware<S> for SessionManager {
                     .get_result::<DbSession>(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
-                let value = utils::seal(&self.secret, session.id)
+                let value = adaptarr_util::seal(&self.secret, session.id)
                     .expect("sealing session ID");
                 let cookie = Cookie::build(COOKIE, base64::encode(&value))
-                    .domain(self.domain)
+                    .domain(rsp.request().app_config().host().to_string())
                     .path("/")
-                    .max_age(Duration::days(MAX_DURATION))
+                    .max_age_time(Duration::days(MAX_DURATION))
                     .secure(!cfg!(debug_assertions))
                     .http_only(!cfg!(debug_assertions))
                     .same_site(SameSite::Strict)
                     .finish();
-                rsp.add_cookie(&cookie)?;
+                Ok(Some(cookie))
             } else if let Some(session) = session.existing {
                 diesel::update(&session)
                     .set(sessions::last_used.eq(now))
                     .execute(&*db)
                     .map_err(|e| ErrorInternalServerError(e.to_string()))?;
+                Ok(None)
+            } else {
+                Ok(None)
             }
+        }).transpose()?;
+
+        if let Some(Some(cookie)) = cookie {
+            rsp.response_mut().add_cookie(&cookie)?;
         }
 
-        Ok(Response::Done(rsp))
+        Ok(())
+    }
+}
+
+impl<S, B> Transform<S> for SessionManager
+where
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>>,
+    S::Error: From<actix_web::Error> + 'static,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Request = ServiceRequest;
+    type Response = ServiceResponse<B>;
+    type Error = S::Error;
+    type Transform = SessionMiddleware<S>;
+    type InitError = ();
+    type Future = FutureResult<SessionMiddleware<S>, ()>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        future::ok(SessionMiddleware {
+            service,
+            manager: Rc::new(self.clone()),
+        })
+    }
+}
+
+pub struct SessionMiddleware<S> {
+    service: S,
+    manager: Rc<SessionManager>,
+}
+
+impl<S, B> Service for SessionMiddleware<S>
+where
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>>,
+    S::Error: From<actix_web::Error> + 'static,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Request = ServiceRequest;
+    type Response = ServiceResponse<B>;
+    type Error = S::Error;
+    type Future = Box<dyn Future<Item = Self::Response, Error = S::Error>>;
+
+    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
+        self.service.poll_ready()
+    }
+
+    fn call(&mut self, mut req: ServiceRequest) -> Self::Future {
+        if let Err(e) = self.manager.before_request(&mut req) {
+            return Box::new(future::err(From::from(e)));
+        }
+
+        let manager = self.manager.clone();
+        Box::new(self.service.call(req)
+            .map(move |rsp| rsp.checked_expr(|rsp| manager.after_request(rsp))))
+        // Box::new(self.service.call(req))
     }
 }
 
 impl<P> Session<P> {
-    pub fn create<S>(req: &HttpRequest<S>, user: &User, is_elevated: bool) {
+    pub fn create(req: &HttpRequest, user: &User, is_elevated: bool) {
         let mask = if is_elevated {
             PermissionBits::elevated()
         } else {
@@ -301,6 +351,7 @@ impl<P> Session<P> {
 
         let mut extensions = req.extensions_mut();
 
+        debug!("creating session");
         if let Some(session) = extensions.get_mut::<SessionData>() {
             session.new = Some(new);
             return;
@@ -313,7 +364,7 @@ impl<P> Session<P> {
         });
     }
 
-    pub fn destroy<S>(req: &HttpRequest<S>, sess: Self) {
+    pub fn destroy(req: &HttpRequest, sess: Self) {
         req.extensions_mut().insert(SessionData {
             existing: Some(sess.data),
             new: None,
@@ -326,13 +377,7 @@ impl<P> Session<P> {
     }
 
     pub fn user(&self, dbcon: &Connection) -> Result<User, DbError> {
-        match User::by_id(dbcon, self.data.user) {
-            Ok(user) => Ok(user),
-            Err(FindUserError::Internal(err)) => Err(err),
-            Err(err) => {
-                panic!("Inconsistency: session's user doesn't exist: {}", err);
-            }
-        }
+        User::by_id(dbcon, self.data.user).map_err(FindModelError::assert_exists)
     }
 
     pub fn permissions(&self) -> PermissionBits {
@@ -349,22 +394,26 @@ impl<P> std::ops::Deref for Session<P> {
 }
 
 
-impl<P> FromRequest<State> for Session<P>
+impl<P> FromRequest for Session<P>
 where
     P: Policy,
     Error: From<P::Error>,
 {
+    type Error = Error;
+    type Future = Result<Session<P>, Error>;
     type Config = ();
-    type Result = Result<Session<P>, Error>;
 
-    fn from_request(req: &HttpRequest<State>, _cfg: &()) -> Self::Result {
+    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         if let Some(session) = req.extensions().get::<SessionData>()
                                 .and_then(|s| s.existing) {
 
             match P::validate(&session) {
                 Validation::Pass => (),
                 Validation::Update(update, pass) => {
-                    let db = req.state().db.get()?;
+                    let db = req.app_data::<db::Pool>()
+                        .expect("Missing state data")
+                        .get()?;
+
                     diesel::update(&session)
                         .set(update)
                         .execute(&*db)?;
@@ -416,7 +465,7 @@ pub enum SessionFromRequestError {
     NoSession,
     #[api(internal)]
     #[fail(display = "Unsealing error: {}", _0)]
-    Unsealing(#[cause] utils::UnsealingError),
+    Unsealing(#[cause] adaptarr_util::UnsealingError),
     #[api(internal)]
     #[fail(display = "Invalid base64: {}", _0)]
     Decoding(#[cause] base64::DecodeError),
