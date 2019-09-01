@@ -98,6 +98,9 @@ This endpoint is only available in elevated sessions with the [`role:edit`](
 
 - 204: role was deleted.
 
+- 400 `role:delete:in-use`: role can't be deleted as it is still assigned to at
+  lest one user.
+
 
 
 ## Common status codes #########################################################

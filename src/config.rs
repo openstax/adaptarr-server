@@ -19,9 +19,7 @@ pub fn load() -> crate::Result<&'static Config> {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub server: Server,
-    pub database: Option<Database>,
     pub mail: crate::mail::Config,
-    pub storage: Storage,
     #[serde(default)]
     pub logging: Logging,
     pub sentry: Option<Sentry>,
@@ -46,19 +44,6 @@ pub struct Server {
     /// Secret key.
     #[serde(default = "random_secret", deserialize_with = "de_secret")]
     pub secret: Vec<u8>,
-}
-
-/// Database configuration.
-#[derive(Clone, Debug, Deserialize)]
-pub struct Database {
-    pub url: String,
-}
-
-/// File storage configuration.
-#[derive(Clone, Debug, Deserialize)]
-pub struct Storage {
-    /// Path to a directory in which user-uploaded files will be kept.
-    pub path: std::path::PathBuf,
 }
 
 /// Logging configuration.

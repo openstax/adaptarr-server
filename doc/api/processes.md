@@ -398,6 +398,14 @@ Optional fields may be omitted, in which case the corresponding property will
 remain unchanged. This endpoint is only available in elevated sessions with the
 [`editing-process:edit`](../#p-editing-process-edit) permission.
 
+#### Status codes
+
+- 200: slot was updated. Response contains a JSON object of the [`Slot`](#slot)
+  model describing the slot with changes applied.
+
+- 400 `edit-process:slot:name:duplicate`: rename would result in two slots
+  sharing the same name.
+
 ### `GET /api/v1/processes/:id/versions/:version/:id/steps`
 
 Return list of all steps in a particular version of a process, as a JSON array
@@ -424,6 +432,14 @@ following properties:
 This endpoint is only available in elevated sessions with the
 [`editing-process:edit`](../#p-editing-process-edit) permission.
 
+#### Status codes
+
+- 200: step was updated. Response contains a JSON object of the [`Step`](#step)
+  model describing the step with changes applied.
+
+- 400 `edit-process:step:name:duplicate`: rename would result in two steps
+  sharing the same name.
+
 ### `GET /api/v1/processes/:id/versions/:version/:id/steps/:step/links`
 
 Return list of all link in a particular step in a version of a process,
@@ -449,6 +465,14 @@ following properties:
 
 This endpoint is only available in elevated sessions with the
 [`editing-process:edit`](../#p-editing-process-edit) permission.
+
+#### Status codes
+
+- 200: link was updated. Response contains a JSON object of the [`Link`](#link)
+  model describing the link with changes applied.
+
+- 400 `edit-process:link:name:duplicate`: rename would result in two links
+  sharing the same name.
 
 ### `GET /api/v1/processes/:id/versions/:version/structure`
 

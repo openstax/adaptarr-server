@@ -4,6 +4,7 @@ members = [
     "crates/i18n",
     "crates/macros",
     "crates/mail",
+    "crates/models",
     "crates/util",
 ]
 
