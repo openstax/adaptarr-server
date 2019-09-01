@@ -1,68 +1,60 @@
 use actix_web::{
-    App,
-    Form,
     HttpRequest,
     HttpResponse,
-    Query,
-    http::{Method, StatusCode},
-    middleware::Logger,
-    pred,
+    http::StatusCode,
+    guard,
+    web::{self, Data, Form, Query, ServiceConfig},
 };
-use sentry_actix::SentryMiddleware;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-use crate::{
+use adaptarr_error::ApiError;
+use adaptarr_i18n::{I18n, LanguageTag};
+use adaptarr_models::{
+    User,
+    Model,
+    PasswordResetToken,
+    UserFields,
+    Invite,
     audit,
-    i18n::{LanguageTag, Locale},
-    mail::Mailer,
-    models::{
-        Invite,
-        PasswordResetToken,
-        user::{User, Fields as UserFields},
-    },
-    templates,
 };
-use super::{
-    Error,
-    RouteExt,
-    RouterExt,
-    State,
-    error::ApiError,
-    session::{SessionManager, Session, Normal},
-};
+use adaptarr_web::{Secret, Locale, Database, session::{Session, Normal}};
+use log::warn;
+use serde::{Deserialize, Serialize};
+use std::{borrow::Cow, collections::HashMap};
 
-pub fn app(state: State) -> App<State> {
-    App::with_state(state)
-        .middleware(SentryMiddleware::new())
-        .middleware(Logger::default())
-        .middleware(SessionManager::default())
-        .resource("/login", |r| {
-            r.get().api_with(login);
-            r.post().api_with(do_login);
-        })
-        .resource("/elevate", |r| {
-            r.get().api_with(elevate);
-            r.post()
-                .filter(pred::Header("Accept", "application/json"))
-                .api_with(do_elevate_json);
-            r.post().api_with(do_elevate);
-        })
-        .api_route("/logout", Method::GET, logout)
-        .resource("/reset", |r| {
-            r.get().api_with(reset);
-            r.post().api_with(do_reset);
-        })
-        .resource("/register", |r| {
-            r.name("register");
-            r.get().api_with(register);
-            r.post().api_with(do_register);
-        })
+adaptarr_i18n::localized_templates!(PAGES = "templates/pages/**/*");
+
+type Result<T, E=adaptarr_error::Error> = std::result::Result<T, E>;
+
+/// Configure routes
+pub fn configure(app: &mut ServiceConfig) {
+    app
+        .service(web::resource("/login")
+            .route(web::get().to(login))
+            .route(web::post().to(do_login))
+        )
+        .service(web::resource("/elevate")
+            .route(web::get().to(elevate))
+            .route(web::post()
+                .guard(guard::Header("Accept", "application/json"))
+                .to(do_elevate_json))
+            .route(web::post().to(do_elevate))
+        )
+        .route("/logout", web::get()./**/to(logout))
+        .service(web::resource("/reset")
+            .name("reset")
+            .route(web::get().to(reset))
+            .route(web::post().to(do_reset))
+        )
+        .service(web::resource("/register")
+            .name("register")
+            .route(web::get().to(register))
+            .route(web::post().to(do_register))
+        )
+    ;
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum LoginAction {
+enum LoginAction {
     /// Redirect to the URl specified in `next`.
     Next,
     /// Use `window.postMessage()` to notify opener.
@@ -75,16 +67,16 @@ impl Default for LoginAction {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LoginQuery {
+#[derive(Deserialize, Serialize)]
+struct LoginQuery {
     next: Option<String>,
     #[serde(default)]
     action: LoginAction,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct LoginTemplate<'error> {
-    error: Option<&'error str>,
+    error: Option<Cow<'error, str>>,
     next: Option<String>,
     action: LoginAction,
 }
@@ -96,11 +88,11 @@ struct LoginTemplate<'error> {
 /// ```text
 /// GET /login
 /// ```
-pub fn login(
+fn login(
     session: Option<Session>,
-    locale: &'static Locale<'static>,
+    locale: Locale<'static>,
     query: Query<LoginQuery>,
-) -> RenderedTemplate {
+) -> Result<HttpResponse> {
     if session.is_some() {
         return Ok(HttpResponse::SeeOther()
             .header("Location", query.next.as_ref().map_or("/", String::as_str))
@@ -109,15 +101,15 @@ pub fn login(
 
     let LoginQuery { next, action } = query.into_inner();
 
-    render(locale, "login.html", &LoginTemplate {
+    render(locale.as_ref(), "login.html", &LoginTemplate {
         error: None,
         next,
         action,
     })
 }
 
-#[derive(Debug, Deserialize)]
-pub struct LoginCredentials {
+#[derive(Deserialize)]
+struct LoginParams {
     email: String,
     password: String,
     next: Option<String>,
@@ -130,31 +122,29 @@ pub struct LoginCredentials {
 /// ```text
 /// POST /login
 /// ```
-pub fn do_login(
-    req: HttpRequest<State>,
-    locale: &'static Locale<'static>,
-    params: Form<LoginCredentials>,
-) -> RenderedTemplate {
-    let db = &*req.state().db.get()?;
+fn do_login(
+    req: HttpRequest,
+    db: Database,
+    locale: Locale<'static>,
+    params: Form<LoginParams>,
+) -> Result<HttpResponse> {
+    let LoginParams { email, password, next } = params.into_inner();
 
-    let user = match User::authenticate(db, &params.email, &params.password) {
+    let user = match User::authenticate(&db, &email, &password) {
         Ok(user) => user,
-        Err(err) => {
-            if let Some(code) = err.code() {
-                return render_code(
-                    locale,
-                    StatusCode::BAD_REQUEST,
-                    "login.html",
-                    &LoginTemplate {
-                        error: Some(code),
-                        next: params.into_inner().next,
-                        action: LoginAction::default(),
-                    },
-                );
-            }
-
-            return Err(err.into());
-        },
+        Err(err) => match err.code() {
+            None => return Err(err.into()),
+            Some(code) => return render_code(
+                locale.as_ref(),
+                StatusCode::BAD_REQUEST,
+                "login.html",
+                &LoginTemplate {
+                    error: Some(code),
+                    action: LoginAction::default(),
+                    next,
+                },
+            ),
+        }
     };
 
     audit::log_db_actor(&*db, user.id, "users", user.id, "authenticate", ());
@@ -164,7 +154,7 @@ pub fn do_login(
     Session::<Normal>::create(&req, &user, false);
 
     Ok(HttpResponse::SeeOther()
-        .header("Location", params.next.as_ref().map_or("/", String::as_str))
+        .header("Location", next.as_ref().map_or("/", String::as_str))
         .finish())
 }
 
@@ -175,21 +165,18 @@ pub fn do_login(
 /// ```text
 /// GET /elevate
 /// ```
-pub fn elevate(
-    locale: &'static Locale<'static>,
-    query: Query<LoginQuery>,
-) -> RenderedTemplate {
+fn elevate(locale: Locale<'static>, query: Query<LoginQuery>) -> Result<HttpResponse> {
     let LoginQuery { next, action } = query.into_inner();
 
-    render(locale, "elevate.html", &LoginTemplate {
+    render(locale.as_ref(), "elevate.html", &LoginTemplate {
         error: None,
         next,
         action,
     })
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ElevateCredentials {
+#[derive(Deserialize)]
+struct ElevateCredentials {
     password: String,
     #[serde(default)]
     next: Option<String>,
@@ -204,24 +191,23 @@ pub struct ElevateCredentials {
 /// ```text
 /// POST /elevate
 /// ```
-pub fn do_elevate(
-    req: HttpRequest<State>,
-    state: actix_web::State<State>,
+fn do_elevate(
+    req: HttpRequest,
+    db: Database,
     session: Session,
-    locale: &'static Locale<'static>,
+    locale: Locale<'static>,
     form: Form<ElevateCredentials>,
-) -> RenderedTemplate {
-    let db = state.db.get()?;
-    let user = User::by_id(&*db, session.user)?;
+) -> Result<HttpResponse> {
+    let user = session.user(&db)?;
     let ElevateCredentials { next, action, password } = form.into_inner();
 
     if !user.check_password(&password) {
         return render_code(
-            locale,
+            locale.as_ref(),
             StatusCode::BAD_REQUEST,
             "elevate.html",
             &LoginTemplate {
-                error: Some("user:authenticate:bad-password"),
+                error: Some(Cow::from("user:authenticate:bad-password")),
                 next,
                 action,
             },
@@ -239,9 +225,9 @@ pub fn do_elevate(
 
 #[derive(Serialize)]
 #[serde(untagged)]
-enum ElevationResult {
+enum ElevationResult<'a> {
     Error {
-        message: String,
+        message: Cow<'a, str>,
     },
     Success,
 }
@@ -254,15 +240,14 @@ enum ElevationResult {
 /// POST /elevate
 /// Accept: application/json
 /// ```
-pub fn do_elevate_json(
-    req: HttpRequest<State>,
-    state: actix_web::State<State>,
+fn do_elevate_json(
+    req: HttpRequest,
+    db: Database,
     session: Session,
-    locale: &'static Locale<'static>,
+    locale: Locale<'static>,
     form: Form<ElevateCredentials>,
-) -> RenderedTemplate {
-    let db = state.db.get()?;
-    let user = User::by_id(&*db, session.user)?;
+) -> Result<HttpResponse> {
+    let user = session.user(&db)?;
     let ElevateCredentials { password, .. } = form.into_inner();
 
     if !user.check_password(&password) {
@@ -274,7 +259,7 @@ pub fn do_elevate_json(
             None => {
                 warn!("Message elevate-error missing from locale {}",
                     locale.code);
-                "".to_string()
+                Cow::from("")
             }
         };
 
@@ -289,6 +274,13 @@ pub fn do_elevate_json(
     Ok(HttpResponse::Ok().json(ElevationResult::Success))
 }
 
+// TODO: replace with tera::Context::new()
+/// Empty serializable structure to serve as empty context.
+#[derive(Serialize)]
+struct Empty {
+}
+
+
 /// Log an user out and destroy their session.
 ///
 /// ## Method
@@ -296,23 +288,19 @@ pub fn do_elevate_json(
 /// ```text
 /// GET /logout
 /// ```
-pub fn logout(
-    req: HttpRequest<State>,
-    sess: Session,
-    locale: &'static Locale<'static>
-) -> RenderedTemplate {
-    Session::destroy(&req, sess);
-    render(locale, "logout.html", &Empty {})
+fn logout(req: HttpRequest, session: Session, locale: Locale<'static>) -> Result<HttpResponse> {
+    Session::destroy(&req, session);
+    render(locale.as_ref(), "logout.html", &Empty {})
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ResetQuery {
+#[derive(Deserialize, Serialize)]
+struct ResetQuery {
     token: Option<String>,
 }
 
 #[derive(Serialize)]
 struct ResetTemplate<'s> {
-    error: Option<&'s str>,
+    error: Option<Cow<'s, str>>,
     token: Option<&'s str>,
 }
 
@@ -323,16 +311,13 @@ struct ResetTemplate<'s> {
 /// ```text
 /// GET /reset
 /// ```
-pub fn reset(
-    query: Query<ResetQuery>,
-    locale: &'static Locale<'static>,
-) -> RenderedTemplate {
-    render(locale, "reset.html", &*query)
+fn reset(query: Query<ResetQuery>, locale: Locale<'static>) -> Result<HttpResponse> {
+    render(locale.as_ref(), "reset.html", &*query)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(untagged)]
-pub enum ResetForm {
+enum ResetForm {
     CreateToken {
         email: String,
     },
@@ -343,6 +328,15 @@ pub enum ResetForm {
     },
 }
 
+/// Arguments for `mail/reset`.
+#[derive(Serialize)]
+struct ResetMailArgs<'a> {
+    /// User to whom the email is sent.
+    user: <User as Model>::Public,
+    /// Password reset URL.
+    url: &'a str,
+}
+
 /// Send reset token in an e-mail or perform password reset (with a token).
 ///
 /// ## Method
@@ -350,22 +344,22 @@ pub enum ResetForm {
 /// ```text
 /// POST /reset
 /// ```
-pub fn do_reset(
-    req: HttpRequest<State>,
-    state: actix_web::State<State>,
-    locale: &'static Locale<'static>,
+fn do_reset(
+    req: HttpRequest,
+    db: Database,
+    i18n: Data<I18n<'static>>,
+    secret: Data<Secret>,
+    locale: Locale<'static>,
     form: Form<ResetForm>,
-) -> RenderedTemplate {
-    let db = state.db.get()?;
-
+) -> Result<HttpResponse> {
     match form.into_inner() {
         ResetForm::CreateToken { email } => {
-            let user = match User::by_email(&*db, &email) {
+            let user = match User::by_email(&db, &email) {
                 Ok(user) => user,
                 Err(error) => {
                     if let Some(code) = error.code() {
                         return render_code(
-                            locale,
+                            locale.as_ref(),
                             StatusCode::BAD_REQUEST,
                             "reset.html",
                             &ResetTemplate {
@@ -378,38 +372,32 @@ pub fn do_reset(
                     return Err(error.into());
                 }
             };
-            let token = PasswordResetToken::create(&*db, &user)?;
+            let token = PasswordResetToken::create(&db, &user)?;
 
-            let code = token.get_code(&state.config);
-            // TODO: get URL from Actix.
-            let url = format!(
-                "https://{}/reset?token={}", &state.config.server.domain, code);
+            let code = token.get_code(&secret);
+            let mut url = req.url_for_static("reset")?;
+            url.query_pairs_mut().append_pair("token", &code);
 
-            let user_locale = state.i18n.find_locale(&user.language())
-                .unwrap_or(locale);
-            Mailer::do_send(
-                email.as_str(),
-                "reset",
-                "mail-reset-subject",
-                &templates::ResetMailArgs {
-                    user: user.get_public(UserFields::empty()),
-                    url: &url,
-                },
-                user_locale,
-            );
+            #[allow(clippy::or_fun_call)]
+            let user_locale = i18n.find_locale(&user.language())
+                .unwrap_or(locale.as_ref());
 
-            render(locale, "reset_token_sent.html", &Empty {})
+            user.do_send_mail("reset", "mail-reset-subject", ResetMailArgs {
+                user: user.get_public_full(&db, UserFields::empty())?,
+                url: url.as_str(),
+            }, user_locale);
+
+            render(locale.as_ref(), "reset_token_sent.html", &Empty {})
         }
         ResetForm::FulfilToken { password, password1, token: token_str } => {
-
             let token = match PasswordResetToken::from_code(
-                &*db, &state.config, &token_str)
+                &db, &secret, &token_str)
             {
                 Ok(token) => token,
                 Err(error) => {
                     if let Some(code) = error.code() {
                         return render_code(
-                            locale,
+                            locale.as_ref(),
                             StatusCode::BAD_REQUEST,
                             "reset.html",
                             &ResetTemplate {
@@ -425,11 +413,11 @@ pub fn do_reset(
 
             if password != password1 {
                 return render_code(
-                    locale,
+                    locale.as_ref(),
                     StatusCode::BAD_REQUEST,
                     "reset.html",
                     &ResetTemplate {
-                        error: Some("password:reset:passwords-dont-match"),
+                        error: Some(Cow::from("password:reset:passwords-dont-match")),
                         token: Some(&token_str),
                     },
                 );
@@ -443,7 +431,7 @@ pub fn do_reset(
                     }
 
                     return render_code(
-                        locale,
+                        locale.as_ref(),
                         err.status(),
                         "reset.html",
                         &ResetTemplate {
@@ -456,28 +444,26 @@ pub fn do_reset(
 
             Session::<Normal>::create(&req, &user, false);
 
-            Ok(HttpResponse::SeeOther()
-                .header("Location", "/")
-                .finish())
+            Ok(HttpResponse::SeeOther().header("Location", "/").finish())
         }
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RegisterQuery {
+#[derive(Deserialize, Serialize)]
+struct RegisterQuery {
     invite: String,
 }
 
 #[derive(Serialize)]
 struct RegisterTemplate<'s> {
-    error: Option<&'s str>,
+    error: Option<Cow<'s, str>>,
     email: &'s str,
     invite: &'s str,
     /// List of all available locales.
-    locales: &'s [Locale<'s>],
+    locales: &'s [adaptarr_i18n::Locale],
     /// Locale in which the request was sent. Used as default value for locale
     /// selector.
-    locale: &'s Locale<'s>,
+    locale: &'s adaptarr_i18n::Locale,
 }
 
 /// Render registration form.
@@ -487,25 +473,26 @@ struct RegisterTemplate<'s> {
 /// ```text
 /// GET /register
 /// ```
-pub fn register(
-    state: actix_web::State<State>,
-    locale: &'static Locale<'static>,
+fn register(
+    db: Database,
+    i18n: Data<I18n>,
+    secret: Data<Secret>,
+    locale: Locale<'static>,
     query: Query<RegisterQuery>,
-) -> RenderedTemplate {
-    let db = state.db.get()?;
-    let invite = Invite::from_code(&*db, &state.config, &query.invite)?;
+) -> Result<HttpResponse> {
+    let invite = Invite::from_code(&db, &secret, &query.invite)?;
 
-    render(locale, "register.html", &RegisterTemplate {
+    render(locale.as_ref(), "register.html", &RegisterTemplate {
         error: None,
         email: &invite.email,
         invite: &query.invite,
-        locales: &state.i18n.locales,
-        locale,
+        locales: &i18n.locales,
+        locale: locale.as_ref(),
     })
 }
 
-#[derive(Debug, Deserialize)]
-pub struct RegisterForm {
+#[derive(Deserialize)]
+struct RegisterForm {
     email: String,
     name: String,
     password: String,
@@ -521,30 +508,34 @@ pub struct RegisterForm {
 /// ```text
 /// POST /register
 /// ```
-pub fn do_register(
-    req: HttpRequest<State>,
-    state: actix_web::State<State>,
-    locale: &'static Locale<'static>,
+fn do_register(
+    req: HttpRequest,
+    db: Database,
+    i18n: Data<I18n>,
+    secret: Data<Secret>,
+    locale: Locale<'static>,
     form: Form<RegisterForm>,
-) -> RenderedTemplate {
-    let db = state.db.get()?;
+) -> Result<HttpResponse> {
+    let RegisterForm {
+        email, name, password, password1, invite: invite_code, language,
+    } = form.into_inner();
 
-    let requested_locale = state.i18n.find_locale(&form.language)
-        .unwrap_or(locale);
+    #[allow(clippy::or_fun_call)]
+    let requested_locale = i18n.find_locale(&language).unwrap_or(locale.as_ref());
 
-    let invite = match Invite::from_code(&*db, &state.config, &form.invite) {
+    let invite = match Invite::from_code(&db, &secret, &invite_code) {
         Ok(invite) => invite,
         Err(error) => {
             if let Some(code) = error.code() {
                 return render_code(
-                    locale,
+                    locale.as_ref(),
                     StatusCode::BAD_REQUEST,
                     "register.html",
                     &RegisterTemplate {
                         error: Some(code),
-                        email: &form.email,
-                        invite: &form.invite,
-                        locales: &state.i18n.locales,
+                        email: &email,
+                        invite: &invite_code,
+                        locales: &i18n.locales,
                         locale: requested_locale,
                     }
                 );
@@ -554,40 +545,40 @@ pub fn do_register(
         }
     };
 
-    if form.password != form.password1 {
+    if password != password1 {
         return render_code(
-            locale,
+            locale.as_ref(),
             StatusCode::BAD_REQUEST,
             "register.html",
             &RegisterTemplate {
-                error: Some("user:password:bad-confirmation"),
+                error: Some(Cow::from("user:password:bad-confirmation")),
                 email: &invite.email,
-                invite: &form.invite,
-                locales: &state.i18n.locales,
+                invite: &invite_code,
+                locales: &i18n.locales,
                 locale: requested_locale,
             },
         );
     }
 
-    if form.email != invite.email {
+    if email != invite.email {
         return render_code(
-            locale,
+            locale.as_ref(),
             StatusCode::BAD_REQUEST,
             "register.html",
             &RegisterTemplate {
-                error: Some("user:register:email-changed"),
+                error: Some(Cow::from("user:register:email-changed")),
                 email: &invite.email,
-                invite: &form.invite,
-                locales: &state.i18n.locales,
+                invite: &invite_code,
+                locales: &i18n.locales,
                 locale: requested_locale,
             },
         );
     }
 
     let user = match invite.fulfil(
-        &*db,
-        &form.name,
-        &form.password,
+        &db,
+        &name,
+        &password,
         &requested_locale.code.to_string(),
     ) {
         Ok(user) => user,
@@ -597,14 +588,14 @@ pub fn do_register(
             }
 
             return render_code(
-                locale,
+                locale.as_ref(),
                 err.status(),
                 "register.html",
                 &RegisterTemplate {
                     error: Some(err.code().unwrap()),
-                    email: &form.email,
-                    invite: &form.invite,
-                    locales: &state.i18n.locales,
+                    email: &email,
+                    invite: &invite_code,
+                    locales: &i18n.locales,
                     locale: requested_locale,
                 },
             );
@@ -613,24 +604,15 @@ pub fn do_register(
 
     Session::<Normal>::create(&req, &user, false);
 
-    Ok(HttpResponse::SeeOther()
-        .header("Location", "/")
-        .finish())
+    Ok(HttpResponse::SeeOther().header("Location", "/").finish())
 }
-
-/// Empty serializable structure to serve as empty context.
-#[derive(Serialize)]
-struct Empty {
-}
-
-type RenderedTemplate = Result<HttpResponse, Error>;
 
 /// Render a named template with a given context.
 ///
 /// This is a small wrapper around [`Tera::render`] which also handles errors
 /// and transforms them into a usable response.
-fn render<T>(locale: &'static Locale<'static>, name: &str, context: &T)
--> RenderedTemplate
+fn render<T>(locale: &'static adaptarr_i18n::Locale, name: &str, context: &T)
+-> Result<HttpResponse>
 where
     T: serde::Serialize,
 {
@@ -642,14 +624,16 @@ where
 /// This is a small wrapper around [`Tera::render`] which also handles errors
 /// and transforms them into a usable response.
 fn render_code<T>(
-    locale: &'static Locale<'static>, code: StatusCode, name: &str, context: &T
-) -> RenderedTemplate
+    locale: &'static adaptarr_i18n::Locale,
+    code: StatusCode,
+    name: &str,
+    context: &T,
+) -> Result<HttpResponse>
 where
     T: serde::Serialize,
 {
-    use crate::templates::LocalizedTera;
-    crate::templates::PAGES
-        .render_i18n(name, context, locale)
+    PAGES.render_i18n(name, context, locale)
         .map(|r| HttpResponse::build(code).body(r))
-        .map_err(Into::into)
+        // .map_err(Into::into)
+        .map(Ok).expect("TODO: errors")
 }

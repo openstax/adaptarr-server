@@ -381,6 +381,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "adaptarr-pages"
+version = "0.1.0"
+dependencies = [
+ "actix-web 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "adaptarr-error 0.1.0",
+ "adaptarr-i18n 0.1.0",
+ "adaptarr-models 0.1.0",
+ "adaptarr-web 0.1.0",
+ "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.99 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "adaptarr-util"
 version = "0.1.0"
 dependencies = [
