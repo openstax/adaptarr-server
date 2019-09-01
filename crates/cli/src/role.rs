@@ -1,13 +1,8 @@
+use adaptarr_models::{PermissionBits, Role, db};
+use failure::Error;
 use structopt::StructOpt;
 
-use crate::{
-    Config,
-    Result,
-    db,
-    models::Role,
-    permissions::PermissionBits,
-};
-use super::util::{parse_permissions, print_table};
+use crate::{Config, Result, util::{parse_permissions, print_table}};
 
 #[derive(StructOpt)]
 pub struct Opts {
@@ -25,7 +20,7 @@ pub enum Command {
     Add(AddOpts),
 }
 
-pub fn main(cfg: &Config, opts: Opts) -> Result<()> {
+pub fn main(cfg: &Config, opts: Opts) -> Result<(), Error> {
     match opts.command {
         Command::List => list(cfg),
         Command::Add(opts) => add_role(cfg, opts),
@@ -33,7 +28,7 @@ pub fn main(cfg: &Config, opts: Opts) -> Result<()> {
 }
 
 fn list(cfg: &Config) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let roles = Role::all(&db)?;
 
     let rows = roles.iter()
@@ -50,12 +45,12 @@ pub struct AddOpts {
     /// Role's name
     name: String,
     /// Role's permissions
-    #[structopt(long = "permissions", parse(try_from_str = "parse_permissions"))]
+    #[structopt(long = "permissions", parse(try_from_str = parse_permissions))]
     permissions: Option<PermissionBits>,
 }
 
 fn add_role(cfg: &Config, opts: AddOpts) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let permissions = opts.permissions.unwrap_or_else(PermissionBits::empty);
     let role = Role::create(&db, &opts.name, permissions)?;
 

@@ -1,0 +1,39 @@
+[package]
+name = "adaptarr-cli"
+version = "0.4.0"
+authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
+edition = "2018"
+
+[[bin]]
+name = "adaptarr"
+path = "src/main.rs"
+
+[dependencies]
+actix = "0.8.3"
+actix-web = "1.0.7"
+adaptarr-i18n = { path = "../i18n" }
+adaptarr-mail = { path = "../mail" }
+adaptarr-models = { path = "../models" }
+adaptarr-pages = { path = "../pages" }
+adaptarr-rest-api = { path = "../rest-api" }
+adaptarr-util = { path = "../util" }
+adaptarr-web = { path = "../web" }
+diesel = "1.4.2"
+env_logger = "0.6.2"
+failure = "0.1.5"
+futures = "0.1.28"
+listenfd = "0.3.3"
+serde = "1.0.99"
+structopt = "0.3.0"
+termion = "1.5.3"
+toml = "0.5.3"
+unicode-width = "0.1.6"
+uuid = "0.7.4"
+
+[dependencies.log]
+version = "0.4.8"
+features = ["serde"]
+
+[dependencies.sentry]
+version = "0.17.0"
+features = ["with_debug_to_log"]

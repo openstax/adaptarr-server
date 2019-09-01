@@ -1,21 +1,22 @@
 //! Commands for managing users.
 
+use adaptarr_i18n::{I18n, LanguageTag};
+use adaptarr_models::{
+    FindModelError,
+    Invite,
+    Model,
+    PermissionBits,
+    Role,
+    User,
+    db::{self, Connection},
+};
 use diesel::Connection as _;
 use failure::{Error, Fail};
 use futures::future::{self, Either, Future, IntoFuture};
 use std::{collections::HashMap, str::FromStr};
 use structopt::StructOpt;
 
-use crate::{
-    Config,
-    Result,
-    db::{self, Connection},
-    i18n::{I18n, LanguageTag},
-    mail::Mailer,
-    models::{Invite, User, role::{Role, FindRoleError}},
-    permissions::PermissionBits,
-    templates,
-};
+use crate::{Config, Result};
 use super::util::{parse_permissions, print_table};
 
 #[derive(StructOpt)]
@@ -24,6 +25,7 @@ pub struct Opts {
     command: Command,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(StructOpt)]
 pub enum Command {
     /// List all users
@@ -50,7 +52,7 @@ pub fn main(cfg: &Config, opts: Opts) -> impl Future<Item = (), Error = Error> {
 }
 
 pub fn list(cfg: &Config) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let users = User::all(&db)?;
     let roles = Role::all(&db)?
         .into_iter()
@@ -100,7 +102,7 @@ pub struct AddOpts {
 }
 
 pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let role = opts.role.map(|r| r.get(&db)).transpose()?.and_then(std::convert::identity);
     let user = User::create(
         &db,
@@ -138,15 +140,15 @@ pub fn invite(cfg: &Config, opts: InviteOpts)
         Some(locale) => locale,
         None => return Err(InviteError::NoSuchLocale(opts.language).into()),
     };
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let role = opts.role.map(|r| r.get(&db)).transpose()?.and_then(std::convert::identity);
     let invite = Invite::create(&db, &opts.email, role.as_ref())?;
-    let code = invite.get_code(&cfg);
+    let code = invite.get_code(&cfg.server.secret);
 
     println!("Invitation code: {}", code);
     println!("Registration url: {}/register?invite={}", cfg.server.domain, code);
 
-    let code = invite.get_code(&cfg);
+    let code = invite.get_code(&cfg.server.secret);
     // TODO: get URL from Actix.
     let url = format!(
         "https://{}/register?invite={}",
@@ -154,16 +156,7 @@ pub fn invite(cfg: &Config, opts: InviteOpts)
         code,
     );
 
-    Ok(Mailer::send(
-        opts.email.as_str(),
-        "invite",
-        "mail-invite-subject",
-        &templates::InviteMailArgs {
-            url: &url,
-            email: &opts.email,
-        },
-        locale,
-    ).into_future())
+    Ok(invite.send_mail(&url, locale).into_future().from_err())
 }
 
 #[derive(Debug, Fail)]
@@ -182,7 +175,7 @@ pub struct ModifyOpts {
     #[structopt(long = "language", alias = "lang")]
     language: Option<LanguageTag>,
     /// Set user's permissions
-    #[structopt(long = "permissions", parse(try_from_str = "parse_permissions"))]
+    #[structopt(long = "permissions", parse(try_from_str = parse_permissions))]
     permissions: Option<PermissionBits>,
     /// Set user's role
     #[structopt(long = "role")]
@@ -190,7 +183,7 @@ pub struct ModifyOpts {
 }
 
 pub fn modify(cfg: &Config, opts: ModifyOpts) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let mut user = User::by_id(&db, opts.user)?;
 
     db.transaction::<_, failure::Error, _>(|| {
@@ -224,7 +217,7 @@ enum RoleArg {
 }
 
 impl RoleArg {
-    fn get(&self, db: &Connection) -> Result<Option<Role>, FindRoleError> {
+    fn get(&self, db: &Connection) -> Result<Option<Role>, FindModelError<Role>> {
         match self {
             RoleArg::Null => Ok(None),
             RoleArg::ById(id) => Role::by_id(db, *id).map(Some),

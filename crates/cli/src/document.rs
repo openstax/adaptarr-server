@@ -1,24 +1,20 @@
+use adaptarr_i18n::LanguageTag;
+use adaptarr_models::{
+    CNXML_MIME,
+    File,
+    FindModelError,
+    Model,
+    Module,
+    db::{self, models, schema::{documents, drafts, modules, module_versions}},
+};
+use adaptarr_util::bytes_to_hex;
 use diesel::prelude::*;
-use failure::format_err;
+use failure::{Error, format_err};
 use std::path::PathBuf;
 use structopt::StructOpt;
 use uuid::Uuid;
 
-use crate::{
-    Config,
-    Result,
-    db::{
-        self,
-        models,
-        schema::{documents, drafts, modules, module_versions},
-    },
-    i18n::LanguageTag,
-    models::{
-        File,
-        module::{Module, FindModuleError},
-    },
-    utils::bytes_to_hex,
-};
+use crate::{Config, Result};
 use super::util::print_table;
 
 /// Manage documents
@@ -49,10 +45,10 @@ pub enum Command {
     New(NewOpts),
 }
 
-pub fn main(cfg: &Config, opts: Opts) -> Result<()> {
+pub fn main(cfg: &Config, opts: Opts) -> Result<(), Error> {
     if opts.document.is_none() && opts.command.is_none() {
         Opts::clap().print_help()?;
-        return Ok(());
+        return Ok(())
     }
 
     if opts.command.is_none() {
@@ -68,8 +64,8 @@ pub fn main(cfg: &Config, opts: Opts) -> Result<()> {
     }
 }
 
-fn inspect(cfg: &Config, opts: &Opts) -> Result<()> {
-    let db = db::connect(&cfg)?;
+fn inspect(cfg: &Config, opts: &Opts) -> Result<(), Error> {
+    let db = db::connect(cfg.model.database.as_ref())?;
     let module = opts.document(&db)?;
 
     println!("UUID:     {}", module.id());
@@ -91,7 +87,7 @@ fn inspect(cfg: &Config, opts: &Opts) -> Result<()> {
 }
 
 fn list(cfg: &Config) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let modules = Module::all(&db)?;
 
     let rows = modules.iter()
@@ -104,7 +100,7 @@ fn list(cfg: &Config) -> Result<()> {
 }
 
 fn versions(cfg: &Config, opts: &Opts) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let document = opts.document_id()?;
 
     let versions = module_versions::table
@@ -147,7 +143,7 @@ pub struct FileOpts {
 }
 
 fn file(cfg: &Config, opts: &Opts, file: &FileOpts) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let module = opts.document(&db)?;
     let file = module.get_file(&db, &file.name)?;
     let metadata = std::fs::metadata(&file.path)?;
@@ -166,10 +162,11 @@ pub struct CatOpts {
 }
 
 fn cat(cfg: &Config, opts: &Opts, cat: &CatOpts) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
     let module = opts.document(&db)?;
     let file = module.get_file(&db, &cat.name)?;
     std::io::copy(&mut file.open()?, &mut std::io::stdout())?;
+
     Ok(())
 }
 
@@ -186,21 +183,21 @@ pub struct NewOpts {
 }
 
 fn new(cfg: &Config, opts: &Opts, new: &NewOpts) -> Result<()> {
-    let db = db::connect(&cfg)?;
+    let db = db::connect(cfg.model.database.as_ref())?;
 
     if let Some(id) = opts.document {
         match Module::by_id(&db, id) {
             Ok(_) => return Err(format_err!(
                 "There is already a document with this UUID")),
-            Err(FindModuleError::Database(err)) => return Err(err.into()),
-            Err(FindModuleError::NotFound) => (),
+            Err(FindModelError::Database(_, err)) => return Err(err.into()),
+            Err(FindModelError::NotFound(_)) => (),
         }
     }
 
     let document = db.transaction::<_, failure::Error, _>(|| {
         let index = std::fs::File::open(&new.index)?;
         let index = File::from_read(
-            &db, &cfg.storage, index, Some(&*crate::models::file::CNXML_MIME))?;
+            &db, &cfg.model.storage.path, index, Some(CNXML_MIME))?;
         let module = Module::create::<&str, _>(
             &db, &new.title, new.language.as_str(), index, std::iter::empty())?;
 

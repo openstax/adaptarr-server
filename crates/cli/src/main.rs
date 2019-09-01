@@ -1,5 +1,5 @@
 fn main() {
-    if let Err(err) = adaptarr::main() {
+    if let Err(err) = adaptarr_cli::main() {
         eprintln!("Error: {}", err);
 
         for cause in err.iter_causes() {

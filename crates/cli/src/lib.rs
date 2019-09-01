@@ -1,30 +1,38 @@
 use actix::System;
+use adaptarr_models::audit;
 use failure::Error;
 use futures::{IntoFuture, future};
 use sentry::protocol::Event;
 use std::{env, mem, sync::Arc};
 use structopt::StructOpt;
 
-use crate::{Result, audit, config::Config};
-
+mod config;
 mod document;
 mod role;
 mod server;
 mod user;
 mod util;
 
+use self::config::Config;
+
+pub type Result<T, E=Error> = std::result::Result<T, E>;
+
+pub(crate) const VERSION: &str = env!("VERSION");
+
 #[derive(StructOpt)]
-#[structopt(raw(version = r#"env!("VERSION")"#))]
+#[structopt(name = "adaptarr", no_version, version = VERSION)]
 struct Opts {
     #[structopt(subcommand)]
     command: Command,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(StructOpt)]
 enum Command {
-    /// Start the server
-    #[structopt(name = "start")]
-    Start,
+    /// Manager server
+    #[structopt(name = "server")]
+    Server(server::Opts),
+    /// Manage documents
     #[structopt(name = "document")]
     Document(document::Opts),
     /// Manage roles
@@ -35,26 +43,29 @@ enum Command {
     User(user::Opts),
 }
 
-pub fn main() -> Result<()> {
+pub fn main() -> Result<(), Error> {
     let opts = Opts::from_args();
     let config = crate::config::load()?;
 
-    setup_sentry(&config)?;
+    setup_sentry(config);
     setup_logging(&config.logging)?;
 
     // Run validation after sentry and logging setup so that they can catch bugs
     // in validation.
     config.validate()?;
 
+    // Register global configs with various services requiring them.
+    config.register();
+
     match opts.command {
-        Command::Start => server::start(config),
-        Command::Document(opts) => with_system(document::main, config, opts),
-        Command::Role(opts) => with_system(role::main, config, opts),
-        Command::User(opts) => with_system(user::main, config, opts),
+        Command::Server(opts) => server::main(config.clone(), opts),
+        Command::Document(opts) => with_system(document::main, &config, opts),
+        Command::Role(opts) => with_system(role::main, &config, opts),
+        Command::User(opts) => with_system(user::main, &config, opts),
     }
 }
 
-fn setup_sentry(config: &Config) -> Result<()> {
+fn setup_sentry(config: &Config) {
     if let Some(ref sentry) = config.sentry {
         env::set_var("RUST_BACKTRACE", "1");
         mem::forget(sentry::init((sentry.dsn.as_str(), sentry::ClientOptions {
@@ -67,8 +78,6 @@ fn setup_sentry(config: &Config) -> Result<()> {
         })));
         sentry::integrations::panic::register_panic_handler();
     }
-
-    Ok(())
 }
 
 fn setup_logging(config: &crate::config::Logging) -> Result<()> {
@@ -84,6 +93,7 @@ fn setup_logging(config: &crate::config::Logging) -> Result<()> {
     }
 
     builder.try_init()?;
+
     Ok(())
 }
 

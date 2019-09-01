@@ -1,15 +1,16 @@
+use adaptarr_models::Config as ModelConfig;
+use adaptarr_util::SingleInit;
 use failure::Fail;
 use log::LevelFilter;
-use rand::RngCore;
-use std::{collections::HashMap, fmt, fs, net::{SocketAddr, Ipv4Addr}};
+use serde::Deserialize;
+use std::{collections::HashMap, fs};
 use toml;
-use serde::{Deserialize, de::{Deserializer, Error, Visitor, Unexpected}};
 
-use crate::utils::SingleInit;
+use crate::Result;
 
 static CONFIG: SingleInit<Config> = SingleInit::uninit();
 
-pub fn load() -> crate::Result<&'static Config> {
+pub fn load() -> Result<&'static Config> {
     CONFIG.get_or_try_init(|| {
         let data = fs::read("config.toml").map_err(ReadConfigurationError)?;
         toml::from_slice(&data).map_err(|e| ConfigurationError(e).into())
@@ -18,10 +19,13 @@ pub fn load() -> crate::Result<&'static Config> {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
-    pub mail: crate::mail::Config,
+    pub server: adaptarr_rest_api::Config,
+    pub mail: adaptarr_mail::Config,
     #[serde(default)]
     pub logging: Logging,
     pub sentry: Option<Sentry>,
+    #[serde(flatten)]
+    pub model: ModelConfig,
 }
 
 impl Config {
@@ -30,6 +34,13 @@ impl Config {
         self.mail.validate()?;
 
         Ok(())
+    }
+
+    /// Register this configuration as the global static configuration
+    /// ([`Config::global`]).
+    pub fn register(&'static self) {
+        self.mail.register();
+        self.model.register(&self.server.domain);
     }
 }
 

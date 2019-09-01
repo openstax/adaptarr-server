@@ -1,21 +1,18 @@
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
-use termion::style::{Underline, Reset};
+use adaptarr_models::PermissionBits;
+use serde::de::{Deserialize, IntoDeserializer};
 use std::fmt;
+use termion::style::{Underline, Reset};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::{
-    Result,
-    permissions::PermissionBits,
-};
+use crate::Result;
 
 pub fn parse_permissions(v: &str) -> Result<PermissionBits> {
-    use serde::de::{Deserialize, IntoDeserializer, value::Error};
-
     v.split(',')
         .map(str::trim)
-        .map(IntoDeserializer::into_deserializer)
+        .map(<&str as IntoDeserializer<serde::de::value::Error>>::into_deserializer)
         .map(PermissionBits::deserialize)
-        .collect::<Result<PermissionBits, Error>>()
-        .map_err(Into::into)
+        .collect::<Result<PermissionBits, _>>()
+        .map_err(From::from)
 }
 
 
