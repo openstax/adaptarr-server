@@ -19,7 +19,7 @@ use adaptarr_models::{
     permissions::InviteUser,
 };
 use adaptarr_web::{FormOrJson, Secret, Database, session::{Session, Normal}};
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use diesel::Connection as _;
 use failure::Fail;
 use serde::{Deserialize, Serialize, de::Deserializer};
@@ -280,7 +280,7 @@ fn modify_password(
 
 #[derive(Debug, Serialize)]
 struct SessionData {
-    expires: NaiveDateTime,
+    expires: DateTime<Utc>,
     is_elevated: bool,
     permissions: PermissionBits,
 }

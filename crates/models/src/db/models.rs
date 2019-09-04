@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::schema::*;
@@ -53,10 +53,10 @@ pub struct Session {
     /// ID of the user owning this session.
     pub user: i32,
     /// Maximum age for the session, after which it must not be used.
-    pub expires: NaiveDateTime,
+    pub expires: DateTime<Utc>,
     /// Date of the last use of a session. Sessions which were not used for some
     /// time should expire, even if they are still valid according to `expires`.
-    pub last_used: NaiveDateTime,
+    pub last_used: DateTime<Utc>,
     /// If this an elevated session? To limit attack surface elevated sessions
     /// are granted for a short time, after which they become normal sessions
     /// again.
@@ -69,8 +69,8 @@ pub struct Session {
 #[table_name = "sessions"]
 pub struct NewSession {
     pub user: i32,
-    pub expires: NaiveDateTime,
-    pub last_used: NaiveDateTime,
+    pub expires: DateTime<Utc>,
+    pub last_used: DateTime<Utc>,
     pub is_elevated: bool,
     pub permissions: i32,
 }
@@ -78,8 +78,8 @@ pub struct NewSession {
 #[derive(AsChangeset, Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[table_name = "sessions"]
 pub struct SessionUpdate {
-    pub expires: Option<NaiveDateTime>,
-    pub last_used: Option<NaiveDateTime>,
+    pub expires: Option<DateTime<Utc>>,
+    pub last_used: Option<DateTime<Utc>>,
     pub is_elevated: Option<bool>,
     pub permissions: Option<i32>,
 }
@@ -91,7 +91,7 @@ pub struct Invite {
     /// Email address this invitation is for.
     pub email: String,
     /// Date by which this invitation becomes unusable.
-    pub expires: NaiveDateTime,
+    pub expires: DateTime<Utc>,
     pub role: Option<i32>,
 }
 
@@ -99,7 +99,7 @@ pub struct Invite {
 #[table_name = "invites"]
 pub struct NewInvite<'s> {
     pub email: &'s str,
-    pub expires: NaiveDateTime,
+    pub expires: DateTime<Utc>,
     pub role: Option<i32>,
 }
 
@@ -110,7 +110,7 @@ pub struct PasswordResetToken {
     /// ID of the user for whom this token is valid.
     pub user: i32,
     /// Date by which this token becomes unusable.
-    pub expires: NaiveDateTime,
+    pub expires: DateTime<Utc>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -119,7 +119,7 @@ pub struct NewPasswordResetToken {
     /// ID of the user for whom this token is valid.
     pub user: i32,
     /// Date by which this token becomes unusable.
-    pub expires: NaiveDateTime,
+    pub expires: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]
@@ -200,7 +200,7 @@ pub struct ModuleVersion {
     /// ID of the document which was content of the module at this version.
     pub document: i32,
     /// Date this version was created.
-    pub version: NaiveDateTime,
+    pub version: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]
@@ -286,7 +286,7 @@ pub struct Event {
     /// ID of the user for which this event was generated.
     pub user: i32,
     /// Time at which this event was generated.
-    pub timestamp: NaiveDateTime,
+    pub timestamp: DateTime<Utc>,
     /// Short string describing what kind of event is this.
     pub kind: String,
     /// True if the user has not yet reviewed this event.
@@ -389,7 +389,7 @@ pub struct EditProcessVersion {
     /// Process's ID.
     pub process: i32,
     /// Date of last modification.
-    pub version: NaiveDateTime,
+    pub version: DateTime<Utc>,
     /// Initial step.
     pub start: i32,
 }
@@ -398,7 +398,7 @@ pub struct EditProcessVersion {
 #[table_name = "edit_process_versions"]
 pub struct NewEditProcessVersion {
     pub process: i32,
-    pub version: NaiveDateTime,
+    pub version: DateTime<Utc>,
     pub start: i32,
 }
 
@@ -501,7 +501,7 @@ pub struct AuditLog {
     /// Event's ID.
     pub id: i32,
     /// Date and time when this event was logged.
-    pub timestamp: NaiveDateTime,
+    pub timestamp: DateTime<Utc>,
     /// User who caused this event, or `None` for automated actions carried by
     /// the system or CLI.
     pub actor: Option<i32>,

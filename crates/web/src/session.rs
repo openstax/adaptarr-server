@@ -123,7 +123,7 @@ impl SessionManager {
     }
 
     fn validate(ses: &DbSession) -> Validation {
-        let now = Utc::now().naive_utc();
+        let now = Utc::now();
 
         // Disallow expired sessions.
         if now > ses.expires {
@@ -214,7 +214,7 @@ impl SessionManager {
         let cookie = rsp.request().extensions().get::<SessionData>().map(|session| -> Result<Option<Cookie>> {
             audit::set_actor(None);
 
-            let now = Utc::now().naive_utc();
+            let now = Utc::now();
             let db = self.db.get()
                 .map_err(|e| ErrorInternalServerError(e.to_string()))?;
 
@@ -340,7 +340,7 @@ impl<P> Session<P> {
             user.permissions(true)
         };
 
-        let now = Utc::now().naive_utc();
+        let now = Utc::now();
         let new = NewSession {
             user: user.id,
             is_elevated,

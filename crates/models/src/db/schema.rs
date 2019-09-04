@@ -1,7 +1,7 @@
 table! {
     audit_log (id) {
         id -> Int4,
-        timestamp -> Timestamp,
+        timestamp -> Timestamptz,
         actor -> Nullable<Int4>,
         context -> Varchar,
         context_id -> Nullable<Int4>,
@@ -116,7 +116,7 @@ table! {
     edit_process_versions (id) {
         id -> Int4,
         process -> Int4,
-        version -> Timestamp,
+        version -> Timestamptz,
         start -> Int4,
     }
 }
@@ -125,7 +125,7 @@ table! {
     events (id) {
         id -> Int4,
         user -> Int4,
-        timestamp -> Timestamp,
+        timestamp -> Timestamptz,
         kind -> Varchar,
         is_unread -> Bool,
         data -> Bytea,
@@ -145,7 +145,7 @@ table! {
     invites (id) {
         id -> Int4,
         email -> Varchar,
-        expires -> Timestamp,
+        expires -> Timestamptz,
         role -> Nullable<Int4>,
     }
 }
@@ -161,7 +161,7 @@ table! {
     module_versions (module, document) {
         module -> Uuid,
         document -> Int4,
-        version -> Timestamp,
+        version -> Timestamptz,
     }
 }
 
@@ -169,7 +169,7 @@ table! {
     password_reset_tokens (id) {
         id -> Int4,
         user -> Int4,
-        expires -> Timestamp,
+        expires -> Timestamptz,
     }
 }
 
@@ -194,8 +194,8 @@ table! {
     sessions (id) {
         id -> Int4,
         user -> Int4,
-        expires -> Timestamp,
-        last_used -> Timestamp,
+        expires -> Timestamptz,
+        last_used -> Timestamptz,
         is_elevated -> Bool,
         permissions -> Int4,
     }

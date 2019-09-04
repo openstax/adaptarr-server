@@ -28,7 +28,7 @@ impl PasswordResetToken {
         let data = diesel::insert_into(tokens::table)
             .values(db::NewPasswordResetToken {
                 user: user.id,
-                expires: Utc::now().naive_utc() + Duration::minutes(15),
+                expires: Utc::now() + Duration::minutes(15),
             })
             .get_result::<db::PasswordResetToken>(dbcon)
             .map_err(CreateTokenError)?;
@@ -51,7 +51,7 @@ impl PasswordResetToken {
             .optional()?
             .ok_or(FromCodeError::Expired)?;
 
-        if Utc::now().naive_utc() > token.expires {
+        if Utc::now() > token.expires {
             Err(FromCodeError::Expired)
         } else {
             Ok(PasswordResetToken { data: token })

@@ -2,7 +2,7 @@ use adaptarr_error::ApiError;
 use adaptarr_i18n::Locale;
 use adaptarr_macros::From;
 use adaptarr_mail::{Mailer, SendFuture};
-use chrono::{Duration, Utc, NaiveDateTime};
+use chrono::{Duration, Utc, DateTime};
 use diesel::{Connection as _, prelude::*, result::Error as DbError};
 use failure::Fail;
 use serde::Serialize;
@@ -37,7 +37,7 @@ impl Invite {
             let data = diesel::insert_into(invites::table)
                 .values(db::NewInvite {
                     email,
-                    expires: Utc::now().naive_utc() + Duration::days(7),
+                    expires: Utc::now() + Duration::days(7),
                     role: role.map(Model::id),
                 })
                 .get_result::<db::Invite>(dbcon)?;
@@ -67,7 +67,7 @@ impl Invite {
             .optional()?
             .ok_or(FromCodeError::Expired)?;
 
-        if Utc::now().naive_utc() > invite.expires {
+        if Utc::now() > invite.expires {
             Err(FromCodeError::Expired)
         } else {
             Ok(Invite { data: invite })
@@ -189,6 +189,6 @@ struct InviteMailArgs<'a> {
 #[derive(Serialize)]
 struct LogNewInvite<'a> {
    email: &'a str,
-   expires: NaiveDateTime,
+   expires: DateTime<Utc>,
    role: Option<i32>,
 }

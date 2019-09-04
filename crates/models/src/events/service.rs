@@ -12,7 +12,7 @@ use actix::{
 };
 use adaptarr_i18n::I18n;
 use adaptarr_mail::Mailer;
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use diesel::{Connection as _, prelude::*};
 use itertools::Itertools;
 use log::error;
@@ -77,7 +77,7 @@ pub trait IntoNotifyTarget {
 /// to [`EventManager`].
 pub struct NewEvent {
     pub id: i32,
-    pub timestamp: NaiveDateTime,
+    pub timestamp: DateTime<Utc>,
     pub event: Arc<Event>,
 }
 
@@ -110,7 +110,7 @@ pub struct EventManager {
     pool: Pool,
     i18n: I18n<'static>,
     streams: HashMap<i32, Recipient<NewEvent>>,
-    last_notify: NaiveDateTime,
+    last_notify: DateTime<Utc>,
 }
 
 impl EventManager {
@@ -179,7 +179,7 @@ impl EventManager {
 
     /// Send email notifications for unread events.
     fn send_emails(&mut self) -> Result<(), Error> {
-        let now = Utc::now().naive_utc();
+        let now = Utc::now();
         let db = self.pool.get()?;
         let dbcon = &*db;
 
@@ -258,7 +258,7 @@ impl Default for EventManager {
                 .expect("Internationalization subsystem is not loaded")
                 .clone(),
             streams: HashMap::new(),
-            last_notify: Utc::now().naive_utc(),
+            last_notify: Utc::now(),
         }
     }
 }

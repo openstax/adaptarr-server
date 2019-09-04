@@ -1,6 +1,6 @@
 use adaptarr_error::ApiError;
 use adaptarr_macros::From;
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use diesel::{
     Connection as _,
     prelude::*,
@@ -44,7 +44,7 @@ pub struct Version {
 pub struct Public {
     pub id: i32,
     pub name: String,
-    pub version: NaiveDateTime,
+    pub version: DateTime<Utc>,
 }
 
 impl Model for Version {
@@ -108,7 +108,7 @@ impl Version {
             let version = diesel::insert_into(edit_process_versions::table)
                 .values(&db::NewEditProcessVersion {
                     process: process.id,
-                    version: Utc::now().naive_utc(),
+                    version: Utc::now(),
                     start: 0,
                 })
                 .get_result::<db::EditProcessVersion>(db)?;
