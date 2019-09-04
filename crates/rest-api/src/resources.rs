@@ -14,14 +14,18 @@ use adaptarr_models::{
     db::Pool,
     permissions::ManageResources,
 };
-use adaptarr_web::{Created, Database, FormOrJson, Session};
+use adaptarr_util::futures::void;
 use adaptarr_web::{
+    Created,
+    Database,
     FileExt,
+    FormOrJson,
+    Session,
     etag::IfMatch,
     multipart::{Multipart, FromMultipart, FromStrField},
 };
 use diesel::Connection as _;
-use futures::{Future, future::{self, Either}};
+use futures::{Future, Stream, future};
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -168,30 +172,31 @@ fn update_resource_content(
     id: Path<Uuid>,
     if_match: IfMatch,
     payload: Payload,
-) -> impl Future<Item = HttpResponse, Error = Error> {
+) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
     let mut resource = match Resource::by_id(&db, *id) {
         Ok(resource) => resource,
-        Err(err) => return Either::A(future::err(err.into())),
+        Err(err) => return Box::new(future::err(err.into())),
     };
 
     if resource.is_directory() {
-        return Either::A(future::err(ResourceFileError::IsADirectory.into()));
+        return Box::new(future::err(ResourceFileError::IsADirectory.into()));
     }
 
     if !if_match.is_any() {
         let file = match resource.get_file(&db) {
             Ok(file) => file,
-            Err(err) => return Either::A(future::err(err.into())),
+            Err(err) => return Box::new(future::err(err.into())),
         };
 
         if !if_match.test(&file.entity_tag()) {
-            return Either::A(future::ok(
-                HttpResponse::new(StatusCode::PRECONDITION_FAILED)));
+            return Box::new(payload.from_err()
+                .forward(void::<_, Error>())
+                .map(|_| HttpResponse::new(StatusCode::PRECONDITION_FAILED)));
         }
     }
 
     let storage_path = &adaptarr_models::Config::global().storage.path;
-    Either::B(File::from_stream((*pool).clone(), storage_path, payload, None)
+    Box::new(File::from_stream((*pool).clone(), storage_path, payload, None)
         .and_then(move |file|
             resource.set_file(&db, &file)
                 .map_err(From::from)

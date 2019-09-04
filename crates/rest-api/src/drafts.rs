@@ -19,9 +19,10 @@ use adaptarr_models::{
     editing::{Version, Slot},
     permissions::ManageProcess,
 };
+use adaptarr_util::futures::void;
 use adaptarr_web::{Database, FileExt, FormOrJson, Session, etag::IfMatch};
 use failure::Fail;
-use futures::{Future, future};
+use futures::{Future, Stream, future};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -289,8 +290,9 @@ fn update_file(
         };
 
         if !if_match.test(&file.entity_tag()) {
-            return Box::new(future::ok(
-                HttpResponse::new(StatusCode::PRECONDITION_FAILED)));
+            return Box::new(payload.from_err()
+                .forward(void::<_, Error>())
+                .map(|_| HttpResponse::new(StatusCode::PRECONDITION_FAILED)));
         }
     }
 
