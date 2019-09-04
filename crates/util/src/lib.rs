@@ -3,6 +3,8 @@ use serde::de::{Deserialize, Deserializer};
 mod secure;
 mod single_init;
 
+pub mod futures;
+
 pub use self::{
     secure::*,
     single_init::SingleInit,
