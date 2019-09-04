@@ -1,4 +1,5 @@
 use adaptarr_error::ApiError;
+use adaptarr_util::and_tuple;
 use diesel::{
     Connection as _,
     prelude::*,
@@ -36,13 +37,28 @@ pub struct Step {
     data: db::EditProcessStep,
 }
 
+#[derive(Debug)]
+pub struct Seating {
+    pub slot: Slot,
+    pub permissions: Vec<SlotPermission>,
+    pub user: Option<i32>,
+}
+
 /// A subset of this step's data that can safely be publicly exposed.
 #[derive(Debug, Serialize)]
 pub struct Public {
     pub id: i32,
     pub process: [i32; 2],
     pub name: String,
+    pub slots: Vec<StepSlot>,
     pub links: Vec<<Link as Model>::Public>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StepSlot {
+    pub slot: i32,
+    pub permissions: Vec<SlotPermission>,
+    pub user: Option<i32>,
 }
 
 impl Model for Step {
@@ -51,7 +67,7 @@ impl Model for Step {
     type Id = i32;
     type Database = db::EditProcessStep;
     type Public = Public;
-    type PublicParams = Option<(Uuid, i32)>;
+    type PublicParams = (Option<Uuid>, Option<i32>);
 
     fn by_id(db: &Connection, id: Self::Id) -> FindModelResult<Self> {
         edit_process_steps::table
@@ -75,14 +91,33 @@ impl Model for Step {
 
     fn get_public(&self) -> Public {
         let db = crate::db::pool().get().expect("uninitialized database");
-        self.get_public_full(&*db, None).expect("database error")
+        self.get_public_full(&*db, (None, None)).expect("database error")
     }
 
-    fn get_public_full(&self, db: &Connection, slots: Option<(Uuid, i32)>)
+    fn get_public_full(&self, db: &Connection, (draft, slots): Self::PublicParams)
     -> Result<Public, DbError> {
         let db::EditProcessStep { id, process: version, ref name, .. } = self.data;
 
-        let links = self.get_links(db, slots)?
+        let seating = match draft {
+            Some(draft) => self.get_slot_seating(db, draft)?
+                .into_iter()
+                .map(|s| StepSlot {
+                    slot: s.slot.id,
+                    permissions: s.permissions,
+                    user: s.user,
+                })
+                .collect(),
+            None => self.get_slots(db)?
+                .into_iter()
+                .map(|(slot, permissions)| StepSlot {
+                    slot: slot.id,
+                    permissions,
+                    user: None,
+                })
+                .collect(),
+        };
+
+        let links = self.get_links(db, and_tuple(draft, slots))?
             .iter()
             .map(Link::get_public)
             .collect();
@@ -96,6 +131,7 @@ impl Model for Step {
             id,
             process: [process, version],
             name: name.clone(),
+            slots: seating,
             links,
         })
     }
@@ -155,7 +191,7 @@ impl Step {
     /// of users occupying these slots.
     #[allow(clippy::type_complexity)]
     pub fn get_slot_seating(&self, db: &Connection, draft: Uuid)
-    -> Result<Vec<(Slot, Vec<SlotPermission>, Option<i32>)>, DbError> {
+    -> Result<Vec<Seating>, DbError> {
         let slots = edit_process_step_slots::table
             .inner_join(edit_process_slots::table
                 .left_join(draft_slots::table))
@@ -186,11 +222,11 @@ impl Step {
 
                 // Every group has at least one element, so we know key and
                 // seating cannot be None.
-                (
-                    Slot::from_db(key.unwrap()),
+                Seating {
+                    slot: Slot::from_db(key.unwrap()),
                     permissions,
-                    seating.map(|s| s.user),
-                )
+                    user: seating.map(|s| s.user),
+                }
             })
             .collect();
 

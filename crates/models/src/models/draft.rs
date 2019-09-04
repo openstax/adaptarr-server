@@ -37,7 +37,7 @@ use super::{
     Model,
     Module,
     User,
-    editing::{FillSlotError, Slot, Step, Version},
+    editing::{FillSlotError, Seating, Slot, Step, Version},
 };
 
 #[derive(Debug)]
@@ -107,7 +107,7 @@ impl Model for Draft {
             document: self.document.get_public(),
             permissions: self.get_permissions(db, user).map(Some)?,
             step: self.get_step(db)?
-                .get_public_full(db, Some((self.data.module, user)))
+                .get_public_full(db, (Some(self.data.module), Some(user)))
                 .map(Some)?,
             books: self.get_books(db).map(Some)?,
         })
@@ -395,7 +395,7 @@ impl Draft {
 
             let slots = next.get_slot_seating(db, self.data.module)?;
 
-            for (slot, _, seating) in slots {
+            for Seating { slot, user: seating, .. } in slots {
                 if seating.is_none() {
                     slot.fill(db, &self)
                         .map_err(|e| AdvanceDraftError::FillSlot(slot.id, e))?;

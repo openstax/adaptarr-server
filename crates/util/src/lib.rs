@@ -28,3 +28,10 @@ where
 {
     T::deserialize(de).map(Some)
 }
+
+pub fn and_tuple<A, B>(a: Option<A>, b: Option<B>) -> Option<(A, B)> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some((a, b)),
+        _ => None,
+    }
+}

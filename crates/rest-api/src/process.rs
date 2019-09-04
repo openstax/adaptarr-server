@@ -545,7 +545,7 @@ fn list_steps_in_version(db: Database, _: Session, id: Path<(i32, i32)>)
 -> Result<Json<Vec<<Step as Model>::Public>>> {
     Ok(Json(Version::by_id(&db, *id)?
         .get_steps(&db)?
-        .get_public_full(&db, None)?))
+        .get_public_full(&db, (None, None))?))
 }
 
 /// Get details of a particular step in a particular version of an editing
@@ -565,7 +565,7 @@ fn get_step_in_version(
 
     Ok(Json(Version::by_id(&db, (process_id, version_id))?
         .get_step(&db, step_id)?
-        .get_public()))
+        .get_public_full(&db, (None, None))?))
 }
 
 /// Modify a step in a particular version of an editing process.
@@ -597,7 +597,7 @@ fn modify_step(db: &Connection, step: &mut Step, data: StepUpdate)
 -> Result<Json<<Step as Model>::Public>> {
     step.set_name(db, &data.name)?;
 
-    Ok(Json(step.get_public_full(db, None)?))
+    Ok(Json(step.get_public_full(&db, (None, None))?))
 }
 
 /// Get list of all links in a particular step in a version of an editing

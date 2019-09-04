@@ -1,7 +1,7 @@
 use actix_web::{
     HttpResponse,
     Responder,
-    http::StatusCode,
+    http::{StatusCode, header::ETAG},
     web::{self, Data, Json, Payload, Path, ServiceConfig},
 };
 use adaptarr_error::{ApiError, Error};
@@ -305,7 +305,11 @@ fn update_file(
         .and_then(move |file| {
             draft.write_file(&db, &name, &file)
                 .map_err(Into::into)
-                .map(|_| HttpResponse::new(StatusCode::NO_CONTENT))
+                .map(|_|
+                    HttpResponse::NoContent()
+                        .header(ETAG, file.entity_tag())
+                        .finish()
+                )
         }))
 }
 

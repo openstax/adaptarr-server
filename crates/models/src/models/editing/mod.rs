@@ -125,6 +125,6 @@ pub use self::{
     link::Link,
     process::Process,
     slot::{FillSlotError, Slot},
-    step::Step,
+    step::{Seating, Step},
     version::{CreateVersionError, Version},
 };

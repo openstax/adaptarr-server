@@ -2,7 +2,7 @@ use actix_web::{
     HttpRequest,
     HttpResponse,
     Responder,
-    http::{StatusCode, header::{ContentDisposition, DispositionType}},
+    http::{StatusCode, header::{ETAG, ContentDisposition, DispositionType}},
     web::{self, Data, Json, Payload, Path, ServiceConfig},
 };
 use adaptarr_error::Error;
@@ -192,6 +192,13 @@ fn update_resource_content(
 
     let storage_path = &adaptarr_models::Config::global().storage.path;
     Either::B(File::from_stream((*pool).clone(), storage_path, payload, None)
-        .and_then(move |file| resource.set_file(&db, &file).map_err(From::from))
-        .map(|_| HttpResponse::new(StatusCode::NO_CONTENT)))
+        .and_then(move |file|
+            resource.set_file(&db, &file)
+                .map_err(From::from)
+                .map(|_|
+                    HttpResponse::NoContent()
+                        .header(ETAG, file.entity_tag())
+                        .finish()
+                )
+        ))
 }
