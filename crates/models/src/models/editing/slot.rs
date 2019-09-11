@@ -82,7 +82,7 @@ impl Model for Slot {
         }
     }
 
-    fn get_public_full(&self, db: &Connection, _: ()) -> Result<Public, DbError> {
+    fn get_public_full(&self, db: &Connection, _: &()) -> Result<Public, DbError> {
         let db::EditProcessSlot { id, ref name, .. } = self.data;
 
         Ok(Public {

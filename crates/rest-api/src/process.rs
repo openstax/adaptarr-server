@@ -165,7 +165,7 @@ fn list_free_slots(db: Database, session: Session)
     Ok(Json(Slot::all_free(&db, session.user(&db)?.role)?
         .into_iter()
         .map(|(draft, slot)| Ok(FreeSlot {
-            slot: slot.get_public_full(&db, ())?,
+            slot: slot.get_public_full(&db, &())?,
             draft: draft.get_public(),
         }))
         .collect::<Result<Vec<_>>>()?))
@@ -234,7 +234,7 @@ fn list_slots_in_process(db: Database, _: Session, id: Path<i32>)
     Ok(Json(Process::by_id(&db, *id)?
         .get_current(&db)?
         .get_slots(&db)?
-        .get_public_full(&db, ())?))
+        .get_public_full(&db, &())?))
 }
 
 /// Get details of a particular slot in an editing process.
@@ -251,7 +251,7 @@ fn get_slot_in_process(db: Database, _: Session, path: Path<(i32, i32)>)
     Ok(Json(Process::by_id(&db, process_id)?
         .get_current(&db)?
         .get_slot(&db, slot_id)?
-        .get_public_full(&db, ())?))
+        .get_public_full(&db, &())?))
 }
 
 /// Modify a slot in an editing process.
@@ -460,7 +460,7 @@ fn get_process_version(db: Database, _: Session, id: Path<(i32, i32)>)
 /// ```
 fn list_slots_in_version(db: Database, _: Session, id: Path<(i32, i32)>)
 -> Result<Json<Vec<<Slot as Model>::Public>>> {
-    Ok(Json(Version::by_id(&db, *id)?.get_slots(&db)?.get_public_full(&db, ())?))
+    Ok(Json(Version::by_id(&db, *id)?.get_slots(&db)?.get_public_full(&db, &())?))
 }
 
 /// Get details of a particular slot in a particular version of an editing
@@ -480,7 +480,7 @@ fn get_slot_in_version(
 
     Ok(Json(Version::by_id(&db, (process_id, version_id))?
         .get_slot(&db, slot_id)?
-        .get_public_full(&db, ())?))
+        .get_public_full(&db, &())?))
 }
 
 /// Modify a slot in a particular version of an editing process.
@@ -531,7 +531,7 @@ fn modify_slot(db: &Connection, version: &Version, slot: i32, data: SlotUpdate)
         Ok(())
     })?;
 
-    Ok(Json(slot.get_public_full(db, ())?))
+    Ok(Json(slot.get_public_full(db, &())?))
 }
 
 /// Get list of all steps in a particular version of an editing process.
@@ -545,7 +545,7 @@ fn list_steps_in_version(db: Database, _: Session, id: Path<(i32, i32)>)
 -> Result<Json<Vec<<Step as Model>::Public>>> {
     Ok(Json(Version::by_id(&db, *id)?
         .get_steps(&db)?
-        .get_public_full(&db, (None, None))?))
+        .get_public_full(&db, &(None, None))?))
 }
 
 /// Get details of a particular step in a particular version of an editing
@@ -565,7 +565,7 @@ fn get_step_in_version(
 
     Ok(Json(Version::by_id(&db, (process_id, version_id))?
         .get_step(&db, step_id)?
-        .get_public_full(&db, (None, None))?))
+        .get_public_full(&db, &(None, None))?))
 }
 
 /// Modify a step in a particular version of an editing process.
@@ -597,7 +597,7 @@ fn modify_step(db: &Connection, step: &mut Step, data: StepUpdate)
 -> Result<Json<<Step as Model>::Public>> {
     step.set_name(db, &data.name)?;
 
-    Ok(Json(step.get_public_full(&db, (None, None))?))
+    Ok(Json(step.get_public_full(&db, &(None, None))?))
 }
 
 /// Get list of all links in a particular step in a version of an editing

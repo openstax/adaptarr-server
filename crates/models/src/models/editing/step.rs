@@ -91,10 +91,10 @@ impl Model for Step {
 
     fn get_public(&self) -> Public {
         let db = crate::db::pool().get().expect("uninitialized database");
-        self.get_public_full(&*db, (None, None)).expect("database error")
+        self.get_public_full(&*db, &(None, None)).expect("database error")
     }
 
-    fn get_public_full(&self, db: &Connection, (draft, slots): Self::PublicParams)
+    fn get_public_full(&self, db: &Connection, &(draft, slots): &Self::PublicParams)
     -> Result<Public, DbError> {
         let db::EditProcessStep { id, process: version, ref name, .. } = self.data;
 

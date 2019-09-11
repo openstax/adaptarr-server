@@ -72,7 +72,7 @@ impl Model for Role {
         }
     }
 
-    fn get_public_full(&self, _: &Connection, sensitive: bool)
+    fn get_public_full(&self, _: &Connection, &sensitive: &bool)
     -> Result<Public, DbError> {
         let db::Role { id, ref name, .. } = self.data;
 

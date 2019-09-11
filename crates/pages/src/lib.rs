@@ -383,7 +383,7 @@ fn do_reset(
                 .unwrap_or(locale.as_ref());
 
             user.do_send_mail("reset", "mail-reset-subject", ResetMailArgs {
-                user: user.get_public_full(&db, UserFields::empty())?,
+                user: user.get_public_full(&db, &UserFields::empty())?,
                 url: url.as_str(),
             }, user_locale);
 

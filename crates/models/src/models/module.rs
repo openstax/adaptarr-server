@@ -107,7 +107,7 @@ impl Model for Module {
         }
     }
 
-    fn get_public_full(&self, db: &Connection, _: ()) -> Result<Public, DbError> {
+    fn get_public_full(&self, db: &Connection, _: &()) -> Result<Public, DbError> {
         let process = drafts::table
             .inner_join(edit_process_steps::table
                 .inner_join(edit_process_versions::table

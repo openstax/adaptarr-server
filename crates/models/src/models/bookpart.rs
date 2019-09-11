@@ -94,13 +94,13 @@ impl Model for BookPart {
         }
     }
 
-    fn get_public_full(&self, db: &Connection, _: ()) -> Result<Public, DbError> {
+    fn get_public_full(&self, db: &Connection, _: &()) -> Result<Public, DbError> {
         Ok(Public {
             number: self.data.id,
             title: self.data.title.clone(),
             part: Some(if let Some(id) = self.data.module {
                 Module::by_id(db, id).assert_exists()?
-                    .get_public_full(db, ())
+                    .get_public_full(db, &())
                     .map(Variant::Module)?
             } else {
                 Variant::Group {
@@ -154,7 +154,7 @@ impl BookPart {
         let part = if let Some(id) = self.data.module {
             Module::by_id(db, id)
                 .assert_exists()?
-                .get_public_full(db, ())
+                .get_public_full(db, &())
                 .map(Variant::Module)?
         } else {
             let parts = book_parts::table
@@ -287,7 +287,7 @@ impl BookPart {
                 Ok(Tree {
                     number: part.id,
                     title: title.unwrap_or_else(|| module.title.clone()),
-                    part: Variant::Module(module.get_public_full(db, ())?),
+                    part: Variant::Module(module.get_public_full(db, &())?),
                 })
             }
             NewTree::Group { title, parts } => {

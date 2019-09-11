@@ -110,7 +110,7 @@ impl Model for User {
         }
     }
 
-    fn get_public_full(&self, db: &Connection, fields: Fields)
+    fn get_public_full(&self, db: &Connection, &fields: &Fields)
     -> Result<Public, DbError> {
         let db::User { id, ref name, is_super, ref language, .. } = self.data;
 
@@ -127,7 +127,7 @@ impl Model for User {
             language: language.clone(),
             permissions,
             role: self.role.as_ref().map(|r|
-                r.get_public_full(db, fields.contains(Fields::ROLE_PERMISSIONS))
+                r.get_public_full(db, &fields.contains(Fields::ROLE_PERMISSIONS))
             ).transpose()?,
         })
     }

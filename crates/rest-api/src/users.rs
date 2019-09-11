@@ -63,7 +63,7 @@ fn list_users(db: Database, session: Session)
         fields.insert(UserFields::ROLE_PERMISSIONS);
     }
 
-    Ok(Json(User::all(&db)?.get_public_full(&db, fields)?))
+    Ok(Json(User::all(&db)?.get_public_full(&db, &fields)?))
 }
 
 #[derive(Deserialize)]
@@ -133,7 +133,7 @@ fn get_user(db: Database, session: Session, id: Path<UserId>)
         fields.insert(UserFields::ROLE_PERMISSIONS);
     }
 
-    Ok(Json(id.get_user(&db, &session)?.get_public_full(&db, fields)?))
+    Ok(Json(id.get_user(&db, &session)?.get_public_full(&db, &fields)?))
 }
 
 #[derive(Deserialize)]
@@ -209,7 +209,7 @@ fn modify_user(
         fields.insert(UserFields::ROLE_PERMISSIONS);
     }
 
-    Ok(Json(user.get_public_full(&db, fields)?))
+    Ok(Json(user.get_public_full(&db, &fields)?))
 }
 
 /// Get list of drafts a given user has access to.
@@ -229,7 +229,7 @@ fn list_user_drafts(db: Database, session: Session, id: Path<UserId>)
 
     let user = id.get_user(&db, &session)?;
 
-    Ok(Json(Draft::all_of(&db, user.id())?.get_public_full(&db, user.id)?))
+    Ok(Json(Draft::all_of(&db, user.id())?.get_public_full(&db, &user.id)?))
 }
 
 #[derive(Deserialize)]

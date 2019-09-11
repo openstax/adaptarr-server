@@ -64,7 +64,7 @@ pub fn configure(app: &mut ServiceConfig) {
 fn list_drafts(db: Database, session: Session)
 -> Result<Json<Vec<<Draft as Model>::Public>>> {
     Ok(Json(Draft::all_of(&db, session.user)?
-        .get_public_full(&db, session.user_id())?))
+        .get_public_full(&db, &session.user_id())?))
 }
 
 /// Get a draft by ID.
@@ -83,7 +83,7 @@ fn get_draft(db: Database, session: Session, id: Path<Uuid>)
         return Err(FindModelError::<Draft>::not_found().into());
     }
 
-    Ok(Json(draft.get_public_full(&db, user.id())?))
+    Ok(Json(draft.get_public_full(&db, &user.id())?))
 }
 
 #[derive(Deserialize)]
@@ -112,7 +112,7 @@ fn update_draft(
 
     draft.set_title(&db, &update.title)?;
 
-    Ok(Json(draft.get_public_full(&db, session.user_id())?))
+    Ok(Json(draft.get_public_full(&db, &session.user_id())?))
 }
 
 /// Delete a draft.
@@ -413,9 +413,9 @@ fn get_process_details(
     let slots = process.get_slots(&db)?
         .into_iter()
         .map(|slot| Ok(SlotSeating {
-            slot: slot.get_public_full(&db, ())?,
+            slot: slot.get_public_full(&db, &())?,
             user: slot.get_occupant(&db, &draft)?
-                .map(|user| user.get_public_full(&db, UserFields::empty()))
+                .map(|user| user.get_public_full(&db, &UserFields::empty()))
                 .transpose()?
         }))
         .collect::<Result<Vec<_>>>()?;

@@ -72,7 +72,7 @@ pub fn configure(app: &mut ServiceConfig) {
 /// ```
 fn list_modules(db: Database, _: Session)
 -> Result<Json<Vec<<Module as Model>::Public>>> {
-    Ok(Json(Module::all(&db)?.get_public_full(&db, ())?))
+    Ok(Json(Module::all(&db)?.get_public_full(&db, &())?))
 }
 
 #[derive(Deserialize)]
@@ -113,7 +113,7 @@ fn create_module(
     let module = Module::create::<&str, _>(
         &db, &data.title, &data.language, index, std::iter::empty())?;
 
-    let public = module.get_public_full(&db, ())?;
+    let public = module.get_public_full(&db, &())?;
 
     let location = format!("{}/api/v1/modules/{}",
         req.app_config().host(), module.id());
@@ -152,7 +152,7 @@ fn create_module_from_zip(
         .from_err::<Error>()
         .and_then(|r| future::result(r).from_err())
         .and_then(move |module| -> Result<_> {
-            Ok(module.get_public_full(&db, ())?)
+            Ok(module.get_public_full(&db, &())?)
         })
         .map(move |p| {
             let location = format!("{}/api/v1/modules/{}",
@@ -170,7 +170,7 @@ fn create_module_from_zip(
 /// ```
 fn get_module(db: Database, _: Session, id: Path<Uuid>)
 -> Result<Json<<Module as Model>::Public>> {
-    Ok(Json(Module::by_id(&db, *id)?.get_public_full(&db, ())?))
+    Ok(Json(Module::by_id(&db, *id)?.get_public_full(&db, &())?))
 }
 
 #[derive(Deserialize)]
@@ -207,7 +207,7 @@ fn begin_process(
         .collect::<Result<Vec<_>>>()?;
 
     let draft = module.begin_process(&db, &version, slots)?;
-    let public = draft.get_public_full(&db, session.user_id())?;
+    let public = draft.get_public_full(&db, &session.user_id())?;
     let location = format!("{}/api/v1/drafts/{}",
         req.app_config().host(), draft.id());
 
@@ -249,7 +249,7 @@ fn replace_module(
             actor: session.user_id().into(),
         }).from_err())
         .and_then(|r| future::result(r).from_err())
-        .and_then(move |module| module.get_public_full(&db, ()).map_err(Error::from))
+        .and_then(move |module| module.get_public_full(&db, &()).map_err(Error::from))
         .map(Json))
 }
 

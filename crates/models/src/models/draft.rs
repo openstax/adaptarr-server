@@ -101,13 +101,13 @@ impl Model for Draft {
         }
     }
 
-    fn get_public_full(&self, db: &Connection, user: i32) -> Result<Public, DbError> {
+    fn get_public_full(&self, db: &Connection, &user: &i32) -> Result<Public, DbError> {
         Ok(Public {
             module: self.data.module,
             document: self.document.get_public(),
             permissions: self.get_permissions(db, user).map(Some)?,
             step: self.get_step(db)?
-                .get_public_full(db, (Some(self.data.module), Some(user)))
+                .get_public_full(db, &(Some(self.data.module), Some(user)))
                 .map(Some)?,
             books: self.get_books(db).map(Some)?,
         })

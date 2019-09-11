@@ -39,7 +39,7 @@ fn list_roles(db: Database, session: Session)
         .permissions(true)
         .contains(PermissionBits::EDIT_ROLE);
 
-    Ok(Json(Role::all(&db)?.get_public_full(&db, show_permissions)?))
+    Ok(Json(Role::all(&db)?.get_public_full(&db, &show_permissions)?))
 }
 
 #[derive(Deserialize)]
@@ -65,7 +65,7 @@ fn create_role(
     let role = Role::create(&db, &data.name, data.permissions)?;
     let location = format!("{}/api/v1/roles/{}", req.app_config().host(), role.id);
 
-    Ok(Created(location, Json(role.get_public_full(&db, true)?)))
+    Ok(Created(location, Json(role.get_public_full(&db, &true)?)))
 }
 
 /// Get a role by ID.
@@ -81,7 +81,7 @@ fn get_role(db: Database, session: Session, id: Path<i32>)
         .permissions(true)
         .contains(PermissionBits::EDIT_ROLE);
 
-    Ok(Json(Role::by_id(&db, *id)?.get_public_full(&db, show_permissions)?))
+    Ok(Json(Role::by_id(&db, *id)?.get_public_full(&db, &show_permissions)?))
 }
 
 #[derive(Deserialize)]
@@ -118,7 +118,7 @@ fn update_role(
         Ok(())
     })?;
 
-    Ok(Json(role.get_public_full(&db, true)?))
+    Ok(Json(role.get_public_full(&db, &true)?))
 }
 
 /// Delete a role.

@@ -80,7 +80,7 @@ pub trait Model: Sized {
     fn get_public(&self) -> Self::Public;
 
     /// Get the public portion of this book's data.
-    fn get_public_full(&self, _: &Connection, _: Self::PublicParams)
+    fn get_public_full(&self, _: &Connection, _: &Self::PublicParams)
     -> Result<Self::Public, DbError> {
         Ok(self.get_public())
     }
@@ -189,7 +189,6 @@ impl<M: Model> From<DbError> for FindModelError<M> {
 impl<T> Model for Vec<T>
 where
     T: Model,
-    T::PublicParams: Clone,
 {
     const ERROR_CATEGORY: &'static str = <T as Model>::ERROR_CATEGORY;
 
@@ -218,8 +217,8 @@ where
         self.iter().map(T::get_public).collect()
     }
 
-    fn get_public_full(&self, db: &Connection, params: Self::PublicParams)
+    fn get_public_full(&self, db: &Connection, params: &Self::PublicParams)
     -> Result<Self::Public, DbError> {
-        self.iter().map(|t| t.get_public_full(db, params.clone())).collect()
+        self.iter().map(|t| t.get_public_full(db, params)).collect()
     }
 }
