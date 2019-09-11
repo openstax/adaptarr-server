@@ -89,9 +89,14 @@ impl Book {
         Ok(())
     }
 
+    /// Load a [`BookPart`] by ID.
+    pub fn get_part(&self, db: &Connection, id: i32) -> FindModelResult<BookPart> {
+        BookPart::by_id(db, (self.data.id, id))
+    }
+
     /// Load root part of this book.
     pub fn root_part(&self, db: &Connection) -> Result<BookPart, DbError> {
-        BookPart::by_id(db, (self.data.id, 0)).assert_exists()
+        self.get_part(db, 0).assert_exists()
     }
 
     /// Change title of this book.
