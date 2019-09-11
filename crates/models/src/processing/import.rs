@@ -259,7 +259,7 @@ impl Importer {
     /// Import a single module from a collection ZIP.
     fn load_collection_module(
         &mut self,
-        dbconn: &Connection,
+        db: &Connection,
         zip: &mut ZipArchive<&mut std::fs::File>,
         base_path: PathBuf,
     ) -> Result<ModuleZip, ImportError> {
@@ -276,7 +276,7 @@ impl Importer {
         let index_file = {
             let index = zip.by_name(index_path)?;
             File::from_read(
-                dbconn,
+                db,
                 &self.storage_path,
                 index,
                 Some(&*CNXML_MIME),
@@ -315,7 +315,7 @@ impl Importer {
                 continue;
             }
 
-            let file = File::from_read(dbconn, &self.storage_path, file, None)?;
+            let file = File::from_read(db, &self.storage_path, file, None)?;
             files.push((name, file));
         }
 
@@ -330,13 +330,13 @@ impl Importer {
     /// Load contents of a book from a collection ZIP.
     fn load_collection_zip(
         &mut self,
-        dbconn: &Connection,
+        db: &Connection,
         book: &mut Book,
         mut zip: ZipArchive<&mut std::fs::File>,
         coldata: Collection,
         base: PathBuf,
     ) -> Result<(), ImportError> {
-        let root = book.root_part(dbconn)?;
+        let root = book.root_part(db)?;
 
         let mut queue = vec![(root, &coldata.content)];
 
@@ -348,16 +348,16 @@ impl Importer {
                         let ModuleZip {
                             language, index, files, ..
                         } = self.load_collection_module(
-                            dbconn, &mut zip, path)?;
-                        let module = Module::create(dbconn, &title, &language, index, files)?;
-                        group.insert_module(dbconn, inx as i32, &title, &module)
+                            db, &mut zip, path)?;
+                        let module = Module::create(db, &title, &language, index, files)?;
+                        group.insert_module(db, inx as i32, &title, &module)
                             .map_err(|e| match e {
                                 CreatePartError::Database(e) => e,
                                 CreatePartError::IsAModule => unreachable!(),
                             })?;
                     }
                     Element::Subcollection(Subcollection { title, content }) => {
-                        let new = group.create_group(dbconn, inx as i32, &title)
+                        let new = group.create_group(db, inx as i32, &title)
                             .map_err(|e| match e {
                                 CreatePartError::Database(e) => e,
                                 CreatePartError::IsAModule => unreachable!(),
@@ -377,11 +377,11 @@ impl Importer {
         let (zip, coldata, base) = self.preprocess_collection_zip(&mut file)?;
 
         let db = self.pool.get()?;
-        let dbconn = &*db;
+        let db = &*db;
 
-        dbconn.transaction(|| {
-            let mut book = Book::create(dbconn, &title)?;
-            self.load_collection_zip(dbconn, &mut book, zip, coldata, base)?;
+        db.transaction(|| {
+            let mut book = Book::create(db, &title)?;
+            self.load_collection_zip(db, &mut book, zip, coldata, base)?;
             Ok(book)
         })
     }
@@ -392,11 +392,11 @@ impl Importer {
         let (zip, coldata, base) = self.preprocess_collection_zip(&mut file)?;
 
         let db = self.pool.get()?;
-        let dbconn = &*db;
+        let db = &*db;
 
-        dbconn.transaction(|| {
-            book.root_part(dbconn)?.clear(dbconn)?;
-            self.load_collection_zip(dbconn, &mut book, zip, coldata, base)?;
+        db.transaction(|| {
+            book.root_part(db)?.clear(db)?;
+            self.load_collection_zip(db, &mut book, zip, coldata, base)?;
             Ok(book)
         })
     }

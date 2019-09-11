@@ -135,20 +135,20 @@ impl Model for User {
 
 impl User {
     /// Get all users.
-    pub fn all(dbcon: &Connection) -> Result<Vec<User>, DbError> {
+    pub fn all(db: &Connection) -> Result<Vec<User>, DbError> {
         users::table
             .left_join(roles::table)
-            .get_results::<(db::User, Option<db::Role>)>(dbcon)
+            .get_results::<(db::User, Option<db::Role>)>(db)
             .map(|v| v.into_iter().map(Self::from_db).collect())
     }
 
     /// Find an user by email address.
-    pub fn by_email(dbcon: &Connection, email: &str)
+    pub fn by_email(db: &Connection, email: &str)
     -> FindModelResult<User> {
         users::table
             .filter(users::email.eq(email))
             .left_join(roles::table)
-            .get_result::<(db::User, Option<db::Role>)>(dbcon)
+            .get_result::<(db::User, Option<db::Role>)>(db)
             .map(Self::from_db)
             .map_err(From::from)
     }
@@ -156,7 +156,7 @@ impl User {
     /// Create a new user.
     #[allow(clippy::too_many_arguments)]
     pub fn create(
-        dbcon: &Connection,
+        db: &Connection,
         actor: Option<i32>,
         email: &str,
         name: &str,
@@ -186,9 +186,9 @@ impl User {
             &ARGON2_CONFIG,
         ).expect("Cannot hash password");
 
-        dbcon.transaction(|| {
+        db.transaction(|| {
             diesel::delete(invites::table.filter(invites::email.eq(email)))
-                .execute(dbcon)
+                .execute(db)
                 .map_err(CreateUserError::Database)?;
 
             let data = diesel::insert_into(users::table)
@@ -206,11 +206,11 @@ impl User {
                     },
                     role: role.map(Model::id),
                 })
-                .get_result::<db::User>(dbcon)?;
+                .get_result::<db::User>(db)?;
 
             let actor = actor.unwrap_or(data.id);
             audit::log_db_actor(
-                dbcon, actor, "users", data.id, "create", LogNewUser {
+                db, actor, "users", data.id, "create", LogNewUser {
                     email,
                     name,
                     is_super,
@@ -223,9 +223,9 @@ impl User {
     }
 
     /// Find an user for given email and try to authenticate as them.
-    pub fn authenticate(dbcon: &Connection, email: &str, password: &str)
+    pub fn authenticate(db: &Connection, email: &str, password: &str)
     -> Result<User, UserAuthenticateError> {
-        let user = User::by_email(dbcon, email)?;
+        let user = User::by_email(db, email)?;
 
         if user.check_password(password) {
             Ok(user)
@@ -268,7 +268,7 @@ impl User {
     }
 
     /// Change user's password.
-    pub fn change_password(&mut self, dbcon: &Connection, password: &str)
+    pub fn change_password(&mut self, db: &Connection, password: &str)
     -> Result<(), ChangePasswordError> {
         if password.is_empty() {
             return Err(ChangePasswordError::EmptyPassword);
@@ -286,18 +286,18 @@ impl User {
             &ARGON2_CONFIG,
         ).expect("Cannot hash password");
 
-        let data = dbcon.transaction(|| {
+        let data = db.transaction(|| {
             // Delete all existing password reset tokens.
             diesel::delete(
                 password_reset_tokens::table
                     .filter(password_reset_tokens::user.eq(self.id)))
-                .execute(dbcon)?;
+                .execute(db)?;
 
             // Delete all existing sessions.
             diesel::delete(sessions::table.filter(sessions::user.eq(self.id)))
-                .execute(dbcon)?;
+                .execute(db)?;
 
-            audit::log_db(dbcon, "users", self.id, "change-password", ());
+            audit::log_db(db, "users", self.id, "change-password", ());
 
             // Update credentials.
             diesel::update(&self.data)
@@ -305,7 +305,7 @@ impl User {
                     salt: &salt,
                     password: &hash,
                 })
-                .get_result::<db::User>(dbcon)
+                .get_result::<db::User>(db)
         })?;
 
         self.data = data;
@@ -314,13 +314,13 @@ impl User {
     }
 
     /// Change user's name.
-    pub fn set_name(&mut self, dbcon: &Connection, name: &str)
+    pub fn set_name(&mut self, db: &Connection, name: &str)
     -> Result<(), DbError> {
         self.data = diesel::update(&self.data)
             .set(users::name.eq(name))
-            .get_result::<db::User>(dbcon)?;
+            .get_result::<db::User>(db)?;
 
-        audit::log_db(dbcon, "users", self.id, "set-name", name);
+        audit::log_db(db, "users", self.id, "set-name", name);
 
         Ok(())
     }
@@ -328,16 +328,16 @@ impl User {
     /// Change user's preferred language.
     pub fn set_language(
         &mut self,
-        dbcon: &Connection,
+        db: &Connection,
         language: &LanguageTag,
     ) -> Result<(), DbError> {
         let data = diesel::update(&self.data)
             .set(users::language.eq(language.as_str()))
-            .get_result::<db::User>(dbcon)?;
+            .get_result::<db::User>(db)?;
 
         self.data = data;
 
-        audit::log_db(dbcon, "users", self.id, "change-language", language);
+        audit::log_db(db, "users", self.id, "change-language", language);
 
         Ok(())
     }
@@ -345,7 +345,7 @@ impl User {
     /// Change user's permissions.
     pub fn set_permissions(
         &mut self,
-        dbcon: &Connection,
+        db: &Connection,
         permissions: PermissionBits,
     ) -> Result<(), DbError> {
         // Superusers have all permissions.
@@ -356,9 +356,9 @@ impl User {
         let sessions_perms = permissions
             | self.role.as_ref().map_or(PermissionBits::empty(), Role::permissions);
 
-        let data = dbcon.transaction(|| {
+        let data = db.transaction(|| {
             audit::log_db(
-                dbcon, "users", self.id, "set-permissions", permissions.bits());
+                db, "users", self.id, "set-permissions", permissions.bits());
 
             // Since we might be removing a permission we also need to update
             // user's sessions.
@@ -367,16 +367,16 @@ impl User {
                         sessions::is_elevated.eq(false))))
                 .set(sessions::permissions.eq(
                     (sessions_perms & PermissionBits::normal()).bits()))
-                .execute(dbcon)?;
+                .execute(db)?;
             diesel::update(sessions::table.filter(
                     sessions::user.eq(self.id).and(
                         sessions::is_elevated.eq(false))))
                 .set(sessions::permissions.eq(sessions_perms.bits()))
-                .execute(dbcon)?;
+                .execute(db)?;
 
             diesel::update(&self.data)
                 .set(users::permissions.eq(permissions.bits()))
-                .get_result::<db::User>(dbcon)
+                .get_result::<db::User>(db)
         })?;
 
         self.data = data;
@@ -387,7 +387,7 @@ impl User {
     /// Change user's role.
     pub fn set_role(
         &mut self,
-        dbcon: &Connection,
+        db: &Connection,
         role: Option<&Role>,
     ) -> Result<(), DbError> {
         let (role_id, sessions_perms) = match role {
@@ -399,7 +399,7 @@ impl User {
         };
 
         let data = dbcon.transaction(|| {
-            audit::log_db(dbcon, "users", self.id, "set-role", role_id);
+            audit::log_db(db, "users", self.id, "set-role", role_id);
 
             // Since user's previous role might have had more permissions
             // we also need to update user's sessions.
@@ -408,16 +408,16 @@ impl User {
                         sessions::is_elevated.eq(false))))
                 .set(sessions::permissions.eq(
                     (sessions_perms & PermissionBits::normal()).bits()))
-                .execute(dbcon)?;
+                .execute(db)?;
             diesel::update(sessions::table.filter(
                     sessions::user.eq(self.id).and(
                         sessions::is_elevated.eq(true))))
                 .set(sessions::permissions.eq(sessions_perms.bits()))
-                .execute(dbcon)?;
+                .execute(db)?;
 
             diesel::update(&self.data)
                 .set(users::role.eq(role_id))
-                .get_result::<db::User>(dbcon)
+                .get_result::<db::User>(db)
         })?;
 
         self.data = data;

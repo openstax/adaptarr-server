@@ -22,12 +22,12 @@ pub struct Invite {
 
 impl Invite {
     /// Create a new invitation for a given email address.
-    pub fn create(dbcon: &Connection, email: &str, role: Option<&Role>)
+    pub fn create(db: &Connection, email: &str, role: Option<&Role>)
     -> Result<Invite, CreateInviteError> {
-        dbcon.transaction(|| {
+        db.transaction(|| {
             let user = users::table
                 .filter(users::email.eq(email))
-                .get_result::<db::User>(dbcon)
+                .get_result::<db::User>(db)
                 .optional()?;
 
             if user.is_some() {
@@ -40,9 +40,9 @@ impl Invite {
                     expires: Utc::now() + Duration::days(7),
                     role: role.map(Model::id),
                 })
-                .get_result::<db::Invite>(dbcon)?;
+                .get_result::<db::Invite>(db)?;
 
-            audit::log_db(dbcon, "invites", data.id, "create", LogNewInvite {
+            audit::log_db(db, "invites", data.id, "create", LogNewInvite {
                 email,
                 expires: data.expires,
                 role: data.role,
@@ -54,7 +54,7 @@ impl Invite {
 
     /// Get an existing invite by code.
     pub fn from_code(
-        dbconn: &Connection,
+        db: &Connection,
         secret: &[u8],
         code: &str,
     ) -> Result<Invite, FromCodeError> {
@@ -63,7 +63,7 @@ impl Invite {
 
         let invite = invites::table
             .filter(invites::id.eq(id))
-            .get_result::<db::Invite>(dbconn)
+            .get_result::<db::Invite>(db)
             .optional()?
             .ok_or(FromCodeError::Expired)?;
 
@@ -84,17 +84,17 @@ impl Invite {
     /// Fulfil an invitation by creating a user.
     pub fn fulfil(
         self,
-        dbconn: &Connection,
+        db: &Connection,
         name: &str,
         password: &str,
         language: &str,
     ) -> Result<User, CreateUserError> {
         let role = self.data.role.map(|id|
-            Role::by_id(dbconn, id).assert_exists()
+            Role::by_id(db, id).assert_exists()
         ).transpose()?;
 
         let user = User::create(
-            dbconn,
+            db,
             None,
             &self.email,
             name,
@@ -105,7 +105,7 @@ impl Invite {
             role.as_ref(),
         )?;
 
-        audit::log_db_actor(dbconn, user.id, "invites", self.id, "fulfil", ());
+        audit::log_db_actor(db, user.id, "invites", self.id, "fulfil", ());
 
         Ok(user)
     }

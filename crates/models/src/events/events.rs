@@ -253,32 +253,32 @@ pub struct ExpandedStep {
     pub name: String,
 }
 
-pub fn expand_event(domain: &str, dbcon: &Connection, event: &db::Event)
+pub fn expand_event(domain: &str, db: &Connection, event: &db::Event)
 -> Result<ExpandedEvent, Error> {
     match Kind::from_str(&event.kind) {
         Kind::Assigned =>
-            expand_assigned(domain, dbcon, rmps::from_slice(&event.data)?),
+            expand_assigned(domain, db, rmps::from_slice(&event.data)?),
         Kind::ProcessEnded =>
-            expand_process_ended(domain, dbcon, rmps::from_slice(&event.data)?),
+            expand_process_ended(domain, db, rmps::from_slice(&event.data)?),
         Kind::ProcessCancelled =>
-            expand_process_cancelled(domain, dbcon, rmps::from_slice(&event.data)?),
+            expand_process_cancelled(domain, db, rmps::from_slice(&event.data)?),
         Kind::SlotFilled =>
-            expand_slot_filled(domain, dbcon, rmps::from_slice(&event.data)?),
+            expand_slot_filled(domain, db, rmps::from_slice(&event.data)?),
         Kind::SlotVacated =>
-            expand_slot_vacated(domain, dbcon, rmps::from_slice(&event.data)?),
+            expand_slot_vacated(domain, db, rmps::from_slice(&event.data)?),
         Kind::DraftAdvanced =>
-            expand_draft_advanced(domain, dbcon, rmps::from_slice(&event.data)?),
+            expand_draft_advanced(domain, db, rmps::from_slice(&event.data)?),
         Kind::Other => Err(Error::UnknownEvent(event.kind.clone())),
     }
 }
 
-fn expand_books_containing(domain: &str, dbcon: &Connection, module: &Module)
+fn expand_books_containing(domain: &str, db: &Connection, module: &Module)
 -> Result<ExpandedBooks, Error> {
-    let books = module.get_books(dbcon)?;
+    let books = module.get_books(db)?;
     let (title, url) = match books.first() {
         None => (None, None),
         Some(id) => {
-            let book = Book::by_id(dbcon, *id)
+            let book = Book::by_id(db, *id)
                 .assert_exists()?
                 .into_db();
 
@@ -296,15 +296,15 @@ fn expand_books_containing(domain: &str, dbcon: &Connection, module: &Module)
     })
 }
 
-fn expand_assigned(domain: &str, dbcon: &Connection, ev: Assigned)
+fn expand_assigned(domain: &str, db: &Connection, ev: Assigned)
 -> Result<ExpandedEvent, Error> {
-    let who = User::by_id(dbcon, ev.who)
+    let who = User::by_id(db, ev.who)
         .assert_exists()?
         .into_db();
-    let module = Module::by_id(dbcon, ev.module)
+    let module = Module::by_id(db, ev.module)
         .assert_exists()?;
 
-    let book = expand_books_containing(domain, dbcon, &module)?;
+    let book = expand_books_containing(domain, db, &module)?;
     let module = module.into_db();
 
     Ok(ExpandedEvent::Assigned {
@@ -320,9 +320,9 @@ fn expand_assigned(domain: &str, dbcon: &Connection, ev: Assigned)
     })
 }
 
-fn expand_process_ended(domain: &str, dbcon: &Connection, ev: ProcessEnded)
+fn expand_process_ended(domain: &str, db: &Connection, ev: ProcessEnded)
 -> Result<ExpandedEvent, Error> {
-    let module = Module::by_id(dbcon, ev.module)
+    let module = Module::by_id(db, ev.module)
         .assert_exists()?
         .into_db();
 
@@ -335,9 +335,9 @@ fn expand_process_ended(domain: &str, dbcon: &Connection, ev: ProcessEnded)
     })
 }
 
-fn expand_process_cancelled(domain: &str, dbcon: &Connection, ev: ProcessCancelled)
+fn expand_process_cancelled(domain: &str, db: &Connection, ev: ProcessCancelled)
 -> Result<ExpandedEvent, Error> {
-    let module = Module::by_id(dbcon, ev.module)
+    let module = Module::by_id(db, ev.module)
         .assert_exists()?
         .into_db();
 
@@ -349,13 +349,13 @@ fn expand_process_cancelled(domain: &str, dbcon: &Connection, ev: ProcessCancell
     })
 }
 
-fn expand_slot_filled(domain: &str, dbcon: &Connection, ev: SlotFilled)
+fn expand_slot_filled(domain: &str, db: &Connection, ev: SlotFilled)
 -> Result<ExpandedEvent, Error> {
-    let module = Module::by_id(dbcon, ev.module)
+    let module = Module::by_id(db, ev.module)
         .assert_exists()?
         .into_db();
 
-    let slot = Slot::by_id(dbcon, ev.slot)
+    let slot = Slot::by_id(db, ev.slot)
         .assert_exists()?
         .into_db();
 
@@ -370,13 +370,13 @@ fn expand_slot_filled(domain: &str, dbcon: &Connection, ev: SlotFilled)
     })
 }
 
-fn expand_slot_vacated(domain: &str, dbcon: &Connection, ev: SlotVacated)
+fn expand_slot_vacated(domain: &str, db: &Connection, ev: SlotVacated)
 -> Result<ExpandedEvent, Error> {
-    let module = Module::by_id(dbcon, ev.module)
+    let module = Module::by_id(db, ev.module)
         .assert_exists()?
         .into_db();
 
-    let slot = Slot::by_id(dbcon, ev.slot)
+    let slot = Slot::by_id(db, ev.slot)
         .assert_exists()?
         .into_db();
 
@@ -391,14 +391,14 @@ fn expand_slot_vacated(domain: &str, dbcon: &Connection, ev: SlotVacated)
     })
 }
 
-fn expand_draft_advanced(domain: &str, dbcon: &Connection, ev: DraftAdvanced)
+fn expand_draft_advanced(domain: &str, db: &Connection, ev: DraftAdvanced)
 -> Result<ExpandedEvent, Error> {
-    let module = Module::by_id(dbcon, ev.module)
+    let module = Module::by_id(db, ev.module)
         .assert_exists()?;
 
-    let book = expand_books_containing(domain, dbcon, &module)?;
+    let book = expand_books_containing(domain, db, &module)?;
     let module = module.into_db();
-    let step = Step::by_id(dbcon, ev.step).assert_exists()?.into_db();
+    let step = Step::by_id(db, ev.step).assert_exists()?.into_db();
 
     Ok(ExpandedEvent::DraftAdvanced {
         draft: ExpandedDraft {

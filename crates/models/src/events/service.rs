@@ -181,9 +181,9 @@ impl EventManager {
     fn send_emails(&mut self) -> Result<(), Error> {
         let now = Utc::now();
         let db = self.pool.get()?;
-        let dbcon = &*db;
+        let db = &*db;
 
-        dbcon.transaction::<_, Error, _>(|| {
+        db.transaction::<_, Error, _>(|| {
             let events = events::table
                 .filter(events::timestamp.ge(self.last_notify)
                     .and(events::is_unread.eq(true)))
@@ -193,9 +193,9 @@ impl EventManager {
                 .group_by(|event| event.user);
 
             for (user, events) in events.into_iter() {
-                let user = User::by_id(dbcon, user)
+                let user = User::by_id(db, user)
                     .assert_exists()?;
-                self.notify_user_by_email(&user, dbcon, events.collect())?;
+                self.notify_user_by_email(&user, db, events.collect())?;
             }
 
             Ok(())
@@ -210,7 +210,7 @@ impl EventManager {
     fn notify_user_by_email(
         &mut self,
         user: &User,
-        dbcon: &Connection,
+        db: &Connection,
         events: Vec<db::Event>,
     ) -> Result<(), Error> {
         let domain = Config::domain();
@@ -223,7 +223,7 @@ impl EventManager {
 
         for (kind, group) in groups.into_iter() {
             let evs = group
-                .map(|event| expand_event(domain, dbcon, &event))
+                .map(|event| expand_event(domain, db, &event))
                 .collect::<Result<Vec<_>, _>>()?;
 
             groupped.push((kind, evs));

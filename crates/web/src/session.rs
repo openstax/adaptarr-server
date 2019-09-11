@@ -376,8 +376,8 @@ impl<P> Session<P> {
         self.data.user
     }
 
-    pub fn user(&self, dbcon: &Connection) -> Result<User, DbError> {
-        User::by_id(dbcon, self.data.user).map_err(FindModelError::assert_exists)
+    pub fn user(&self, db: &Connection) -> Result<User, DbError> {
+        User::by_id(db, self.data.user).map_err(FindModelError::assert_exists)
     }
 
     pub fn permissions(&self) -> PermissionBits {
