@@ -101,6 +101,12 @@ impl Process {
         Ok(())
     }
 
+    /// Get a [`Version`] by ID.
+    pub fn get_version(&self, db: &Connection, id: i32)
+    -> FindModelResult<Version> {
+        Version::by_id(db, (self.data.id, id))
+    }
+
     /// Get list of all versions of this process.
     pub fn get_versions(&self, db: &Connection)
     -> Result<Vec<Version>, DbError> {
