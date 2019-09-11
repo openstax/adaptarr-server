@@ -205,6 +205,52 @@ impl<M: Model> Optional for Result<M, FindModelError<M>> {
     }
 }
 
+impl<M: Model> Model for Option<M> {
+    const ERROR_CATEGORY: &'static str = <M as Model>::ERROR_CATEGORY;
+
+    type Id = Option<M::Id>;
+    type Database = Option<M::Database>;
+    type Public = Option<M::Public>;
+    type PublicParams = M::PublicParams;
+
+    fn by_id(db: &Connection, id: Self::Id) -> FindModelResult<Self> {
+        match id {
+            None => Ok(None),
+            Some(id) => match M::by_id(db, id) {
+                Ok(model) => Ok(Some(model)),
+                Err(FindModelError::Database(_, err)) =>
+                    Err(FindModelError::Database(PhantomData, err)),
+                Err(FindModelError::NotFound(_)) =>
+                    Err(FindModelError::NotFound(PhantomData)),
+            }
+        }
+    }
+
+    fn from_db(data: Self::Database) -> Self {
+        data.map(M::from_db)
+    }
+
+    fn into_db(self) -> Self::Database {
+        self.map(M::into_db)
+    }
+
+    fn id(&self) -> Self::Id {
+        self.as_ref().map(M::id)
+    }
+
+    fn get_public(&self) -> Self::Public {
+        self.as_ref().map(M::get_public)
+    }
+
+    fn get_public_full(&self, db: &Connection, params: &Self::PublicParams)
+    -> Result<Self::Public, DbError> {
+        match self {
+            None => Ok(None),
+            Some(model) => Ok(Some(model.get_public_full(db, params)?)),
+        }
+    }
+}
+
 impl<T> Model for Vec<T>
 where
     T: Model,
