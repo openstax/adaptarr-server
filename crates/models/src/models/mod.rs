@@ -186,6 +186,25 @@ impl<M: Model> From<DbError> for FindModelError<M> {
     }
 }
 
+pub trait Optional {
+    /// Result after allowing nullability.
+    type Output;
+
+    fn optional(self) -> Self::Output;
+}
+
+impl<M: Model> Optional for Result<M, FindModelError<M>> {
+    type Output = Result<Option<M>, DbError>;
+
+    fn optional(self) -> Self::Output {
+        match self {
+            Ok(model) => Ok(Some(model)),
+            Err(FindModelError::NotFound(_)) => Ok(None),
+            Err(FindModelError::Database(_, err)) => Err(err),
+        }
+    }
+}
+
 impl<T> Model for Vec<T>
 where
     T: Model,
