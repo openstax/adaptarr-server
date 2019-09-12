@@ -13,7 +13,12 @@
     is_super: boolean,
     language: string,
     permissions: Permission[]?,
-    role: Role | null,
+    teams: [
+        {
+            id: number,
+            role: Role | null,
+        },
+    ],
 }
 ```
 
@@ -25,17 +30,20 @@ This model is used throughout the API to describe users. The fields are
 
 - `language`: user's preferred language. Server guarantees that it is supported;
 
-- `permissions`: list of permissions this user has. This includes only user's
-  inherent permissions, excluding the ones they gain from being assigned a role.
-  Do note that a user may be granted the same permission twice; once in their
-  inherent permissions, and again as part of role permissions.
+- `permissions`: list of system permissions this user has.
 
   This field is only returned to users with the [`user:edit-permissions`](
   ../#p-user-edit-permissions) permission, and in a few specific cases listed in
   endpoint documentation.
 
-- `role`: an instance of the [`Role`](../roles.md#Role) model describing role
-  assigned to the user. May be `null` if the user is not assigned a role.
+- `teams`: list of teams this user is member of. Only includes the teams which
+  the requesting user is a member of;
+
+- `teams.id`: team's ID;
+
+- `teams.role`: an instance of the [`Role`](../roles.md#Role) model describing
+  role assigned to the user in this team. May be `null` if the user is not
+  assigned a role.
 
 ### `:id`
 
@@ -54,8 +62,10 @@ them. Such exceptions are listed in endpoint documentation.
 
 ### `GET /api/v1/users`
 
-Return list of all users in the system, as a JSON array of object of the
-[`User`](#user) model.
+Return list of all users in teams current user is a member of, as a JSON array
+of object of the [`User`](#user) model.
+
+In elevated sessions a list of all users in the system is returned instead.
 
 ### `POST /api/v1/users/invite`
 
@@ -67,6 +77,8 @@ a JSON object, with following fields/properties:
     email: string,
     language: string,
     role: number?,
+    team: number,
+    permissions: TeamPermission[],
 }
 ```
 
@@ -80,10 +92,15 @@ a JSON object, with following fields/properties:
 - `role`: if present contains ID of a role to which the user will be assigned
   upon registration.
 
-Each invitation is valid for seven days.
+- `team`: ID of the team to which to invite the users. Current user must have
+  the [`member:add`](../#p-member-add) permission in this team. Additionally if
+  the user being invited doesn't yet have an account, current user must
+  additionally have the [`user:invite`](../#p-user-invite) system permission.
 
-This endpoint is only available in elevated sessions with the [`user:invite`](
-../#p-user-invite) permission.
+- `permissions`: list of permissions the new user will have in `team`. Must be
+  a subset of permissions held in `team` by current user.
+
+Each invitation is valid for seven days.
 
 [BCP47]: https://tools.ietf.org/rfc/bcp/bcp47.txt
 
@@ -111,8 +128,7 @@ object with following fields/properties:
 ```
 {
     language: string?,
-    permissions: Permission[]?,
-    role: (number | null)?,
+    permissions: SystemPermission[]?,
     name: string?,
 }
 ```
@@ -124,15 +140,8 @@ object with following fields/properties:
   which user already has but which are not present in this field will be
   removed.
 
-  This field can only be used in an elevated session with the
-  [`user:edit-permissions`](../#p-user-edit-permissions) permission.
-
-- `role`: when this field is a number it is an ID of a role to which the user
-  will be assigned, when it is `null` the user will instead be unassigned from
-  any role.
-
-  This field can only be used in an elevated session with the [`role:assign`](
-  ../#p-role-assign) permission.
+  This field can only be used by a user with the [`user:edit-permissions`](
+  ../#p-user-edit-permissions) system permission.
 
 - `name`: user's name;
 
@@ -154,8 +163,8 @@ session with the [`user:edit`](../#p-user-edit) permission.
 Get list of all drafts a user has access to, as a JSON array of objects of the
 [`Draft`](../drafts.md#Draft) model.
 
-This endpoints in only available for users with the [`editing-process:manage`](
-../#p-editing-process-manage) permission.
+This list will only include drafts in teams in which current user has the
+[`editing-process:manage`](../#p-editing-process-manage) permission.
 
 ### `PUT /api/v1/users/me/password`
 

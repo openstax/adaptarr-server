@@ -10,15 +10,19 @@ use adaptarr_models::{
     Draft,
     Invite,
     Model,
+    Optional,
     PermissionBits,
     Role,
+    SystemPermissions,
+    Team,
+    TeamPermissions,
+    TeamResource,
     User,
     UserAuthenticateError,
-    UserFields,
+    UserPublicParams,
     db::Connection,
-    permissions::InviteUser,
 };
-use adaptarr_web::{FormOrJson, Secret, Database, session::{Session, Normal}};
+use adaptarr_web::{FormOrJson, Database, session::{Session, Normal}};
 use chrono::{DateTime, Utc};
 use diesel::Connection as _;
 use failure::Fail;
@@ -52,18 +56,25 @@ pub fn configure(app: &mut ServiceConfig) {
 /// ```
 fn list_users(db: Database, session: Session)
 -> Result<Json<Vec<<User as Model>::Public>>> {
-    let permissions = session.user(&db)?.permissions(true);
+    let user = session.user(&db)?;
+    let permissions = user.permissions();
 
-    let mut fields = UserFields::empty();
+    let (users, teams) = if session.is_elevated {
+        (User::all(&db)?, None)
+    } else {
+        let teams = user.get_team_ids(&db)?;
+        let users = User::by_team(&db, &teams)?;
 
-    if permissions.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
-        fields.insert(UserFields::PERMISSIONS);
-    }
-    if permissions.contains(PermissionBits::EDIT_ROLE) {
-        fields.insert(UserFields::ROLE_PERMISSIONS);
-    }
+        (users, Some(teams))
+    };
 
-    Ok(Json(User::all(&db)?.get_public_full(&db, &fields)?))
+    let params = UserPublicParams {
+        include_permissions: permissions.contains(
+            SystemPermissions::EDIT_USER_PERMISSIONS),
+        include_teams: teams,
+    };
+
+    Ok(Json(users.get_public_full(&db, &params)?))
 }
 
 #[derive(Deserialize)]
@@ -71,6 +82,8 @@ struct InviteParams {
     email: String,
     language: LanguageTag,
     role: Option<i32>,
+    team: i32,
+    permissions: TeamPermissions,
 }
 
 #[derive(ApiError, Debug, Fail)]
@@ -88,26 +101,30 @@ struct NoSuchLocaleError;
 /// POST /users/invite
 /// ```
 fn create_invitation(
-    req: HttpRequest,
     db: Database,
     i18n: Data<I18n<'static>>,
-    secret: Data<Secret>,
-    _: Session<InviteUser>,
+    session: Session,
     params: FormOrJson<InviteParams>,
 ) -> Result<HttpResponse> {
+    let user = session.user(&db)?;
+    let team = Team::by_id(&db, params.team)?;
+    let member = team.get_member(&db, &user)?;
+
+    member.permissions().require(TeamPermissions::ADD_MEMBER)?;
+
+    let role = Option::<Role>::by_id(&db, params.role)?;
+    let invitee = User::by_email(&db, &params.email).optional()?;
+
+    if invitee.is_none() {
+        session.permissions().require(SystemPermissions::INVITE_USER)?;
+    }
+
     let locale = i18n.find_locale(&params.language).ok_or(NoSuchLocaleError)?;
+    let permissions = params.permissions & member.permissions();
+    let invite = Invite::create(
+        &db, team, &params.email, role.as_ref(), permissions)?;
 
-    let role = match params.role {
-        None => None,
-        Some(id) => Some(Role::by_id(&db, id)?),
-    };
-    let invite = Invite::create(&db, &params.email, role.as_ref())?;
-
-    let code = invite.get_code(&secret);
-    let mut url = req.url_for_static("register")?;
-    url.query_pairs_mut().append_pair("invite", &code);
-
-    invite.do_send_mail(url.as_str(), locale);
+    invite.do_send_mail(locale);
 
     Ok(HttpResponse::new(StatusCode::ACCEPTED))
 }
@@ -121,27 +138,28 @@ fn create_invitation(
 /// ```
 fn get_user(db: Database, session: Session, id: Path<UserId>)
 -> Result<Json<<User as Model>::Public>> {
-    let permissions = session.user(&db)?.permissions(true);
-    let mut fields = UserFields::empty();
+    let user = session.user(&db)?;
+    let permissions = user.permissions();
 
-    if id.is_current() {
-        fields.insert(UserFields::PERMISSIONS | UserFields::ROLE_PERMISSIONS);
-    } else if permissions.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
-        fields.insert(UserFields::PERMISSIONS);
-    }
-    if permissions.contains(PermissionBits::EDIT_ROLE) {
-        fields.insert(UserFields::ROLE_PERMISSIONS);
-    }
+    let teams = if session.is_elevated {
+        None
+    } else {
+        Some(user.get_team_ids(&db)?)
+    };
 
-    Ok(Json(id.get_user(&db, &session)?.get_public_full(&db, &fields)?))
+    let params = UserPublicParams {
+        include_permissions: id.is_current()
+            || permissions.contains(SystemPermissions::EDIT_USER_PERMISSIONS),
+        include_teams: teams,
+    };
+
+    Ok(Json(id.get_user(&db, &session)?.get_public_full(&db, &params)?))
 }
 
 #[derive(Deserialize)]
 struct UserUpdate {
     language: Option<LanguageTag>,
-    permissions: Option<PermissionBits>,
-    #[serde(default, deserialize_with = "adaptarr_util::de_optional_null")]
-    role: Option<Option<i32>>,
+    permissions: Option<SystemPermissions>,
     name: Option<String>,
 }
 
@@ -167,7 +185,7 @@ fn modify_user(
     db.transaction::<_, Error, _>(|| {
         if let Some(language) = form.language {
             if !id.is_current() {
-                permissions.require(PermissionBits::EDIT_USER)?;
+                permissions.require(SystemPermissions::EDIT_USER)?;
             }
 
             let locale = i18n.find_locale(&language).ok_or(NoSuchLocaleError)?;
@@ -176,40 +194,31 @@ fn modify_user(
 
         if let Some(name) = form.name {
             if !id.is_current() {
-                permissions.require(PermissionBits::EDIT_USER)?;
+                permissions.require(SystemPermissions::EDIT_USER)?;
             }
 
             user.set_name(db, &name)?;
         }
 
         if let Some(new_perms) = form.permissions {
-            permissions.require(PermissionBits::EDIT_USER_PERMISSIONS)?;
+            permissions.require(SystemPermissions::EDIT_USER_PERMISSIONS)?;
             user.set_permissions(db, new_perms)?;
-        }
-
-        if let Some(role) = form.role {
-            permissions.require(PermissionBits::ASSIGN_ROLE)?;
-            let role = role.map(|id| Role::by_id(db, id))
-                .transpose()?;
-
-            user.set_role(db, role.as_ref())?;
         }
 
         Ok(())
     })?;
 
-    let mut fields = UserFields::empty();
+    let params = UserPublicParams {
+        include_permissions: id.is_current()
+            || permissions.contains(SystemPermissions::EDIT_USER_PERMISSIONS),
+        include_teams: if session.is_elevated {
+            None
+        } else {
+            Some(user.get_team_ids(&db)?)
+        },
+    };
 
-    if id.is_current()  {
-        fields.insert(UserFields::PERMISSIONS | UserFields::ROLE_PERMISSIONS);
-    } else if permissions.contains(PermissionBits::EDIT_USER_PERMISSIONS) {
-        fields.insert(UserFields::PERMISSIONS);
-    }
-    if permissions.contains(PermissionBits::EDIT_ROLE) {
-        fields.insert(UserFields::ROLE_PERMISSIONS);
-    }
-
-    Ok(Json(user.get_public_full(&db, &fields)?))
+    Ok(Json(user.get_public_full(&db, &params)?))
 }
 
 /// Get list of drafts a given user has access to.
@@ -221,15 +230,15 @@ fn modify_user(
 /// ```
 fn list_user_drafts(db: Database, session: Session, id: Path<UserId>)
 -> Result<Json<Vec<<Draft as Model>::Public>>> {
+    let user = id.get_user(&db, &session)?;
+    let mut drafts = Draft::all_of(&db, user.id())?;
+
     if !id.is_current() {
-        session.user(&db)?
-            .permissions(true)
-            .require(PermissionBits::MANAGE_PROCESS)?;
+        let teams = session.user(&db)?.get_team_ids(&db)?;
+        drafts.retain(|draft| teams.contains(&draft.team_id()));
     }
 
-    let user = id.get_user(&db, &session)?;
-
-    Ok(Json(Draft::all_of(&db, user.id())?.get_public_full(&db, &user.id)?))
+    Ok(Json(drafts.get_public_full(&db, &user.id)?))
 }
 
 #[derive(Deserialize)]
@@ -282,7 +291,7 @@ fn modify_password(
 struct SessionData {
     expires: DateTime<Utc>,
     is_elevated: bool,
-    permissions: PermissionBits,
+    permissions: SystemPermissions,
 }
 
 /// Get details about current session.

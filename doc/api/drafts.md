@@ -77,8 +77,8 @@ permission.
 
 Cancel process for a draft, discarding changes.
 
-This endpoint is only available in elevated sessions with the
-[`process:manage`](../#p-process-manage) permission.
+This endpoint is only available to users with the [`process:manage`](
+../#p-process-manage) permission in the team owning the draft.
 
 #### Status codes
 
@@ -196,15 +196,15 @@ properties:
 
 - `slots.user`: details of user assigned to this slot, or `null` if no one is.
 
-This endpoint is only available in elevated session with the [`process:manage`](
-../#p-process-manage) permission.
+This endpoint is only available to users with the [`process:manage`](
+../#p-process-manage) permission in the team owning the draft.
 
 ### `PUT /api/v1/drafts/:id/process/slots/:slot`
 
 Assign a user to a slot. Accepts a JSON number.
 
-This endpoint is only available in elevated sessions with the [`process:manage`](
-../#p-process-manage) permission.
+This endpoint is only available to users with the [`process:manage`](
+../#p-process-manage) permission in the team owning the draft.
 
 #### Status codes
 

@@ -3,7 +3,7 @@ use actix_web::{
     HttpResponse,
     Responder,
     http::{StatusCode, header::{ETAG, ContentDisposition, DispositionType}},
-    web::{self, Data, Json, Payload, Path, ServiceConfig},
+    web::{self, Data, Json, Payload, ServiceConfig},
 };
 use adaptarr_error::Error;
 use adaptarr_models::{
@@ -11,8 +11,9 @@ use adaptarr_models::{
     Model,
     Resource,
     ResourceFileError,
+    Team,
     db::Pool,
-    permissions::ManageResources,
+    permissions::{ManageResources, PermissionBits, TeamPermissions},
 };
 use adaptarr_util::futures::void;
 use adaptarr_web::{
@@ -21,8 +22,9 @@ use adaptarr_web::{
     FileExt,
     FormOrJson,
     Session,
+    TeamScoped,
     etag::IfMatch,
-    multipart::{Multipart, FromMultipart, FromStrField},
+    multipart::{FromMultipart, FromStrField, Multipart},
 };
 use diesel::Connection as _;
 use futures::{Future, Stream, future};
@@ -57,14 +59,24 @@ pub fn configure(app: &mut ServiceConfig) {
 /// ```text
 /// GET /resources
 /// ```
-fn list_resources(db: Database, _: Session)
+fn list_resources(db: Database, session: Session)
 -> Result<Json<Vec<<Resource as Model>::Public>>> {
-    Ok(Json(Resource::all(&db)?.get_public()))
+    let resources = if session.is_elevated {
+        Resource::all(&db)?
+    } else {
+        let user = session.user(&db)?;
+        let teams = user.get_team_ids(&db)?;
+
+        Resource::by_team(&db, &teams)?
+    };
+
+    Ok(Json(resources.get_public()))
 }
 
 #[derive(FromMultipart)]
 struct NewResource {
     name: String,
+    team: FromStrField<i32>,
     file: Option<NamedTempFile>,
     parent: Option<FromStrField<Uuid>>,
 }
@@ -80,10 +92,18 @@ struct NewResource {
 fn create_resource(
     req: HttpRequest,
     db: Database,
-    _: Session<ManageResources>,
+    session: Session,
     data: Multipart<NewResource>,
 ) -> Result<Created<String, Json<<Resource as Model>::Public>>> {
-    let NewResource { name, file, parent } = data.into_inner();
+    let NewResource { name, team, file, parent } = data.into_inner();
+    let team = Team::by_id(&db, *team)?;
+
+    if !session.is_elevated {
+        team.get_member(&db, &session.user(&db)?)?
+            .permissions()
+            .require(TeamPermissions::MANAGE_RESOURCES)?;
+    }
+
     let parent = parent.map(|id| Resource::by_id(&db, *id)).transpose()?;
 
     let resource = db.transaction::<_, Error, _>(|| {
@@ -91,7 +111,7 @@ fn create_resource(
         let file = file.map(|file| File::from_temporary(
             &db, storage_path, file, None)).transpose()?;
 
-        Resource::create(&db, &name, file.as_ref(), parent.as_ref())
+        Resource::create(&db, &team, &name, file.as_ref(), parent.as_ref())
             .map_err(From::from)
     })?;
 
@@ -108,9 +128,9 @@ fn create_resource(
 /// ```text
 /// GET /resources/:id
 /// ```
-fn get_resource(db: Database, _: Session, id: Path<Uuid>)
+fn get_resource(scope: TeamScoped<Resource>)
 -> Result<Json<<Resource as Model>::Public>> {
-    Ok(Json(Resource::by_id(&db, *id)?.get_public()))
+    Ok(Json(scope.resource().get_public()))
 }
 
 #[derive(Deserialize)]
@@ -127,11 +147,10 @@ struct ResourceUpdate {
 /// ```
 fn update_resource(
     db: Database,
-    _: Session<ManageResources>,
-    id: Path<Uuid>,
+    scope: TeamScoped<Resource, ManageResources>,
     update: FormOrJson<ResourceUpdate>,
 ) -> Result<Json<<Resource as Model>::Public>> {
-    let mut resource = Resource::by_id(&db, *id)?;
+    let mut resource = scope.into_resource();
 
     resource.set_name(&db, &update.name)?;
 
@@ -145,11 +164,11 @@ fn update_resource(
 /// ```text
 /// GET /resources/:id/content
 /// ```
-fn get_resource_content(db: Database, _: Session, id: Path<Uuid>)
+fn get_resource_content(db: Database, scope: TeamScoped<Resource>)
 -> Result<impl Responder> {
     let storage_path = &adaptarr_models::Config::global().storage.path;
 
-    Ok(Resource::by_id(&db, *id)?
+    Ok(scope.resource()
         .get_file(&db)?
         .stream(storage_path)?
         .set_content_disposition(ContentDisposition {
@@ -168,15 +187,11 @@ fn get_resource_content(db: Database, _: Session, id: Path<Uuid>)
 fn update_resource_content(
     db: Database,
     pool: Data<Pool>,
-    _: Session<ManageResources>,
-    id: Path<Uuid>,
+    scope: TeamScoped<Resource, ManageResources>,
     if_match: IfMatch,
     payload: Payload,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
-    let mut resource = match Resource::by_id(&db, *id) {
-        Ok(resource) => resource,
-        Err(err) => return Box::new(future::err(err.into())),
-    };
+    let mut resource = scope.into_resource();
 
     if resource.is_directory() {
         return Box::new(future::err(ResourceFileError::IsADirectory.into()));

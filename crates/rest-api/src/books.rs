@@ -9,18 +9,22 @@ use adaptarr_error::Error;
 use adaptarr_models::{
     Book,
     BookPart,
+    FindModelError,
     Model,
     NewTree,
+    Team,
+    TeamResource,
     Tree,
-    permissions::EditBook,
+    permissions::{EditBook, PermissionBits, TeamPermissions, SystemPermissions},
     processing::import::{Importer, ImportBook, ReplaceBook},
 };
 use adaptarr_web::{
     ContentType,
-    Database,
     Created,
+    Database,
     Session,
-    multipart::{Multipart, FromMultipart},
+    TeamScoped,
+    multipart::{FromMultipart, FromStrField, Multipart},
 };
 use diesel::Connection as _;
 use futures::{Future, Stream, future};
@@ -67,14 +71,24 @@ pub fn configure(cfg: &mut ServiceConfig) {
 /// ```text
 /// GET /books
 /// ```
-fn list_books(db: Database, _: Session)
+fn list_books(db: Database, session: Session)
 -> Result<Json<Vec<<Book as Model>::Public>>> {
-    Ok(Json(Book::all(&db)?.get_public()))
+    let books = if session.permissions().contains(SystemPermissions::MANAGE_TEAM) {
+        Book::all(&db)?
+    } else {
+        let user = session.user(&db)?;
+        let teams = user.get_team_ids(&db)?;
+
+        Book::by_team(&db, &teams)?
+    };
+
+    Ok(Json(books.get_public()))
 }
 
 #[derive(Deserialize)]
 struct NewBook {
     title: String,
+    team: i32,
 }
 
 /// Create a new book.
@@ -85,16 +99,35 @@ struct NewBook {
 /// POST /books
 /// Content-Type: application/json
 /// ```
-fn create_book(req: HttpRequest, db: Database, _: Session, form: Json<NewBook>)
--> Result<Created<String, Json<<Book as Model>::Public>>> {
-    let book = Book::create(&db, &form.title)?;
-    let location = format!("{}/api/v1/books/{}", req.app_config().host(), book.id());
+fn create_book(
+    req: HttpRequest,
+    db: Database,
+    session: Session,
+    form: Json<NewBook>,
+) -> Result<Created<String, Json<<Book as Model>::Public>>> {
+    let team = Team::by_id(&db, form.team)?;
+
+    if !session.is_elevated {
+        team.get_member(&db, &session.user(&db)?)
+            .map_err(|err| match err {
+                FindModelError::NotFound(_) => FindModelError::<Book>::not_found(),
+                FindModelError::Database(_, err) =>
+                    FindModelError::<Book>::from(err),
+            })?
+            .permissions()
+            .require(TeamPermissions::EDIT_BOOK)?;
+    }
+
+    let book = Book::create(&db, &team, &form.title)?;
+    let location = format!(
+        "{}/api/v1/books/{}", req.app_config().host(), book.id());
     Ok(Created(location, Json(book.get_public())))
 }
 
 #[derive(FromMultipart)]
 struct NewBookZip {
     title: String,
+    team: FromStrField<i32>,
     file: NamedTempFile,
 }
 
@@ -108,14 +141,47 @@ struct NewBookZip {
 /// ```
 fn create_book_from_zip(
     req: HttpRequest,
+    db: Database,
     importer: Data<Addr<Importer>>,
-    session: Session<EditBook>,
+    session: Session,
     data: Multipart<NewBookZip>,
 ) -> Box<dyn Future<Item = Created<String, Json<<Book as Model>::Public>>, Error = Error>> {
-    let NewBookZip { title, file } = data.into_inner();
+    let NewBookZip { title, team, file } = data.into_inner();
+
+    let team = match Team::by_id(&db, *team) {
+        Ok(team) => team,
+        Err(err) => return Box::new(future::err(err.into())),
+    };
+
+    match session.user(&db)
+        .map_err(Error::from)
+        .and_then(|user| {
+            if session.is_elevated {
+                Ok(TeamPermissions::all())
+            } else {
+                team.get_member(&db, &user)
+                    .map(|tm| tm.permissions())
+                    .map_err(|err| match err {
+                        FindModelError::NotFound(_) =>
+                            FindModelError::<Book>::not_found(),
+                        FindModelError::Database(_, err) =>
+                            FindModelError::<Book>::from(err),
+                    })
+                    .map_err(Error::from)
+            }
+        })
+        .and_then(|permissions| {
+            permissions
+                .require(TeamPermissions::EDIT_BOOK)
+                .map_err(Error::from)
+        })
+    {
+        Ok(()) => (),
+        Err(err) => return Box::new(future::err(err)),
+    }
 
     Box::new(importer.send(ImportBook {
-        title, file,
+        title, team, file,
         actor: session.user_id().into(),
     })
         .from_err::<Error>()
@@ -134,9 +200,8 @@ fn create_book_from_zip(
 /// ```text
 /// GET /books/:id
 /// ```
-fn get_book(db: Database, _: Session, id: Path<Uuid>)
--> Result<Json<<Book as Model>::Public>> {
-    Ok(Json(Book::by_id(&db, *id)?.get_public()))
+fn get_book(scope: TeamScoped<Book>) -> Result<Json<<Book as Model>::Public>> {
+    Ok(Json(scope.resource().get_public()))
 }
 
 #[derive(Deserialize)]
@@ -154,11 +219,10 @@ struct BookChange {
 /// ```
 fn update_book(
     db: Database,
-    _: Session<EditBook>,
-    id: Path<Uuid>,
+    scope: TeamScoped<Book, EditBook>,
     change: Json<BookChange>,
 ) -> Result<Json<<Book as Model>::Public>> {
-    let mut book = Book::by_id(&db, *id)?;
+    let mut book = scope.into_resource();
 
     book.set_title(&db, change.into_inner().title)?;
 
@@ -175,16 +239,17 @@ fn update_book(
 fn replace_book(
     db: Database,
     importer: Data<Addr<Importer>>,
-    session: Session<EditBook>,
-    id: Path<Uuid>,
+    scope: TeamScoped<Book, EditBook>,
+    session: Session,
     payload: Payload,
 ) -> Box<dyn Future<Item = Json<<Book as Model>::Public>, Error = Error>> {
-    let book = match Book::by_id(&db, *id) {
-        Ok(book) => book,
-        Err(err) => return Box::new(future::err(err.into())),
-    };
+    let book = scope.into_resource();
     let file = match NamedTempFile::new() {
         Ok(file) => file,
+        Err(err) => return Box::new(future::err(err.into())),
+    };
+    let team = match book.get_team(&db) {
+        Ok(team) => team,
         Err(err) => return Box::new(future::err(err.into())),
     };
 
@@ -195,7 +260,7 @@ fn replace_book(
             Err(err) => future::err(err),
         })
         .and_then(move |file| importer.send(ReplaceBook {
-            book, file,
+            team, book, file,
             actor: session.user_id().into(),
         }).from_err())
         .and_then(|r| future::result(r).from_err())
@@ -210,10 +275,9 @@ fn replace_book(
 /// ```text
 /// DELETE /books/:id
 /// ```
-fn delete_book(db: Database, _: Session<EditBook>, id: Path<Uuid>)
+fn delete_book(db: Database, scope: TeamScoped<Book, EditBook>)
 -> Result<HttpResponse> {
-    Book::by_id(&db, *id)?.delete(&db)?;
-
+    scope.into_resource().delete(&db)?;
     Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
 
@@ -224,9 +288,9 @@ fn delete_book(db: Database, _: Session<EditBook>, id: Path<Uuid>)
 /// ```text
 /// GET /books/:id/parts
 /// ```
-fn book_contents(db: Database, _: Session, id: Path<Uuid>)
+fn book_contents(db: Database, scope: TeamScoped<Book>)
 -> Result<Json<Tree>> {
-    Ok(Json(BookPart::by_id(&db, (*id, 0))?.get_tree(&db)?))
+    Ok(Json(scope.resource().root_part(&db)?.get_tree(&db)?))
 }
 
 #[derive(Deserialize)]
@@ -247,15 +311,15 @@ struct NewTreeRoot {
 fn create_part(
     req: HttpRequest,
     db: Database,
-    _: Session<EditBook>,
-    book: Path<Uuid>,
+    scope: TeamScoped<Book, EditBook>,
     tree: Json<NewTreeRoot>,
 ) -> Result<Created<String, Json<Tree>>> {
     let NewTreeRoot { tree, parent, index } = tree.into_inner();
-    let parent = BookPart::by_id(&db, (*book, parent))?;
+    let book = scope.resource();
+    let parent = book.get_part(&db, parent)?;
     let tree = parent.create_tree(&db, index, tree)?;
     let location = format!("{}/api/v1/books/{}/parts/{}",
-        req.app_config().host(), book, tree.number);
+        req.app_config().host(), book.id(), tree.number);
 
     Ok(Created(location, Json(tree)))
 }
@@ -267,9 +331,10 @@ fn create_part(
 /// ```text
 /// GET /books/:id/parts/:number
 /// ```
-fn get_part(db: Database, _: Session, id: Path<(Uuid, i32)>)
+fn get_part(db: Database, scope: TeamScoped<Book>, id: Path<(Uuid, i32)>)
 -> Result<Json<<BookPart as Model>::Public>> {
-    Ok(Json(BookPart::by_id(&db, *id)?.get_public()))
+    let (_, part_id) = id.into_inner();
+    Ok(Json(scope.resource().get_part(&db, part_id)?.get_public()))
 }
 
 /// Delete a part from a book.
@@ -279,9 +344,14 @@ fn get_part(db: Database, _: Session, id: Path<(Uuid, i32)>)
 /// ```text
 /// DELETE /book/:id/parts/:number
 /// ```
-fn delete_part(db: Database, _: Session<EditBook>, id: Path<(Uuid, i32)>)
--> Result<HttpResponse> {
-    BookPart::by_id(&db, *id)?.delete(&db)?;
+fn delete_part(
+    db: Database,
+    scope: TeamScoped<Book, EditBook>,
+    id: Path<(Uuid, i32)>,
+) -> Result<HttpResponse> {
+    let (_, part_id) = id.into_inner();
+
+    scope.resource().get_part(&db, part_id)?.delete(&db)?;
 
     Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
@@ -308,18 +378,19 @@ struct PartLocation {
 /// ```
 fn update_part(
     db: Database,
-    _: Session<EditBook>,
+    scope: TeamScoped<Book, EditBook>,
     id: Path<(Uuid, i32)>,
     update: Json<PartUpdate>,
 ) -> Result<HttpResponse> {
     let PartUpdate { title, location } = update.into_inner();
-    let (book, part) = id.into_inner();
+    let (_, part_id) = id.into_inner();
 
-    let mut part = BookPart::by_id(&db, (book, part))?;
+    let book = scope.into_resource();
+    let mut part = book.get_part(&db, part_id)?;
 
     let parent = location.as_ref()
         .map_or(Ok(None), |location|
-            BookPart::by_id(&db, (book, location.parent))
+            book.get_part(&db, location.parent)
                 .map(|part| Some((part, location.index)))
         )?;
 

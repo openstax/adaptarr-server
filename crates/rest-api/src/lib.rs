@@ -10,7 +10,7 @@ mod events;
 mod modules;
 mod process;
 mod resources;
-mod roles;
+mod teams;
 mod users;
 
 pub use self::config::Config;
@@ -28,7 +28,7 @@ pub fn configure(cfg: &mut ServiceConfig) {
             .configure(modules::configure)
             .configure(process::configure)
             .configure(resources::configure)
-            .configure(roles::configure)
+            .configure(teams::configure)
             .configure(users::configure)
     );
 }

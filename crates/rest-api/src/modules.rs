@@ -12,10 +12,11 @@ use adaptarr_models::{
     File,
     Model,
     Module,
+    Team,
     User,
     XrefTarget,
     editing::Process,
-    permissions::{EditModule, ManageProcess},
+    permissions::{EditModule, ManageProcess, PermissionBits, TeamPermissions},
     processing::import::{Importer, ImportModule, ReplaceModule},
 };
 use adaptarr_web::{
@@ -25,7 +26,8 @@ use adaptarr_web::{
     FileExt,
     FormOrJson,
     Session,
-    multipart::{FromMultipart, Multipart},
+    TeamScoped,
+    multipart::{FromMultipart, FromStrField, Multipart},
 };
 use futures::{Future, Stream, future};
 use serde::{Deserialize, Serialize};
@@ -70,14 +72,24 @@ pub fn configure(app: &mut ServiceConfig) {
 /// ```text
 /// Get /modules
 /// ```
-fn list_modules(db: Database, _: Session)
+fn list_modules(db: Database, session: Session)
 -> Result<Json<Vec<<Module as Model>::Public>>> {
-    Ok(Json(Module::all(&db)?.get_public_full(&db, &())?))
+    let modules = if session.is_elevated {
+        Module::all(&db)?
+    } else {
+        let user = session.user(&db)?;
+        let teams = user.get_team_ids(&db)?;
+
+        Module::by_team(&db, &teams)?
+    };
+
+    Ok(Json(modules.get_public_full(&db, &())?))
 }
 
 #[derive(Deserialize)]
 struct NewModule {
     title: String,
+    team: i32,
     language: String,
 }
 
@@ -92,9 +104,17 @@ struct NewModule {
 fn create_module(
     req: HttpRequest,
     db: Database,
-    _: Session<EditModule>,
+    session: Session,
     data: Json<NewModule>,
 ) -> Result<Created<String, Json<<Module as Model>::Public>>> {
+    let team = Team::by_id(&db, data.team)?;
+
+    if !session.is_elevated {
+        team.get_member(&db, &session.user(&db)?)?
+            .permissions()
+            .require(TeamPermissions::EDIT_MODULE)?;
+    }
+
     let content = format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
         <document xmlns="http://cnx.rice.edu/cnxml" cnxml-version="0.7" id="new" module-id="new">
@@ -111,7 +131,7 @@ fn create_module(
     let index = File::from_data(&db, storage_path, &content, Some(CNXML_MIME))?;
 
     let module = Module::create::<&str, _>(
-        &db, &data.title, &data.language, index, std::iter::empty())?;
+        &db, &team, &data.title, &data.language, index, std::iter::empty())?;
 
     let public = module.get_public_full(&db, &())?;
 
@@ -124,6 +144,7 @@ fn create_module(
 #[derive(FromMultipart)]
 struct NewModuleZip {
     title: String,
+    team: FromStrField<i32>,
     file: NamedTempFile,
 }
 
@@ -139,12 +160,39 @@ fn create_module_from_zip(
     req: HttpRequest,
     db: Database,
     importer: Data<Addr<Importer>>,
-    session: Session<EditModule>,
+    session: Session,
     data: Multipart<NewModuleZip>,
 ) -> Box<dyn Future<Item = Created<String, Json<<Module as Model>::Public>>, Error = Error>> {
-    let NewModuleZip { title, file } = data.into_inner();
+    let NewModuleZip { title, team, file } = data.into_inner();
+
+    let team = match Team::by_id(&db, *team) {
+        Ok(team) => team,
+        Err(err) => return Box::new(future::err(err.into())),
+    };
+
+    match session.user(&db)
+        .map_err(Error::from)
+        .and_then(|user| {
+            if session.is_elevated {
+                Ok(TeamPermissions::all())
+            } else {
+                team.get_member(&db, &user)
+                    .map(|tm| tm.permissions())
+                    .map_err(Error::from)
+            }
+        })
+        .and_then(|permissions| {
+            permissions
+                .require(TeamPermissions::EDIT_MODULE)
+                .map_err(Error::from)
+        })
+    {
+        Ok(()) => (),
+        Err(err) => return Box::new(future::err(err)),
+    }
 
     Box::new(importer.send(ImportModule {
+        team,
         title,
         file,
         actor: session.user_id().into(),
@@ -168,9 +216,9 @@ fn create_module_from_zip(
 /// ```text
 /// GET /modules/:id
 /// ```
-fn get_module(db: Database, _: Session, id: Path<Uuid>)
+fn get_module(db: Database, scope: TeamScoped<Module>)
 -> Result<Json<<Module as Model>::Public>> {
-    Ok(Json(Module::by_id(&db, *id)?.get_public_full(&db, &())?))
+    Ok(Json(scope.resource().get_public_full(&db, &())?))
 }
 
 #[derive(Deserialize)]
@@ -190,12 +238,12 @@ struct BeginProcess {
 fn begin_process(
     req: HttpRequest,
     db: Database,
-    session: Session<ManageProcess>,
-    id: Path<Uuid>,
+    scope: TeamScoped<Module, ManageProcess>,
+    session: Session,
     data: FormOrJson<BeginProcess>,
 ) -> Result<Created<String, Json<<Draft as Model>::Public>>> {
     let data = data.into_inner();
-    let module = Module::by_id(&db, id.into_inner())?;
+    let module = scope.resource();
     let process = Process::by_id(&db, data.process)?;
     let version = process.get_current(&db)?;
 
@@ -224,14 +272,11 @@ fn begin_process(
 fn replace_module(
     db: Database,
     importer: Data<Addr<Importer>>,
-    session: Session<EditModule>,
-    id: Path<Uuid>,
+    scope: TeamScoped<Module, EditModule>,
+    session: Session,
     payload: Payload,
 ) -> Box<dyn Future<Item = Json<<Module as Model>::Public>, Error = Error>> {
-    let module = match Module::by_id(&db, *id) {
-        Ok(module) => module,
-        Err(err) => return Box::new(future::err(err.into())),
-    };
+    let module = scope.into_resource();
     let file = match NamedTempFile::new() {
         Ok(file) => file,
         Err(err) => return Box::new(future::err(err.into())),
@@ -249,7 +294,9 @@ fn replace_module(
             actor: session.user_id().into(),
         }).from_err())
         .and_then(|r| future::result(r).from_err())
-        .and_then(move |module| module.get_public_full(&db, &()).map_err(Error::from))
+        .and_then(move |module| {
+            module.get_public_full(&db, &()).map_err(Error::from)
+        })
         .map(Json))
 }
 
@@ -299,9 +346,9 @@ struct FileInfo {
 /// ```text
 /// GET /modules/:id/files
 /// ```
-fn list_files(db: Database, _: Session, id: Path<Uuid>)
+fn list_files(db: Database, scope: TeamScoped<Module>)
 -> Result<Json<Vec<FileInfo>>> {
-    Ok(Json(Module::by_id(&db, *id)?
+    Ok(Json(scope.resource()
         .get_files(&db)?
         .into_iter()
         .map(|(name, file)| FileInfo {
@@ -318,12 +365,12 @@ fn list_files(db: Database, _: Session, id: Path<Uuid>)
 /// ```text
 /// GET /modules/:id/files/:name
 /// ```
-fn get_file(db: Database, _: Session, path: Path<(Uuid, String)>)
+fn get_file(db: Database, scope: TeamScoped<Module>, path: Path<(Uuid, String)>)
 -> Result<impl Responder> {
-    let (id, name) = path.into_inner();
+    let (_, name) = path.into_inner();
 
     let storage_path = &adaptarr_models::Config::global().storage.path;
-    Ok(Module::by_id(&db, id)?.get_file(&db, &name)?.stream(storage_path))
+    Ok(scope.resource().get_file(&db, &name)?.stream(storage_path))
 }
 
 /// Get a list of all possible cross-reference targets within a module.
@@ -333,9 +380,9 @@ fn get_file(db: Database, _: Session, path: Path<(Uuid, String)>)
 /// ```text
 /// GET /modules/:id/xref-targets
 /// ```
-fn list_xref_targets(db: Database, _: Session, id: Path<Uuid>)
+fn list_xref_targets(db: Database, scope: TeamScoped<Module>)
 -> Result<Json<Vec<<XrefTarget as Model>::Public>>> {
-    Ok(Json(Module::by_id(&db, *id)?.xref_targets(&db)?.get_public()))
+    Ok(Json(scope.resource().xref_targets(&db)?.get_public()))
 }
 
 /// Get a list of all books containing this module in them.
@@ -345,7 +392,7 @@ fn list_xref_targets(db: Database, _: Session, id: Path<Uuid>)
 /// ```text
 /// GET /modules/:id/books
 /// ```
-fn list_containing_books(db: Database, _: Session, id: Path<Uuid>)
+fn list_containing_books(db: Database, scope: TeamScoped<Module>)
 -> Result<Json<Vec<Uuid>>> {
-    Ok(Json(Module::by_id(&db, *id)?.get_books(&db)?))
+    Ok(Json(scope.resource().get_books(&db)?))
 }

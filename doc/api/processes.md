@@ -211,15 +211,24 @@ Used to represent a single link in an editing process.
 
 ### `GET /api/v1/processes`
 
-Return list of all processes in the system, as a JSON array of objects of the
-[`Process`](#process) model.
+Return list of all processes in teams current user is a member of, as a JSON
+array of objects of the [`Process`](#process) model.
+
+In elevated sessions list of all processes in the system is returned instead.
 
 ### `POST /api/v1/processes`
 
-Create a new process. Accepts a JSON object of the [`NewTree`](#newtree) model.
+Create a new process. Accepts a JSON object of the [`NewTree`](#newtree) model,
+with following additional properties:
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-process-edit) permission.
+```
+{
+    team: number,
+}
+```
+
+- `team`: ID of the team in which to create the process. Current user must have
+  the [`editing-process:edit`](../#p-process-edit) permission in this team.
 
 #### Status codes
 
@@ -287,8 +296,8 @@ Modify a process. Accepts a JSON object with following properties
 
 - `name`: process's new name.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status code
 
@@ -299,8 +308,8 @@ This endpoint is only available in elevated sessions with the
 
 Delete a process. Only processes which have never been used can be deleted.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status codes
 
@@ -322,8 +331,8 @@ Modify a slot in the newest version of a process. Accepts the same body as
 [`PUT /api/v1/processes/:id/versions/:version/slots/:slot`](
 #put-apiv1processesidversionsversionslotsslot).
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 ### `GET /api/v1/processes/:id/steps`
 
@@ -341,8 +350,8 @@ Modify a step in the newest version of a process. Accepts the same body as
 [`PUT /api/v1/processes/:id/versions/:version/steps/:step`](
 #put-apiv1processesidversionsversionstepsstep).
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 ### `GET /api/v1/processes/:id/steps/:step/links`
 
@@ -360,8 +369,8 @@ Modify a link in the newest version of a process. Accepts the same body as
 [`PUT /api/v1/processes/:id/versions/:version/steps/:step/links/:slot/:target`](
 #put-apiv1processesidversionsversionstepssteplinksslottarget).
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 ### `GET /api/v1/processes/:id/structure`
 
@@ -378,8 +387,8 @@ Return list of all versions of a process, as a JSON array of objects of the
 Create a new version of an editing process. Accepts a JSON object of the
 [`NewTree`](#newtree) model.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status codes
 
@@ -421,8 +430,8 @@ following properties:
 - `roles`: slot's new role limit.
 
 Optional fields may be omitted, in which case the corresponding property will
-remain unchanged. This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+remain unchanged. This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status codes
 
@@ -455,8 +464,8 @@ following properties:
 
 - `name`: step's new name.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status codes
 
@@ -489,8 +498,8 @@ following properties:
 
 - `name`: link's new name.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status codes
 
