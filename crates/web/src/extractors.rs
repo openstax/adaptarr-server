@@ -3,17 +3,28 @@ use actix_web::{
     FromRequest,
     HttpMessage,
     HttpRequest,
+    HttpResponse,
+    ResponseError,
     dev::Payload,
     error::ErrorUnsupportedMediaType,
-    http::header::ACCEPT_LANGUAGE,
+    http::{StatusCode, header::ACCEPT_LANGUAGE},
     web::{Form, FormConfig, Json, JsonConfig},
 };
 use adaptarr_error::{ApiError, Error};
 use adaptarr_i18n::{I18n, LanguageRange};
-use adaptarr_models::db::{Connection, Pool, PooledConnection};
+use adaptarr_models::{
+    FindModelError,
+    Model,
+    TeamMember,
+    TeamResource,
+    db::{Connection, Pool, PooledConnection},
+    permissions::{NoPermissions, Permission, PermissionBits, TeamPermissions},
+};
 use failure::Fail;
 use futures::future::{self, Future, FutureResult};
-use std::{ops::Deref, str::FromStr};
+use std::{marker::PhantomData, ops::Deref, str::FromStr};
+
+use crate::session::{Normal, Session};
 
 /// Extract preferred locale from request's headers.
 pub struct Locale<'a>(&'a adaptarr_i18n::Locale);
@@ -154,16 +165,16 @@ pub struct Database(PooledConnection);
 
 impl FromRequest for Database {
     type Error = Error;
-    type Future = FutureResult<Database, Error>;
+    type Future = Result<Database, Error>;
     type Config = ();
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         let pool = match req.app_data::<Pool>() {
             Some(pool) => pool,
-            None => return future::err(DatabasePoolMissing.into()),
+            None => return Err(DatabasePoolMissing.into()),
         };
 
-        future::result(pool.get().map_err(Error::from).map(Database))
+        pool.get().map_err(Error::from).map(Database)
     }
 }
 
@@ -203,5 +214,101 @@ impl std::ops::Deref for Secret {
 
     fn deref(&self) -> &[u8] {
         &self.secret
+    }
+}
+
+/// Limit access to a route to users who are members of a specific team, and
+/// have required permissions in that team.
+///
+/// The first type argument is a [`TeamResource`] to which the access is being
+/// limited. Its ID must be parsable from a string, and must be specified in the
+/// first fragment of route's path.
+///
+/// The second type argument is a [`Permission`] describing the set of required
+/// permissions. This argument can be omitted to indicate, that no permissions
+/// are required.
+pub struct TeamScoped<T, P = NoPermissions<TeamPermissions>>
+where
+    T: TeamResource,
+    P: Permission<Bits = TeamPermissions>
+{
+    resource: T,
+    permissions: TeamPermissions,
+    _phantom: PhantomData<(*const T, *const P)>
+}
+
+impl<T, P> TeamScoped<T, P>
+where
+    T: TeamResource,
+    P: Permission<Bits = TeamPermissions>
+{
+    /// Get permissions current user has in this scope.
+    pub fn permissions(&self) -> TeamPermissions {
+        self.permissions
+    }
+
+    /// Get reference to the resource this guard is scoped to.
+    pub fn resource(&self) -> &T {
+        &self.resource
+    }
+
+    /// Get the resource this guard is scoped to.
+    pub fn into_resource(self) -> T {
+        self.resource
+    }
+}
+
+impl<T, P> FromRequest for TeamScoped<T, P>
+where
+    T: TeamResource + 'static,
+    <T as Model>::Id: FromStr,
+    <<T as Model>::Id as FromStr>::Err: Fail,
+    P: Permission<Bits = TeamPermissions>,
+{
+    type Error = actix_web::Error;
+    type Future = Result<Self, actix_web::Error>;
+    type Config = ();
+
+    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
+        let resource_id: <T as Model>::Id = req.match_info()[0]
+            .parse()
+            .map_err(ParsePathError)?;
+        let session = Session::<Normal>::extract(req)?;
+        let db = Database::extract(req)?;
+        let resource = T::by_id(&db, resource_id).map_err(Error::from)?;
+
+        if session.is_elevated {
+            return Ok(TeamScoped {
+                resource,
+                permissions: TeamPermissions::all(),
+                _phantom: PhantomData,
+            });
+        }
+
+        let membership = TeamMember::by_id(
+            &db,
+            (resource.team_id(), session.user),
+        ).map_err(|err| match err {
+            FindModelError::NotFound(_) => FindModelError::<T>::not_found(),
+            FindModelError::Database(_, err) => FindModelError::<T>::from(err),
+        }).map_err(Error::from)?;
+
+        membership.permissions().require(P::bits()).map_err(Error::from)?;
+
+        Ok(TeamScoped {
+            resource,
+            permissions: membership.permissions(),
+            _phantom: PhantomData,
+        })
+    }
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "{}", _0)]
+struct ParsePathError<E: Fail>(#[cause] E);
+
+impl<E: Fail> ResponseError for ParsePathError<E> {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::new(StatusCode::BAD_REQUEST)
     }
 }
