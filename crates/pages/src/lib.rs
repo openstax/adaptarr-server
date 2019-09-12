@@ -630,6 +630,5 @@ where
 {
     PAGES.render_i18n(name, context, locale)
         .map(|r| HttpResponse::build(code).body(r))
-        // .map_err(Into::into)
-        .map(Ok).expect("TODO: errors")
+        .map_err(Into::into)
 }
