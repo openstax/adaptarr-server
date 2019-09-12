@@ -77,6 +77,16 @@ register-error = { $code ->
 
 
 
+## Team invitation page
+
+join-team-title = You have been invited to join { $team }
+
+join-team-reject = Reject
+
+join-team-accept = Join { $team }
+
+
+
 ## Password reset page
 
 reset-field-password = Password

@@ -11,7 +11,6 @@ use adaptarr_models::{
     User,
     Model,
     PasswordResetToken,
-    UserFields,
     Invite,
     audit,
 };
@@ -28,6 +27,7 @@ type Result<T, E=adaptarr_error::Error> = std::result::Result<T, E>;
 pub fn configure(app: &mut ServiceConfig) {
     app
         .service(web::resource("/login")
+            .name("login")
             .route(web::get().to(login))
             .route(web::post().to(do_login))
         )
@@ -48,6 +48,11 @@ pub fn configure(app: &mut ServiceConfig) {
             .name("register")
             .route(web::get().to(register))
             .route(web::post().to(do_register))
+        )
+        .service(web::resource("/join/team")
+            .name("join-team")
+            .route(web::get().to(join_team))
+            .route(web::post().to(do_join_team))
         )
     ;
 }
@@ -347,7 +352,6 @@ struct ResetMailArgs<'a> {
 fn do_reset(
     req: HttpRequest,
     db: Database,
-    i18n: Data<I18n<'static>>,
     secret: Data<Secret>,
     locale: Locale<'static>,
     form: Form<ResetForm>,
@@ -379,7 +383,7 @@ fn do_reset(
             url.query_pairs_mut().append_pair("token", &code);
 
             user.do_send_mail("reset", "mail-reset-subject", ResetMailArgs {
-                user: user.get_public_full(&db, &UserFields::empty())?,
+                user: user.get_public_full(&db, &Default::default())?,
                 url: url.as_str(),
             });
 
@@ -470,6 +474,7 @@ struct RegisterTemplate<'s> {
 /// GET /register
 /// ```
 fn register(
+    req: HttpRequest,
     db: Database,
     i18n: Data<I18n>,
     secret: Data<Secret>,
@@ -477,6 +482,15 @@ fn register(
     query: Query<RegisterQuery>,
 ) -> Result<HttpResponse> {
     let invite = Invite::from_code(&db, &secret, &query.invite)?;
+
+    if invite.is_for_existing() {
+        let mut url = req.url_for_static("join-team")?;
+        url.query_pairs_mut().append_pair("invite", &query.invite);
+
+        return Ok(HttpResponse::SeeOther()
+            .header("Location", url.as_str())
+            .finish());
+    }
 
     render(locale.as_ref(), "register.html", &RegisterTemplate {
         error: None,
@@ -541,6 +555,10 @@ fn do_register(
         }
     };
 
+    if invite.is_for_existing() {
+        return Ok(HttpResponse::new(StatusCode::BAD_REQUEST));
+    }
+
     if password != password1 {
         return render_code(
             locale.as_ref(),
@@ -571,7 +589,7 @@ fn do_register(
         );
     }
 
-    let user = match invite.fulfil(
+    let user = match invite.fulfil_new(
         &db,
         &name,
         &password,
@@ -599,6 +617,109 @@ fn do_register(
     };
 
     Session::<Normal>::create(&req, &user, false);
+
+    Ok(HttpResponse::SeeOther().header("Location", "/").finish())
+}
+
+/// Render team joining form.
+///
+/// ## Method
+///
+/// ```text
+/// GET /join/team
+/// ```
+fn join_team(
+    req: HttpRequest,
+    db: Database,
+    secret: Data<Secret>,
+    locale: Locale<'static>,
+    session: Option<Session>,
+    query: Query<RegisterQuery>,
+) -> Result<HttpResponse> {
+    let session = match session {
+        Some(session) => session,
+        None => {
+            let mut url = req.url_for_static("login")?;
+            url.query_pairs_mut().append_pair("next", &req.uri().to_string());
+
+            return Ok(HttpResponse::SeeOther()
+                .header("Location", url.as_str())
+                .finish());
+        }
+    };
+
+    let invite = Invite::from_code(&db, &secret, &query.invite)?;
+
+    let user = match invite.user() {
+        Some(user) => user,
+        None => {
+            let mut url = req.url_for_static("register")?;
+            url.query_pairs_mut().append_pair("invite", &query.invite);
+
+            return Ok(HttpResponse::SeeOther()
+                .header("Location", url.as_str())
+                .finish());
+        }
+    };
+
+    if user.id() != session.user {
+        return Ok(HttpResponse::new(StatusCode::NOT_FOUND));
+    }
+
+    render(locale.as_ref(), "join-team.html", &JoinTemplate {
+        invite: &query.invite,
+        team: &invite.team().name,
+    })
+}
+
+#[derive(Serialize)]
+struct JoinTemplate<'s> {
+    invite: &'s str,
+    team: &'s str,
+}
+
+#[derive(Deserialize)]
+struct JoinForm {
+    invite: String,
+    action: JoinAction,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum JoinAction {
+    Reject,
+    Accept,
+}
+
+/// Fulfil a team invitation.
+///
+/// ## Method
+///
+/// ```
+/// POST /join/team
+/// ```
+fn do_join_team(
+    db: Database,
+    secret: Data<Secret>,
+    session: Session,
+    form: Form<JoinForm>,
+) -> Result<HttpResponse> {
+    let JoinForm { invite: invite_code, action } = form.into_inner();
+    let invite = Invite::from_code(&db, &secret, &invite_code)?;
+
+    let user = match invite.user() {
+        Some(user) => user,
+        None => return Ok(HttpResponse::new(StatusCode::BAD_REQUEST)),
+    };
+
+    if user.id() != session.user {
+        return Ok(HttpResponse::new(StatusCode::NOT_FOUND));
+    }
+
+    match action {
+        JoinAction::Reject => invite.delete(&db)?,
+        JoinAction::Accept => { invite.fulfil_existing(&db)?; }
+    }
 
     Ok(HttpResponse::SeeOther().header("Location", "/").finish())
 }
