@@ -20,7 +20,12 @@ use adaptarr_models::{
         schema::sessions,
     },
     models::{AssertExists, FindModelError, Model, User},
-    permissions::{Permission, PermissionBits, RequirePermissionsError},
+    permissions::{
+        Permission,
+        PermissionBits,
+        RequirePermissionsError,
+        SystemPermissions,
+    },
 };
 use chrono::{Duration, Utc};
 use diesel::{prelude::*, result::{Error as DbError}};
@@ -140,11 +145,9 @@ impl SessionManager {
         // Downgrade elevated session back to a normal session after some
         // time.
         if ses.is_elevated && diff > Duration::minutes(SUPER_EXPIRATION) {
-            let permissions = ses.permissions & PermissionBits::normal().bits();
-
             return Validation::Update(SessionUpdate {
                 is_elevated: Some(false),
-                permissions: Some(permissions),
+                permissions: Some(ses.permissions),
                 .. SessionUpdate::default()
             }, true);
         }
@@ -323,30 +326,26 @@ where
         let manager = self.manager.clone();
         Box::new(self.service.call(req)
             .map(move |rsp| rsp.checked_expr(|rsp| manager.after_request(rsp))))
-        // Box::new(self.service.call(req))
     }
 }
 
 impl<P> Session<P> {
     pub fn create(req: &HttpRequest, user: &User, is_elevated: bool) {
-        let mask = if is_elevated {
-            PermissionBits::elevated()
+        let permissions = if is_elevated && user.is_super {
+            SystemPermissions::all()
+        } else if is_elevated {
+            user.permissions()
         } else {
-            PermissionBits::normal()
-        };
-        let permissions = if user.is_super {
-            PermissionBits::all()
-        } else {
-            user.permissions(true)
+            SystemPermissions::empty()
         };
 
         let now = Utc::now();
         let new = NewSession {
             user: user.id,
-            is_elevated,
+            is_elevated: user.is_super && is_elevated,
             expires: now + Duration::days(MAX_DURATION),
             last_used: now,
-            permissions: (permissions & mask).bits(),
+            permissions: permissions.bits(),
         };
 
         let mut extensions = req.extensions_mut();
@@ -380,8 +379,8 @@ impl<P> Session<P> {
         User::by_id(db, self.data.user).map_err(FindModelError::assert_exists)
     }
 
-    pub fn permissions(&self) -> PermissionBits {
-        PermissionBits::from_bits_truncate(self.data.permissions)
+    pub fn permissions(&self) -> SystemPermissions {
+        SystemPermissions::from_bits_truncate(self.data.permissions)
     }
 }
 
@@ -445,11 +444,15 @@ impl Policy for Normal {
     }
 }
 
-impl<P: Permission> Policy for P {
-    type Error = RequirePermissionsError;
+impl<P> Policy for P
+where
+    P: Permission<Bits = SystemPermissions>,
+{
+    type Error = RequirePermissionsError<P::Bits>;
 
-    fn validate(session: &DbSession) -> Validation<RequirePermissionsError> {
-        let bits = PermissionBits::from_bits_truncate(session.permissions);
+    fn validate(session: &DbSession) -> Validation<RequirePermissionsError<P::Bits>> {
+        let bits = P::Bits::from_bits(session.permissions)
+            .unwrap_or_else(P::Bits::empty);
 
         match bits.require(P::bits()) {
             Ok(()) => Validation::Pass,
