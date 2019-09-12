@@ -17,6 +17,8 @@ mod module;
 mod password;
 mod resource;
 mod role;
+mod team;
+mod team_member;
 mod user;
 mod xref_target;
 
@@ -34,12 +36,14 @@ pub use self::{
     password::PasswordResetToken,
     resource::{Resource, ResourceFileError},
     role::Role,
+    team::{Team, TeamResource},
+    team_member::TeamMember,
     user::{
         ChangePasswordError,
         CreateUserError,
-        Fields as UserFields,
         User,
         UserAuthenticateError,
+        PublicParams as UserPublicParams,
     },
     xref_target::XrefTarget,
 };

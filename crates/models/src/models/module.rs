@@ -2,6 +2,7 @@ use adaptarr_error::ApiError;
 use adaptarr_macros::From;
 use diesel::{
     Connection as _,
+    expression::dsl::any,
     prelude::*,
     result::{DatabaseErrorKind, Error as DbError},
 };
@@ -33,6 +34,8 @@ use super::{
     File,
     FindModelResult,
     Model,
+    Team,
+    TeamResource,
     User,
     XrefTarget,
     editing::{Slot, Version},
@@ -49,6 +52,7 @@ pub struct Module {
 #[derive(Debug, Serialize)]
 pub struct Public {
     pub id: Uuid,
+    pub team: i32,
     #[serde(flatten)]
     pub document: <Document as Model>::Public,
     pub process: Option<ProcessStatus>,
@@ -65,6 +69,12 @@ pub struct ProcessStatus {
 pub struct StepData {
     pub id: i32,
     pub name: String,
+}
+
+impl TeamResource for Module {
+    fn team_id(&self) -> <Team as Model>::Id {
+        self.data.team
+    }
 }
 
 impl Model for Module {
@@ -102,6 +112,7 @@ impl Model for Module {
     fn get_public(&self) -> Public {
         Public {
             id: self.data.id,
+            team: self.data.team,
             document: self.document.get_public(),
             process: None,
         }
@@ -128,7 +139,8 @@ impl Model for Module {
 
         Ok(Public {
             id: self.data.id,
-            document: self.document.get_public_full(db, ())?,
+            team: self.data.team,
+            document: self.document.get_public_full(db, &())?,
             process,
         })
     }
@@ -146,9 +158,22 @@ impl Module {
             .map(|v| v.into_iter().map(Self::from_db).collect())
     }
 
+    /// Get all modules in a team.
+    ///
+    /// *Warning*: this function is temporary and will be removed once we figure
+    /// out how to do pagination.
+    pub fn by_team(db: &Connection, teams: &[i32]) -> Result<Vec<Module>, DbError> {
+        modules::table
+            .filter(modules::team.eq(any(teams)))
+            .inner_join(documents::table)
+            .get_results::<(db::Module, db::Document)>(db)
+            .map(|v| v.into_iter().map(Self::from_db).collect())
+    }
+
     /// Create a new module.
     pub fn create<N, I>(
         db: &Connection,
+        team: &Team,
         title: &str,
         language: &str,
         index: File,
@@ -165,6 +190,7 @@ impl Module {
                 .values(&db::Module {
                     id: Uuid::new_v4(),
                     document: document.id,
+                    team: team.id(),
                 })
                 .get_result::<db::Module>(db)?;
 
@@ -235,6 +261,7 @@ impl Module {
                     drafts::module.eq(self.data.id),
                     drafts::document.eq(duplicate_document(self.document.id)),
                     drafts::step.eq(version.start),
+                    drafts::team.eq(self.data.team),
                 ))
                 .get_result::<db::Draft>(db)?;
 

@@ -9,6 +9,7 @@
 ```
 {
     id: uuid,
+    team: number,
     title: string,
     language: string,
     process: {
@@ -25,6 +26,8 @@
 This model is used throughout the API to describe modules. The fields are
 
 - `id`: module's UUID;
+
+- `team`: ID of the team owning this module;
 
 - `title`: module's title;
 

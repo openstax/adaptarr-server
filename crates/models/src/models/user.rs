@@ -2,9 +2,9 @@ use adaptarr_error::ApiError;
 use adaptarr_i18n::{LanguageTag, Locale};
 use adaptarr_macros::From;
 use adaptarr_mail::{Mailbox, Mailer, IntoSubject};
-use bitflags::bitflags;
 use diesel::{
     Connection as _,
+    expression::dsl::any,
     prelude::*,
     result::{DatabaseErrorKind, Error as DbError},
 };
@@ -17,11 +17,19 @@ use crate::{
     db::{
         Connection,
         models as db,
-        schema::{invites, users, password_reset_tokens, roles, sessions},
+        schema::{
+            invites,
+            password_reset_tokens,
+            roles,
+            sessions,
+            team_members,
+            teams,
+            users,
+        },
     },
-    permissions::PermissionBits,
+    permissions::SystemPermissions,
 };
-use super::{FindModelError, FindModelResult, Model, Role};
+use super::{FindModelError, FindModelResult, Model, Role, Team};
 
 static ARGON2_CONFIG: argon2::Config = argon2::Config {
     ad: &[],
@@ -39,7 +47,6 @@ static ARGON2_CONFIG: argon2::Config = argon2::Config {
 #[derive(Debug)]
 pub struct User {
     data: db::User,
-    role: Option<Role>,
 }
 
 /// A subset of user's data that can safely be publicly exposed.
@@ -50,47 +57,53 @@ pub struct Public {
     is_super: bool,
     language: String,
     #[serde(skip_serializing_if="Option::is_none")]
-    permissions: Option<PermissionBits>,
+    permissions: Option<SystemPermissions>,
+    #[serde(skip_serializing_if="Option::is_none")]
+    teams: Option<Vec<TeamInfo>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TeamInfo {
+    #[serde(rename = "id")]
+    team: i32,
     role: Option<<Role as Model>::Public>,
 }
 
-bitflags! {
-    /// Flags controlling which fields are included in [`User::get_public()`].
-    pub struct Fields: u32 {
-        /// Include user's permissions ([`PublicData::permissions`]).
-        const PERMISSIONS = 0x0000_0001;
-        /// Include user's role's permissions.
-        const ROLE_PERMISSIONS = 0x0000_0002;
-    }
+#[derive(Default)]
+pub struct PublicParams {
+    /// Include user's system permissions ([`PublicData::permissions`]) and team
+    /// permissions.
+    pub include_permissions: bool,
+    /// Teams to include in [`Public::teams`].
+    ///
+    /// Specifying `None` is equivalent to a vector with all team included.
+    // FIXME: This can't be a slice until generic associated types are stable.
+    pub include_teams: Option<Vec<i32>>,
 }
 
 impl Model for User {
     const ERROR_CATEGORY: &'static str = "user";
 
     type Id = i32;
-    type Database = (db::User, Option<db::Role>);
+    type Database = db::User;
     type Public = Public;
-    type PublicParams = Fields;
+    type PublicParams = PublicParams;
 
     fn by_id(db: &Connection, id: Self::Id)
     -> FindModelResult<Self> {
         users::table
             .filter(users::id.eq(id))
-            .left_join(roles::table)
-            .get_result::<(db::User, Option<db::Role>)>(db)
+            .get_result(db)
             .map(Self::from_db)
             .map_err(From::from)
     }
 
-    fn from_db((data, role): Self::Database) -> Self {
-        User {
-            data,
-            role: role.map(Model::from_db),
-        }
+    fn from_db(data: Self::Database) -> Self {
+        User { data }
     }
 
     fn into_db(self) -> Self::Database {
-        (self.data, self.role.map(Model::into_db))
+        self.data
     }
 
     fn id(&self) -> Self::Id {
@@ -106,19 +119,39 @@ impl Model for User {
             is_super,
             language: language.clone(),
             permissions: None,
-            role: self.role.as_ref().map(Model::get_public),
+            teams: None,
         }
     }
 
-    fn get_public_full(&self, db: &Connection, &fields: &Fields)
+    fn get_public_full(&self, db: &Connection, params: &PublicParams)
     -> Result<Public, DbError> {
         let db::User { id, ref name, is_super, ref language, .. } = self.data;
 
-        let permissions = if fields.contains(Fields::PERMISSIONS) {
-            Some(PermissionBits::from_bits_truncate(self.data.permissions))
+        let permissions = if params.include_permissions {
+            Some(SystemPermissions::from_bits_truncate(self.data.permissions))
         } else {
             None
         };
+
+        let teams = match params.include_teams {
+            Some(ref teams) => team_members::table
+                .filter(team_members::team.eq(any(&teams))
+                    .and(team_members::user.eq(self.data.id)))
+                .left_join(roles::table)
+                .get_results::<(db::TeamMember, Option<db::Role>)>(db)?,
+            None => team_members::table
+                .filter(team_members::user.eq(self.data.id))
+                .left_join(roles::table)
+                .get_results::<(db::TeamMember, Option<db::Role>)>(db)?,
+        }
+            .into_iter()
+            .map(|(member, role)| Ok(TeamInfo {
+                team: member.team,
+                role: role.map(|id| Role::from_db(id)
+                    .get_public_full(db, &params.include_permissions))
+                    .transpose()?,
+            }))
+            .collect::<Result<Vec<TeamInfo>, DbError>>()?;
 
         Ok(Public {
             id,
@@ -126,9 +159,7 @@ impl Model for User {
             is_super,
             language: language.clone(),
             permissions,
-            role: self.role.as_ref().map(|r|
-                r.get_public_full(db, &fields.contains(Fields::ROLE_PERMISSIONS))
-            ).transpose()?,
+            teams: Some(teams),
         })
     }
 }
@@ -137,9 +168,19 @@ impl User {
     /// Get all users.
     pub fn all(db: &Connection) -> Result<Vec<User>, DbError> {
         users::table
-            .left_join(roles::table)
-            .get_results::<(db::User, Option<db::Role>)>(db)
+            .get_results::<db::User>(db)
             .map(|v| v.into_iter().map(Self::from_db).collect())
+    }
+
+    /// Get all users in specified teams.
+    pub fn by_team(db: &Connection, teams: &[i32])
+    -> Result<Vec<User>, DbError> {
+        users::table
+            .inner_join(team_members::table)
+            .filter(team_members::team.eq(any(teams)))
+            .select(users::all_columns)
+            .get_results(db)
+            .map(Model::from_db)
     }
 
     /// Find an user by email address.
@@ -147,8 +188,7 @@ impl User {
     -> FindModelResult<User> {
         users::table
             .filter(users::email.eq(email))
-            .left_join(roles::table)
-            .get_result::<(db::User, Option<db::Role>)>(db)
+            .get_result(db)
             .map(Self::from_db)
             .map_err(From::from)
     }
@@ -163,8 +203,7 @@ impl User {
         password: &str,
         is_super: bool,
         language: &str,
-        permissions: PermissionBits,
-        role: Option<&Role>,
+        permissions: SystemPermissions,
     ) -> Result<User, CreateUserError> {
         if name.is_empty() {
             return Err(CreateUserError::EmptyName);
@@ -204,7 +243,6 @@ impl User {
                     } else {
                         permissions.bits()
                     },
-                    role: role.map(Model::id),
                 })
                 .get_result::<db::User>(db)?;
 
@@ -218,7 +256,7 @@ impl User {
                     permissions: data.permissions,
                 });
 
-            Ok(User { data, role: None })
+            Ok(User { data })
         })
     }
 
@@ -259,21 +297,33 @@ impl User {
             .expect("locale data missing for user's language")
     }
 
-    /// Get all permissions this user has.
-    ///
-    /// The `role` argument controls whether role permissions are included in
-    /// the returned permission set.
-    pub fn permissions(&self, role: bool) -> PermissionBits {
-        let role = if role {
-            self.role.as_ref().map(Role::permissions).unwrap_or_default()
-        } else {
-            PermissionBits::empty()
-        };
-        PermissionBits::from_bits_truncate(self.data.permissions) | role
+    /// Get all system permissions this user has.
+    pub fn permissions(&self) -> SystemPermissions {
+        SystemPermissions::from_bits_truncate(self.data.permissions)
     }
 
     pub fn mailbox(&self) -> Mailbox {
         Mailbox::new(self.data.email.clone())
+    }
+
+    /// Get list of IDs of all teams this user is a member of.
+    pub fn get_team_ids(&self, db: &Connection)
+    -> Result<Vec<<Team as Model>::Id>, DbError> {
+        team_members::table
+            .filter(team_members::user.eq(self.data.id))
+            .select(team_members::team)
+            .get_results(db)
+    }
+
+    /// Get list of all teams this user is a member of.
+    pub fn get_teams(&self, db: &Connection)
+    -> Result<Vec<Team>, DbError> {
+        team_members::table
+            .filter(team_members::user.eq(self.data.id))
+            .inner_join(teams::table)
+            .select(teams::all_columns)
+            .get_results(db)
+            .map(Model::from_db)
     }
 
     /// Change user's password.
@@ -351,19 +401,16 @@ impl User {
         Ok(())
     }
 
-    /// Change user's permissions.
+    /// Change user's system permissions.
     pub fn set_permissions(
         &mut self,
         db: &Connection,
-        permissions: PermissionBits,
+        permissions: SystemPermissions,
     ) -> Result<(), DbError> {
         // Superusers have all permissions.
         if self.data.is_super {
             return Ok(());
         }
-
-        let sessions_perms = permissions
-            | self.role.as_ref().map_or(PermissionBits::empty(), Role::permissions);
 
         let data = db.transaction(|| {
             audit::log_db(
@@ -373,14 +420,8 @@ impl User {
             // user's sessions.
             diesel::update(sessions::table.filter(
                     sessions::user.eq(self.id).and(
-                        sessions::is_elevated.eq(false))))
-                .set(sessions::permissions.eq(
-                    (sessions_perms & PermissionBits::normal()).bits()))
-                .execute(db)?;
-            diesel::update(sessions::table.filter(
-                    sessions::user.eq(self.id).and(
-                        sessions::is_elevated.eq(false))))
-                .set(sessions::permissions.eq(sessions_perms.bits()))
+                        sessions::permissions.ne(0))))
+                .set(sessions::permissions.eq(permissions.bits()))
                 .execute(db)?;
 
             diesel::update(&self.data)
@@ -389,48 +430,6 @@ impl User {
         })?;
 
         self.data = data;
-
-        Ok(())
-    }
-
-    /// Change user's role.
-    pub fn set_role(
-        &mut self,
-        db: &Connection,
-        role: Option<&Role>,
-    ) -> Result<(), DbError> {
-        let (role_id, sessions_perms) = match role {
-            Some(role) => (
-                Some(role.id),
-                self.permissions(false) | role.permissions(),
-            ),
-            None => (None, self.permissions(false)),
-        };
-
-        let data = dbcon.transaction(|| {
-            audit::log_db(db, "users", self.id, "set-role", role_id);
-
-            // Since user's previous role might have had more permissions
-            // we also need to update user's sessions.
-            diesel::update(sessions::table.filter(
-                    sessions::user.eq(self.id).and(
-                        sessions::is_elevated.eq(false))))
-                .set(sessions::permissions.eq(
-                    (sessions_perms & PermissionBits::normal()).bits()))
-                .execute(db)?;
-            diesel::update(sessions::table.filter(
-                    sessions::user.eq(self.id).and(
-                        sessions::is_elevated.eq(true))))
-                .set(sessions::permissions.eq(sessions_perms.bits()))
-                .execute(db)?;
-
-            diesel::update(&self.data)
-                .set(users::role.eq(role_id))
-                .get_result::<db::User>(db)
-        })?;
-
-        self.data = data;
-        self.role = role.map(Clone::clone);
 
         Ok(())
     }
@@ -528,7 +527,7 @@ struct LogNewUser<'a> {
     is_super: bool,
     language: &'a str,
     // XXX: we serialize permissions as bits as rmp-serde currently works as
-    // a human-readable format, and serializes PermissionBits as an array of
+    // a human-readable format, and serializes SystemPermissions as an array of
     // strings.
     permissions: i32,
 }

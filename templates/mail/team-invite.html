@@ -1,0 +1,22 @@
+{% extends "_base.html" %}
+{% import "_macros.html" as m %}
+
+{% block content %}
+    {{ m::expand_paras(paras=_(
+        key="mail-team-invite-before-button",
+        team=team
+    ), first_top="10px") }}
+
+    {{ m::button(url=url, text=_(key="mail-team-invite-join-button", team=team)) }}
+
+    {{ m::expand_paras(paras=_(key="mail-team-invite-after-button", url=url)) }}
+{% endblock %}
+
+{% block footer %}
+    {{ m::footer(top="6px") }}
+    {% filter translate(key="mail-team-invite-footer", team=team) %}
+        You are receiving this message because you have an Adaptarr! account and
+        someone has invited you to join {{ team }}.
+    {% endfilter %}
+    {{ m::endpara() }}
+{% endblock %}

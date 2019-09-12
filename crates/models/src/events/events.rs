@@ -309,8 +309,8 @@ fn expand_assigned(domain: &str, db: &Connection, ev: Assigned)
 
     Ok(ExpandedEvent::Assigned {
         who: ExpandedUser {
-            name: who.0.name,
-            url: format!("https://{}/users/{}", domain, who.0.id),
+            name: who.name,
+            url: format!("https://{}/users/{}", domain, who.id),
         },
         module: ExpandedModule {
             title: module.1.title,

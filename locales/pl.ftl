@@ -149,6 +149,48 @@ mail-invite-footer = Powyższe zaproszenie dla { $email } do dołączenia do
 
 
 
+## Team invitation email
+
+mail-team-invite-subject = Zaproszenie
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-text =
+    Zostałeś/aś zaproszony/a do dołączenia do zespołu { $team } w { -brand-name }.
+
+    Aby dołączyć do zespołu przejdź pod poniższy adres URL
+
+        { $url }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-before-button =
+    Zostałeś/aś zaproszony/a do dołączenia do zespołu { $team } w { -brand-name }.
+
+    Aby dołączyć do zespołu przejdź pod poniższy adres URL
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+mail-team-invite-join-button = Dołącz do { $team }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-after-button =
+    Albo skopiuj poniższy URL do paska przeglądarki:
+    { -mail-url(url: $url, text: $url) }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-footer = Powyższe zaproszenie zostało wysłane ponieważ
+    posiadasz konto w { -brand-name } oraz ktoś zaprosił cię do dołączenia do
+    zespołu { $team }.
+
+
+
 ## Password reset email
 
 mail-reset-subject = Odzyskiwanie hasła

@@ -1,6 +1,11 @@
 use adaptarr_error::ApiError;
 use adaptarr_macros::From;
-use diesel::{Connection as _, prelude::*, result::{Error as DbError, DatabaseErrorKind}};
+use diesel::{
+    Connection as _,
+    expression::dsl::any,
+    prelude::*,
+    result::{Error as DbError, DatabaseErrorKind},
+};
 use failure::Fail;
 use serde::Serialize;
 use uuid::Uuid;
@@ -13,7 +18,7 @@ use crate::{
         schema::resources,
     },
 };
-use super::{AssertExists, FindModelResult, File, Model};
+use super::{AssertExists, FindModelResult, File, Model, Team, TeamResource};
 
 #[derive(Debug)]
 pub struct Resource {
@@ -23,6 +28,7 @@ pub struct Resource {
 #[derive(Clone, Debug, Serialize)]
 pub struct Public {
     pub id: Uuid,
+    pub team: i32,
     pub name: String,
     pub parent: Option<Uuid>,
     pub kind: Kind,
@@ -64,13 +70,19 @@ impl Model for Resource {
     }
 
     fn get_public(&self) -> Self::Public {
-        let db::Resource { id, ref name, parent, .. } = self.data;
+        let db::Resource { id, team, ref name, parent, .. } = self.data;
 
         Public {
-            id, parent,
+            id, team, parent,
             name: name.clone(),
             kind: if self.is_directory() { Kind::Directory } else { Kind::File },
         }
+    }
+}
+
+impl TeamResource for Resource {
+    fn team_id(&self) -> <Team as Model>::Id {
+        self.data.team
     }
 }
 
@@ -82,9 +94,18 @@ impl Resource {
             .map(|v| v.into_iter().map(Resource::from_db).collect::<Vec<_>>())
     }
 
+    /// Get all resources in specified teams.
+    pub fn by_team(db: &Connection, teams: &[i32]) -> Result<Vec<Resource>, DbError> {
+        resources::table
+            .filter(resources::team.eq(any(teams)))
+            .get_results::<db::Resource>(db)
+            .map(Model::from_db)
+    }
+
     /// Create a new resource.
     pub fn create(
         db: &Connection,
+        team: &Team,
         name: &str,
         file: Option<&File>,
         parent: Option<&Resource>,
@@ -96,6 +117,7 @@ impl Resource {
                     name,
                     file: file.map(|f| f.id),
                     parent: parent.map(|r| r.id),
+                    team: team.id(),
                 })
                 .get_result::<db::Resource>(db)?;
 

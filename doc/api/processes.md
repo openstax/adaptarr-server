@@ -10,6 +10,7 @@
 {
     id: number,
     name: string,
+    team: number,
 }
 ```
 
@@ -18,6 +19,8 @@ This model is used throughout the API to describe processes. The fields are
 - `id`: process's ID;
 
 - `name`: process's name;
+
+- `team`: ID of the team owning this process;
 
 ### `Version`
 

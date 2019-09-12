@@ -19,10 +19,8 @@ pub struct User {
     pub is_super: bool,
     /// User's preferred language
     pub language: String,
-    /// Permissions this user has.
+    /// System permissions this user has.
     pub permissions: i32,
-    /// ID of this user's role.
-    pub role: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -35,7 +33,6 @@ pub struct NewUser<'a> {
     pub is_super: bool,
     pub language: &'a str,
     pub permissions: i32,
-    pub role: Option<i32>,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug)]
@@ -61,7 +58,7 @@ pub struct Session {
     /// are granted for a short time, after which they become normal sessions
     /// again.
     pub is_elevated: bool,
-    /// Permissions this session has.
+    /// System permissions this session has.
     pub permissions: i32,
 }
 
@@ -92,7 +89,18 @@ pub struct Invite {
     pub email: String,
     /// Date by which this invitation becomes unusable.
     pub expires: DateTime<Utc>,
+    /// Role in `team` to assign the new user to.
     pub role: Option<i32>,
+    /// Team to which the user is invited.
+    pub team: i32,
+    /// Permissions the user will have in `team`.
+    pub permissions: i32,
+    /// Existing user who is being invited.
+    ///
+    /// When this field is `None`, this model represents an invitation for a new
+    /// user to join the system. Otherwise it represents an invitation for an
+    /// existing user to join a team.
+    pub user: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -101,6 +109,9 @@ pub struct NewInvite<'s> {
     pub email: &'s str,
     pub expires: DateTime<Utc>,
     pub role: Option<i32>,
+    pub team: i32,
+    pub permissions: i32,
+    pub user: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Identifiable, Queryable)]
@@ -120,6 +131,35 @@ pub struct NewPasswordResetToken {
     pub user: i32,
     /// Date by which this token becomes unusable.
     pub expires: DateTime<Utc>,
+}
+
+/// Team a user can be a member of.
+#[derive(Associations, Clone, Debug, Identifiable, Queryable)]
+pub struct Team {
+    /// Team's ID.
+    pub id: i32,
+    /// Team's name.
+    pub name: String,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "teams"]
+pub struct NewTeam<'a> {
+    pub name: &'a str,
+}
+
+/// Association between users and teams.
+#[derive(Associations, Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(user, team)]
+pub struct TeamMember {
+    /// Team whose member `user` is.
+    pub team: i32,
+    /// User who's a member of a team.
+    pub user: i32,
+    /// Permissions `user` has in `team`.
+    pub permissions: i32,
+    /// Role `users` has in `team`.
+    pub role: Option<i32>,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]
@@ -191,6 +231,8 @@ pub struct Module {
     pub id: Uuid,
     /// Document which is the current content of this module.
     pub document: i32,
+    /// Team owning this module.
+    pub team: i32,
 }
 
 #[derive(Clone, Copy, Debug, Insertable, Queryable)]
@@ -209,6 +251,8 @@ pub struct Book {
     pub id: Uuid,
     /// Title of this book.
     pub title: String,
+    /// Team owning this book.
+    pub team: i32,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -216,6 +260,7 @@ pub struct Book {
 pub struct NewBook<'a> {
     pub id: Uuid,
     pub title: &'a str,
+    pub team: i32,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]
@@ -265,6 +310,8 @@ pub struct Draft {
     pub document: i32,
     /// Editing step this draft is currently in.
     pub step: i32,
+    /// Team owning this draft.
+    pub team: i32,
 }
 
 /// Describes users assigned to particular slots in a draft.
@@ -351,6 +398,8 @@ pub struct Role {
     pub name: String,
     /// Additional permissions a user has when they are a member of this role.
     pub permissions: i32,
+    /// Team owning this role.
+    pub team: i32,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
@@ -358,6 +407,7 @@ pub struct Role {
 pub struct NewRole<'s> {
     pub name: &'s str,
     pub permissions: i32,
+    pub team: i32,
 }
 
 /// Root model of an editing process.
@@ -372,12 +422,15 @@ pub struct EditProcess {
     pub id: i32,
     /// Process's name.
     pub name: String,
+    /// Team owning this editing process.
+    pub team: i32,
 }
 
 #[derive(AsChangeset, Clone, Debug, Insertable)]
 #[table_name = "edit_processes"]
 pub struct NewEditProcess<'a> {
     pub name: &'a str,
+    pub team: i32,
 }
 
 /// Actual implementation of an editing process.
@@ -543,6 +596,8 @@ pub struct Resource {
     pub file: Option<i32>,
     /// ‘Folder’ containing this resource.
     pub parent: Option<Uuid>,
+    /// Team owning this resource.
+    pub team: i32,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug, Insertable)]
@@ -552,4 +607,5 @@ pub struct NewResource<'a> {
     pub name: &'a str,
     pub file: Option<i32>,
     pub parent: Option<Uuid>,
+    pub team: i32,
 }

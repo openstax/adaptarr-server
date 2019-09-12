@@ -26,6 +26,7 @@ table! {
     books (id) {
         id -> Uuid,
         title -> Varchar,
+        team -> Int4,
     }
 }
 
@@ -53,6 +54,7 @@ table! {
         module -> Uuid,
         document -> Int4,
         step -> Int4,
+        team -> Int4,
     }
 }
 
@@ -68,6 +70,7 @@ table! {
     edit_processes (id) {
         id -> Int4,
         name -> Varchar,
+        team -> Int4,
     }
 }
 
@@ -147,6 +150,9 @@ table! {
         email -> Varchar,
         expires -> Timestamptz,
         role -> Nullable<Int4>,
+        team -> Int4,
+        permissions -> Int4,
+        user -> Nullable<Int4>,
     }
 }
 
@@ -154,6 +160,7 @@ table! {
     modules (id) {
         id -> Uuid,
         document -> Int4,
+        team -> Int4,
     }
 }
 
@@ -179,6 +186,7 @@ table! {
         name -> Varchar,
         file -> Nullable<Int4>,
         parent -> Nullable<Uuid>,
+        team -> Int4,
     }
 }
 
@@ -187,6 +195,7 @@ table! {
         id -> Int4,
         name -> Varchar,
         permissions -> Int4,
+        team -> Int4,
     }
 }
 
@@ -202,6 +211,22 @@ table! {
 }
 
 table! {
+    team_members (user, team) {
+        team -> Int4,
+        user -> Int4,
+        permissions -> Int4,
+        role -> Nullable<Int4>,
+    }
+}
+
+table! {
+    teams (id) {
+        id -> Int4,
+        name -> Varchar,
+    }
+}
+
+table! {
     users (id) {
         id -> Int4,
         email -> Varchar,
@@ -211,7 +236,6 @@ table! {
         is_super -> Bool,
         language -> Varchar,
         permissions -> Int4,
-        role -> Nullable<Int4>,
     }
 }
 
@@ -230,6 +254,7 @@ table! {
 joinable!(audit_log -> users (actor));
 joinable!(book_parts -> books (book));
 joinable!(book_parts -> modules (module));
+joinable!(books -> teams (team));
 joinable!(document_files -> documents (document));
 joinable!(document_files -> files (file));
 joinable!(documents -> files (index));
@@ -239,6 +264,7 @@ joinable!(draft_slots -> users (user));
 joinable!(drafts -> documents (document));
 joinable!(drafts -> edit_process_steps (step));
 joinable!(drafts -> modules (module));
+joinable!(drafts -> teams (team));
 joinable!(edit_process_links -> edit_process_slots (slot));
 joinable!(edit_process_slot_roles -> edit_process_slots (slot));
 joinable!(edit_process_slot_roles -> roles (role));
@@ -246,15 +272,23 @@ joinable!(edit_process_slots -> edit_process_versions (process));
 joinable!(edit_process_step_slots -> edit_process_slots (slot));
 joinable!(edit_process_step_slots -> edit_process_steps (step));
 joinable!(edit_process_versions -> edit_processes (process));
+joinable!(edit_processes -> teams (team));
 joinable!(events -> users (user));
 joinable!(invites -> roles (role));
+joinable!(invites -> teams (team));
+joinable!(invites -> users (user));
 joinable!(module_versions -> documents (document));
 joinable!(module_versions -> modules (module));
 joinable!(modules -> documents (document));
+joinable!(modules -> teams (team));
 joinable!(password_reset_tokens -> users (user));
 joinable!(resources -> files (file));
+joinable!(resources -> teams (team));
+joinable!(roles -> teams (team));
 joinable!(sessions -> users (user));
-joinable!(users -> roles (role));
+joinable!(team_members -> roles (role));
+joinable!(team_members -> teams (team));
+joinable!(team_members -> users (user));
 joinable!(xref_targets -> documents (document));
 
 allow_tables_to_appear_in_same_query!(
@@ -281,6 +315,8 @@ allow_tables_to_appear_in_same_query!(
     resources,
     roles,
     sessions,
+    team_members,
+    teams,
     users,
     xref_targets,
 );

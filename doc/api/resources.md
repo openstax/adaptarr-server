@@ -9,6 +9,7 @@
 ```
 {
     id: uuid,
+    team: number,
     name: string,
     parent: uuid?,
     kind: 'file' | 'directory',
@@ -18,6 +19,8 @@
 This model is used throughout the API to describe resources. The fields are
 
 - `id`: resource's UUID;
+
+- `team`: ID of the team owning this resource;
 
 - `name`: resource's name;
 

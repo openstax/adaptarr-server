@@ -1,4 +1,9 @@
-use diesel::{Connection as _, prelude::*, result::Error as DbError};
+use diesel::{
+    Connection as _,
+    expression::dsl::any,
+    prelude::*,
+    result::Error as DbError,
+};
 use serde::Serialize;
 
 use crate::{
@@ -8,7 +13,7 @@ use crate::{
         models as db,
         schema::{edit_process_versions, edit_processes},
     },
-    models::{FindModelResult, Model},
+    models::{FindModelResult, Model, Team, TeamResource},
 };
 use super::{CreateVersionError, Version, structure};
 
@@ -25,6 +30,13 @@ pub struct Process {
 pub struct Public {
     pub id: i32,
     pub name: String,
+    pub team: i32,
+}
+
+impl TeamResource for Process {
+    fn team_id(&self) -> <Team as Model>::Id {
+        self.data.team
+    }
 }
 
 impl Model for Process {
@@ -61,6 +73,7 @@ impl Model for Process {
         Public {
             id,
             name: name.clone(),
+            team: self.data.team,
         }
     }
 }
@@ -76,13 +89,25 @@ impl Process {
             .map(|v| v.into_iter().map(Process::from_db).collect())
     }
 
+    /// Get all processes in team.
+    ///
+    /// *Warning*: this function is temporary and will be removed once we figure
+    /// out how to do pagination.
+    pub fn by_team(db: &Connection, team: &[i32]) -> Result<Vec<Process>, DbError> {
+        edit_processes::table
+            .filter(edit_processes::team.eq(any(team)))
+            .get_results::<db::EditProcess>(db)
+            .map(Model::from_db)
+    }
+
     /// Create a new editing process.
-    pub fn create(db: &Connection, structure: &structure::Process)
+    pub fn create(db: &Connection, team: &Team, structure: &structure::Process)
     -> Result<Version, CreateVersionError> {
         db.transaction(|| {
             let process = diesel::insert_into(edit_processes::table)
                 .values(&db::NewEditProcess {
                     name: &structure.name,
+                    team: team.id(),
                 })
                 .get_result::<db::EditProcess>(db)?;
 

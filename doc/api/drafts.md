@@ -9,6 +9,7 @@
 ```
 {
     module: uuid,
+    team: number,
     title: string,
     language: string,
     permissions: SlotPermission[]?,
@@ -20,6 +21,8 @@
 THis model is used throughout the API to describe drafts. The fields are
 
 - `module`: UUID of the module from this draft was derived;
+
+- `team`: ID of the team owning the module this draft was derived from;
 
 - `title`: draft's title;
 

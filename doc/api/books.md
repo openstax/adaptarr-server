@@ -10,6 +10,7 @@
 {
     id: uuid,
     title: string,
+    team: number,
 }
 ```
 
@@ -17,7 +18,9 @@ This model is used throughout the API to describe books. The fields are
 
 - `id`: book's UUID;
 
-- `title`: book's title.
+- `title`: book's title;
+
+- `team`: ID of the team owning this book.
 
 ### `Tree`
 
