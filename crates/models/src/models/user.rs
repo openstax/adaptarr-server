@@ -246,8 +246,17 @@ impl User {
         ).expect("hashing password")
     }
 
+    /// Get user's preferred language.
     pub fn language(&self) -> LanguageTag {
         self.data.language.parse().expect("invalid language tag in database")
+    }
+
+    /// Get [`Locale`] for user's preferred language.
+    pub fn locale(&self) -> &'static Locale {
+        adaptarr_i18n::load()
+            .expect("locale data should be loaded at this point")
+            .find_locale(&self.language())
+            .expect("locale data missing for user's language")
     }
 
     /// Get all permissions this user has.
@@ -431,13 +440,12 @@ impl User {
         template: &str,
         subject: S,
         context: C,
-        locale: &'static Locale,
     )
     where
         S: IntoSubject,
         C: Serialize,
     {
-        Mailer::do_send(self.mailbox(), template, subject, context, locale);
+        Mailer::do_send(self.mailbox(), template, subject, context, self.locale());
     }
 }
 

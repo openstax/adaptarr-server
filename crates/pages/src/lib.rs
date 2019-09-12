@@ -378,14 +378,10 @@ fn do_reset(
             let mut url = req.url_for_static("reset")?;
             url.query_pairs_mut().append_pair("token", &code);
 
-            #[allow(clippy::or_fun_call)]
-            let user_locale = i18n.find_locale(&user.language())
-                .unwrap_or(locale.as_ref());
-
             user.do_send_mail("reset", "mail-reset-subject", ResetMailArgs {
                 user: user.get_public_full(&db, &UserFields::empty())?,
                 url: url.as_str(),
-            }, user_locale);
+            });
 
             render(locale.as_ref(), "reset_token_sent.html", &Empty {})
         }
