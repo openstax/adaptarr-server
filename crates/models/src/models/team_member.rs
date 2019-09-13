@@ -9,7 +9,7 @@ use crate::{
     db::{Connection, models as db, schema::{roles, team_members}},
     permissions::TeamPermissions,
 };
-use super::{Model, Role, FindModelResult, TeamResource};
+use super::{AssertExists, Model, User, Role, FindModelResult, TeamResource};
 
 pub struct TeamMember {
     data: db::TeamMember,
@@ -91,6 +91,10 @@ impl TeamMember {
         TeamPermissions::from_bits_truncate(self.data.permissions) | role
     }
 
+    pub fn get_user(&self, db: &Connection) -> Result<User, DbError> {
+        User::by_id(db, self.data.user).assert_exists()
+    }
+
     /// Change this member's inherent permissions.
     pub fn set_permissions(
         &mut self,
@@ -143,6 +147,14 @@ impl TeamMember {
 
             Ok(())
         })
+    }
+}
+
+impl std::ops::Deref for TeamMember {
+    type Target = db::TeamMember;
+
+    fn deref(&self) -> &db::TeamMember {
+        &self.data
     }
 }
 

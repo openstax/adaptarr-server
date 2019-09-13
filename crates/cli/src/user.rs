@@ -194,13 +194,13 @@ pub fn modify(cfg: &Config, opts: ModifyOpts) -> Result<()> {
 }
 
 #[derive(Debug)]
-enum RoleArg {
+pub enum RoleArg {
     Null,
     ById(i32),
 }
 
 impl RoleArg {
-    fn get(&self, db: &Connection, team: &Team)
+    pub fn get(&self, db: &Connection, team: &Team)
     -> Result<Option<Role>, FindModelError<Role>> {
         match self {
             RoleArg::Null => Ok(None),
@@ -225,4 +225,4 @@ impl FromStr for RoleArg {
 
 #[derive(Debug, Fail)]
 #[fail(display = "bad role: {}. Expected number or null", _0)]
-struct ParseRoleArgError(std::num::ParseIntError);
+pub struct ParseRoleArgError(std::num::ParseIntError);

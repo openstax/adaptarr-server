@@ -9,6 +9,7 @@ use structopt::StructOpt;
 mod config;
 mod document;
 mod server;
+mod team;
 mod user;
 mod util;
 
@@ -37,6 +38,9 @@ enum Command {
     /// Manage users
     #[structopt(name = "user")]
     User(user::Opts),
+    /// Manage teams
+    #[structopt(name = "team")]
+    Team(team::Opts),
 }
 
 pub fn main() -> Result<(), Error> {
@@ -57,6 +61,7 @@ pub fn main() -> Result<(), Error> {
         Command::Server(opts) => server::main(config.clone(), opts),
         Command::Document(opts) => with_system(document::main, &config, opts),
         Command::User(opts) => with_system(user::main, &config, opts),
+        Command::Team(opts) => with_system(team::main, &config, opts),
     }
 }
 
