@@ -1,18 +1,27 @@
 use adaptarr_models::PermissionBits;
-use serde::de::{Deserialize, IntoDeserializer};
+use serde::de::{DeserializeOwned, IntoDeserializer};
 use std::fmt;
 use termion::style::{Underline, Reset};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::Result;
 
-pub fn parse_permissions(v: &str) -> Result<PermissionBits> {
-    v.split(',')
+pub fn parse_permissions<P>(v: &str) -> Result<P>
+where
+    P: DeserializeOwned + PermissionBits,
+{
+    let mut permissions = P::empty();
+
+    let iter = v.split(',')
         .map(str::trim)
         .map(<&str as IntoDeserializer<serde::de::value::Error>>::into_deserializer)
-        .map(PermissionBits::deserialize)
-        .collect::<Result<PermissionBits, _>>()
-        .map_err(From::from)
+        .map(P::deserialize);
+
+    for permission in iter {
+        permissions.insert(permission?);
+    }
+
+    Ok(permissions)
 }
 
 
