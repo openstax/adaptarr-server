@@ -18,7 +18,7 @@ use std::str::FromStr;
 use structopt::StructOpt;
 
 use crate::{Config, Result};
-use super::util::{parse_permissions, print_table};
+use super::util::{format, parse_permissions, print_table};
 
 #[derive(StructOpt)]
 pub struct Opts {
@@ -62,10 +62,11 @@ pub fn list(cfg: &Config) -> Result<()> {
             user.name.as_str(),
             user.email.as_str(),
             user.language.as_str(),
+            format(user.permissions()),
         ))
         .collect::<Vec<_>>();
 
-    print_table(("ID", "Name", "Email", "Lng"), &rows);
+    print_table(("ID", "Name", "Email", "Lng", "Permissions"), &rows);
 
     Ok(())
 }
