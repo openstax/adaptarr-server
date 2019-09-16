@@ -78,7 +78,7 @@ fn list_teams(db: Database, session: Session)
         session.user(&db)?.get_teams(&db)?
     };
 
-    Ok(Json(teams.get_public()))
+    Ok(Json(teams.get_public_full(&db, &())?))
 }
 
 #[derive(Deserialize)]
@@ -102,7 +102,7 @@ fn create_team(
     let team = Team::create(&db, &data.name)?;
     let location = req.url_for("team", &[team.id().to_string()])?.to_string();
 
-    Ok(Created(location, Json(team.get_public())))
+    Ok(Created(location, Json(team.get_public_full(&db, &())?)))
 }
 
 /// Get a team by ID.
@@ -114,7 +114,7 @@ fn create_team(
 /// ```
 fn get_team(db: Database, _: TeamScoped<Team>, id: Path<i32>)
 -> Result<Json<<Team as Model>::Public>> {
-    Ok(Json(Team::by_id(&db, *id)?.get_public()))
+    Ok(Json(Team::by_id(&db, *id)?.get_public_full(&db, &())?))
 }
 
 #[derive(Deserialize)]
@@ -140,7 +140,7 @@ fn update_team(
 
     team.set_name(&db, &update.name)?;
 
-    Ok(Json(team.get_public()))
+    Ok(Json(team.get_public_full(&db, &())?))
 }
 
 /// Get list of all roles in a team.

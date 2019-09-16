@@ -10,6 +10,7 @@
 {
     id: number,
     name: string,
+    roles: Role[],
 }
 ```
 
@@ -17,7 +18,9 @@ Used throughout the API to describe teams. The fields are
 
 - `id`: team's ID;
 
-- `name`: team's name.
+- `name`: team's name;
+
+- `roles`: list of all roles in this team.
 
 ### `TeamMember`
 

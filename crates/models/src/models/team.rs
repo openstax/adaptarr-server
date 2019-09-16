@@ -28,6 +28,8 @@ pub trait TeamResource: Model {
 pub struct Public {
     pub id: i32,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roles: Option<Vec<<Role as Model>::Public>>,
 }
 
 impl TeamResource for Team {
@@ -70,7 +72,19 @@ impl Model for Team {
         Public {
             id,
             name: name.clone(),
+            roles: None,
         }
+    }
+
+    fn get_public_full(&self, db: &Connection, _: &())
+    -> Result<Self::Public, DbError> {
+        let db::Team { id, ref name } = self.data;
+
+        Ok(Public {
+            id,
+            name: name.clone(),
+            roles: Some(self.get_roles(db)?.get_public_full(db, &false)?),
+        })
     }
 }
 
