@@ -17,6 +17,7 @@
         {
             id: number,
             role: Role | null,
+            name: string,
         },
     ],
 }
@@ -44,6 +45,8 @@ This model is used throughout the API to describe users. The fields are
 - `teams.role`: an instance of the [`Role`](../roles.md#Role) model describing
   role assigned to the user in this team. May be `null` if the user is not
   assigned a role.
+
+- `teams.name`: this team's name.
 
 ### `:id`
 

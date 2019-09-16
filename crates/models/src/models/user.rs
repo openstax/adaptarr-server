@@ -67,6 +67,7 @@ pub struct TeamInfo {
     #[serde(rename = "id")]
     team: i32,
     role: Option<<Role as Model>::Public>,
+    name: String,
 }
 
 #[derive(Default)]
@@ -138,18 +139,21 @@ impl Model for User {
                 .filter(team_members::team.eq(any(&teams))
                     .and(team_members::user.eq(self.data.id)))
                 .left_join(roles::table)
-                .get_results::<(db::TeamMember, Option<db::Role>)>(db)?,
+                .inner_join(teams::table)
+                .get_results::<(db::TeamMember, Option<db::Role>, db::Team)>(db)?,
             None => team_members::table
                 .filter(team_members::user.eq(self.data.id))
                 .left_join(roles::table)
-                .get_results::<(db::TeamMember, Option<db::Role>)>(db)?,
+                .inner_join(teams::table)
+                .get_results::<(db::TeamMember, Option<db::Role>, db::Team)>(db)?,
         }
             .into_iter()
-            .map(|(member, role)| Ok(TeamInfo {
+            .map(|(member, role, team)| Ok(TeamInfo {
                 team: member.team,
                 role: role.map(|id| Role::from_db(id)
                     .get_public_full(db, &params.include_permissions))
                     .transpose()?,
+                name: team.name,
             }))
             .collect::<Result<Vec<TeamInfo>, DbError>>()?;
 
