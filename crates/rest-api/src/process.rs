@@ -181,11 +181,13 @@ struct FreeSlot {
 /// ```
 fn list_free_slots(db: Database, session: Session)
 -> Result<Json<Vec<FreeSlot>>> {
-    Ok(Json(Slot::all_free(&db, &session.user(&db)?)?
+    let user = session.user(&db)?;
+
+    Ok(Json(Slot::all_free(&db, &user)?
         .into_iter()
         .map(|(draft, slot)| Ok(FreeSlot {
             slot: slot.get_public_full(&db, &())?,
-            draft: draft.get_public(),
+            draft: draft.get_public_full(&db, &user.id())?,
         }))
         .collect::<Result<Vec<_>>>()?))
 }
