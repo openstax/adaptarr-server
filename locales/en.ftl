@@ -4,6 +4,8 @@ locale-name = English
 
 -brand-name = Adaptarr!
 
+-brand-name-article = an { -brand-name }
+
 
 
 ## Login page
@@ -123,7 +125,7 @@ reset-error = { $code ->
 mail-logo-alt = { -org-name }™ logo
 
 mail-footer = This message was auto-generated, please do not respond to it.
-    You are receiving it because you have an { -brand-name } account.
+    You are receiving it because you have { -brand-name-article } account.
 
 
 
@@ -157,7 +159,7 @@ mail-invite-after-button =
 
 # Variables:
 # - $email (string): invitee's email address
-mail-invite-footer = You are receiving this message because a member of
+mail-invite-footer = You are receiving this message because you are a member of
     { -org-name } has invited { $email } to join { -brand-name }.
 
 
@@ -198,8 +200,8 @@ mail-team-invite-after-button =
 # Variables:
 # - $team (string): name of the team to which the user is invited
 # - $url (string): invitation URL
-mail-team-invite-footer = You are receiving this message because you have an
-    { -brand-name } account and someone has invited you to join { $team }.
+mail-team-invite-footer = You are receiving this message because you have
+    { -brand-name-article } account and someone has invited you to join { $team }.
 
 
 
