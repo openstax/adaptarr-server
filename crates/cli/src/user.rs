@@ -5,19 +5,20 @@ use adaptarr_models::{
     FindModelError,
     Invite,
     Model,
-    PermissionBits,
     Role,
+    Team,
     User,
     db::{self, Connection},
+    permissions::{SystemPermissions, TeamPermissions},
 };
 use diesel::Connection as _;
 use failure::{Error, Fail};
 use futures::future::{self, Either, Future, IntoFuture};
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 use structopt::StructOpt;
 
 use crate::{Config, Result};
-use super::util::{parse_permissions, print_table};
+use super::util::{format, parse_permissions, print_table};
 
 #[derive(StructOpt)]
 pub struct Opts {
@@ -54,10 +55,6 @@ pub fn main(cfg: &Config, opts: Opts) -> impl Future<Item = (), Error = Error> {
 pub fn list(cfg: &Config) -> Result<()> {
     let db = db::connect(cfg.model.database.as_ref())?;
     let users = User::all(&db)?;
-    let roles = Role::all(&db)?
-        .into_iter()
-        .map(|role| (role.id, role))
-        .collect::<HashMap<_, _>>();
 
     let rows = users.iter()
         .map(|user| (
@@ -65,17 +62,11 @@ pub fn list(cfg: &Config) -> Result<()> {
             user.name.as_str(),
             user.email.as_str(),
             user.language.as_str(),
-            match user.role {
-                Some(role) => roles.get(&role)
-                    .expect("database inconsistency: no role for user")
-                    .name
-                    .as_str(),
-                None => "",
-            },
+            format(user.permissions()),
         ))
         .collect::<Vec<_>>();
 
-    print_table(("ID", "Name", "Email", "Lng", "Role"), &rows);
+    print_table(("ID", "Name", "Email", "Lng", "Permissions"), &rows);
 
     Ok(())
 }
@@ -96,14 +87,10 @@ pub struct AddOpts {
     /// User's preferred language.
     #[structopt(long = "language", default_value = "en")]
     language: LanguageTag,
-    /// User's role.
-    #[structopt(long = "role")]
-    role: Option<RoleArg>,
 }
 
 pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
     let db = db::connect(cfg.model.database.as_ref())?;
-    let role = opts.role.map(|r| r.get(&db)).transpose()?.and_then(std::convert::identity);
     let user = User::create(
         &db,
         None,
@@ -112,8 +99,7 @@ pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
         &opts.password,
         opts.is_super,
         opts.language.as_str(),
-        PermissionBits::normal(),
-        role.as_ref(),
+        SystemPermissions::empty(),
     )?;
 
     println!("Created user {}", user.id);
@@ -125,12 +111,22 @@ pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
 pub struct InviteOpts {
     /// User's email address
     email: String,
+    /// Team to which to invite
+    #[structopt(long)]
+    team: i32,
     /// Language in which to send invitation
     #[structopt(long = "lang")]
     language: LanguageTag,
     /// User's role.
     #[structopt(long = "role")]
     role: Option<RoleArg>,
+    /// Team permissions permissions
+    #[structopt(
+        long = "permissions",
+        parse(try_from_str = parse_permissions),
+        default_value = "",
+    )]
+    permissions: TeamPermissions,
 }
 
 pub fn invite(cfg: &Config, opts: InviteOpts)
@@ -141,22 +137,17 @@ pub fn invite(cfg: &Config, opts: InviteOpts)
         None => return Err(InviteError::NoSuchLocale(opts.language).into()),
     };
     let db = db::connect(cfg.model.database.as_ref())?;
-    let role = opts.role.map(|r| r.get(&db)).transpose()?.and_then(std::convert::identity);
-    let invite = Invite::create(&db, &opts.email, role.as_ref())?;
+    let team = Team::by_id(&db, opts.team)?;
+    let role = opts.role.map(|r| r.get(&db, &team))
+        .transpose()?
+        .and_then(std::convert::identity);
+    let invite = Invite::create(&db, team, &opts.email, role.as_ref(), opts.permissions)?;
     let code = invite.get_code(&cfg.server.secret);
 
     println!("Invitation code: {}", code);
     println!("Registration url: {}/register?invite={}", cfg.server.domain, code);
 
-    let code = invite.get_code(&cfg.server.secret);
-    // TODO: get URL from Actix.
-    let url = format!(
-        "https://{}/register?invite={}",
-        &cfg.server.domain,
-        code,
-    );
-
-    Ok(invite.send_mail(&url, locale).into_future().from_err())
+    Ok(invite.send_mail(locale).into_future().from_err())
 }
 
 #[derive(Debug, Fail)]
@@ -176,10 +167,7 @@ pub struct ModifyOpts {
     language: Option<LanguageTag>,
     /// Set user's permissions
     #[structopt(long = "permissions", parse(try_from_str = parse_permissions))]
-    permissions: Option<PermissionBits>,
-    /// Set user's role
-    #[structopt(long = "role")]
-    role: Option<RoleArg>,
+    permissions: Option<SystemPermissions>,
 }
 
 pub fn modify(cfg: &Config, opts: ModifyOpts) -> Result<()> {
@@ -199,11 +187,6 @@ pub fn modify(cfg: &Config, opts: ModifyOpts) -> Result<()> {
             user.set_permissions(&db, permissions)?;
         }
 
-        if let Some(role) = opts.role {
-            let role = role.get(&db)?;
-            user.set_role(&db, role.as_ref())?;
-        }
-
         Ok(())
     })?;
 
@@ -211,16 +194,17 @@ pub fn modify(cfg: &Config, opts: ModifyOpts) -> Result<()> {
 }
 
 #[derive(Debug)]
-enum RoleArg {
+pub enum RoleArg {
     Null,
     ById(i32),
 }
 
 impl RoleArg {
-    fn get(&self, db: &Connection) -> Result<Option<Role>, FindModelError<Role>> {
+    pub fn get(&self, db: &Connection, team: &Team)
+    -> Result<Option<Role>, FindModelError<Role>> {
         match self {
             RoleArg::Null => Ok(None),
-            RoleArg::ById(id) => Role::by_id(db, *id).map(Some),
+            RoleArg::ById(id) => team.get_role(db, *id).map(Some),
         }
     }
 }
@@ -241,4 +225,4 @@ impl FromStr for RoleArg {
 
 #[derive(Debug, Fail)]
 #[fail(display = "bad role: {}. Expected number or null", _0)]
-struct ParseRoleArgError(std::num::ParseIntError);
+pub struct ParseRoleArgError(std::num::ParseIntError);

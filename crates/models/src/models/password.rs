@@ -23,35 +23,35 @@ pub struct PasswordResetToken {
 
 impl PasswordResetToken {
     /// Create a new password reset token for a given user.
-    pub fn create(dbcon: &Connection, user: &User)
+    pub fn create(db: &Connection, user: &User)
     -> Result<PasswordResetToken, CreateTokenError> {
         let data = diesel::insert_into(tokens::table)
             .values(db::NewPasswordResetToken {
                 user: user.id,
-                expires: Utc::now().naive_utc() + Duration::minutes(15),
+                expires: Utc::now() + Duration::minutes(15),
             })
-            .get_result::<db::PasswordResetToken>(dbcon)
+            .get_result::<db::PasswordResetToken>(db)
             .map_err(CreateTokenError)?;
 
         audit::log_db_actor(
-            dbcon, user.id, "password-reset-tokens", data.id, "create", ());
+            db, user.id, "password-reset-tokens", data.id, "create", ());
 
         Ok(PasswordResetToken { data })
     }
 
     /// Get an existing password reset token by code.
-    pub fn from_code(dbcon: &Connection, secret: &[u8], code: &str)
+    pub fn from_code(db: &Connection, secret: &[u8], code: &str)
     -> Result<PasswordResetToken, FromCodeError> {
         let mut data = base64::decode_config(code, base64::URL_SAFE_NO_PAD)?;
         let id: i32 = adaptarr_util::unseal(secret, &mut data)?;
 
         let token = tokens::table
             .filter(tokens::id.eq(id))
-            .get_result::<db::PasswordResetToken>(dbcon)
+            .get_result::<db::PasswordResetToken>(db)
             .optional()?
             .ok_or(FromCodeError::Expired)?;
 
-        if Utc::now().naive_utc() > token.expires {
+        if Utc::now() > token.expires {
             Err(FromCodeError::Expired)
         } else {
             Ok(PasswordResetToken { data: token })
@@ -66,16 +66,16 @@ impl PasswordResetToken {
     }
 
     /// Fulfil this reset token by changing user's password.
-    pub fn fulfil(self, dbcon: &Connection, password: &str)
+    pub fn fulfil(self, db: &Connection, password: &str)
     -> Result<User, ResetPasswordError> {
-        let mut user = User::by_id(dbcon, self.data.user)
+        let mut user = User::by_id(db, self.data.user)
             .assert_exists()?;
         audit::with_actor(
             audit::Actor::User(user.id),
-            || user.change_password(dbcon, password),
+            || user.change_password(db, password),
         )?;
         audit::log_db_actor(
-            dbcon,
+            db,
             user.id,
             "password-reset-tokens",
             self.data.id,

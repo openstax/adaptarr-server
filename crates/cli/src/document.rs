@@ -5,12 +5,14 @@ use adaptarr_models::{
     FindModelError,
     Model,
     Module,
+    Team,
+    TeamResource,
     db::{self, models, schema::{documents, drafts, modules, module_versions}},
 };
 use adaptarr_util::bytes_to_hex;
 use diesel::prelude::*;
 use failure::{Error, format_err};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 use structopt::StructOpt;
 use uuid::Uuid;
 
@@ -67,10 +69,12 @@ pub fn main(cfg: &Config, opts: Opts) -> Result<(), Error> {
 fn inspect(cfg: &Config, opts: &Opts) -> Result<(), Error> {
     let db = db::connect(cfg.model.database.as_ref())?;
     let module = opts.document(&db)?;
+    let team = module.get_team(&db)?;
 
     println!("UUID:     {}", module.id());
     println!("Title:    {}", module.title);
     println!("Language: {}", module.language);
+    println!("Team:     {}", team.name);
 
     // TODO: display process
 
@@ -88,13 +92,22 @@ fn inspect(cfg: &Config, opts: &Opts) -> Result<(), Error> {
 
 fn list(cfg: &Config) -> Result<()> {
     let db = db::connect(cfg.model.database.as_ref())?;
+    let teams: HashMap<i32, Team> = Team::all(&db)?
+        .into_iter()
+        .map(|team| (team.id(), team))
+        .collect();
     let modules = Module::all(&db)?;
 
     let rows = modules.iter()
-        .map(|module| (module.id().to_string(), module.title.as_str()))
+        .map(|module| (
+            module.id().to_string(),
+            module.title.as_str(),
+            module.team_id().to_string(),
+            teams.get(&module.team_id()).unwrap().name.as_str(),
+        ))
         .collect::<Vec<_>>();
 
-    print_table(("UUID", "Title"), &rows);
+    print_table(("UUID", "Title", "Team", "Team name"), &rows);
 
     Ok(())
 }
@@ -174,6 +187,9 @@ fn cat(cfg: &Config, opts: &Opts, cat: &CatOpts) -> Result<()> {
 pub struct NewOpts {
     /// Document's title
     title: String,
+    /// ID of team in which to create the module.
+    #[structopt(short = "t", long = "team")]
+    team: i32,
     /// File to use as index.cnxml
     #[structopt(short = "i", long = "index", parse(from_os_str))]
     index: PathBuf,
@@ -194,12 +210,20 @@ fn new(cfg: &Config, opts: &Opts, new: &NewOpts) -> Result<()> {
         }
     }
 
+    let team = Team::by_id(&db, new.team)?;
+
     let document = db.transaction::<_, failure::Error, _>(|| {
         let index = std::fs::File::open(&new.index)?;
         let index = File::from_read(
             &db, &cfg.model.storage.path, index, Some(CNXML_MIME))?;
         let module = Module::create::<&str, _>(
-            &db, &new.title, new.language.as_str(), index, std::iter::empty())?;
+            &db,
+            &team,
+            &new.title,
+            new.language.as_str(),
+            index,
+            std::iter::empty(),
+        )?;
 
         if let Some(id) = opts.document {
             let (module, _) = module.into_db();

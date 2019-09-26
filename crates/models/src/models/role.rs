@@ -1,6 +1,7 @@
 use adaptarr_error::ApiError;
 use diesel::{
     Connection as _,
+    expression::dsl::any,
     prelude::*,
     result::{DatabaseErrorKind, Error as DbError},
 };
@@ -14,9 +15,9 @@ use crate::{
         models as db,
         schema::roles,
     },
-    permissions::PermissionBits,
+    permissions::TeamPermissions,
 };
-use super::{FindModelError, FindModelResult, Model};
+use super::{FindModelError, FindModelResult, Model, Team, TeamResource};
 
 /// Role a user can take.
 #[derive(Clone, Debug)]
@@ -30,7 +31,13 @@ pub struct Public {
     id: i32,
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    permissions: Option<PermissionBits>,
+    permissions: Option<TeamPermissions>,
+}
+
+impl TeamResource for Role {
+    fn team_id(&self) -> <Team as Model>::Id {
+        self.data.team
+    }
 }
 
 impl Model for Role {
@@ -72,7 +79,7 @@ impl Model for Role {
         }
     }
 
-    fn get_public_full(&self, _: &Connection, sensitive: bool)
+    fn get_public_full(&self, _: &Connection, &sensitive: &bool)
     -> Result<Public, DbError> {
         let db::Role { id, ref name, .. } = self.data;
 
@@ -89,7 +96,18 @@ impl Role {
     pub fn all(db: &Connection) -> Result<Vec<Role>, DbError> {
         roles::table
             .get_results::<db::Role>(db)
-            .map(|v| v.into_iter().map(|data| Role { data }).collect())
+            .map(Model::from_db)
+    }
+
+    /// Get all roles from specified teams.
+    pub fn by_teams(db: &Connection, teams: &[Team]) -> Result<Vec<Role>, DbError> {
+        let team_ids = teams.iter().map(Model::id).collect::<Vec<_>>();
+
+        roles::table
+            .filter(
+                roles::team.eq(any(team_ids)))
+            .get_results::<db::Role>(db)
+            .map(Model::from_db)
     }
 
     /// Find all roles by ID.
@@ -104,12 +122,17 @@ impl Role {
     }
 
     /// Create a new role.
-    pub fn create(db: &Connection, name: &str, permissions: PermissionBits)
-    -> Result<Role, CreateRoleError> {
+    pub fn create(
+        db: &Connection,
+        team: &Team,
+        name: &str,
+        permissions: TeamPermissions,
+    ) -> Result<Role, CreateRoleError> {
         let data = diesel::insert_into(roles::table)
             .values(db::NewRole {
                 name,
                 permissions: permissions.bits(),
+                team: team.id(),
             })
             .get_result::<db::Role>(db)?;
 
@@ -134,8 +157,8 @@ impl Role {
     }
 
     /// Get all permissions this role has.
-    pub fn permissions(&self) -> PermissionBits {
-        PermissionBits::from_bits_truncate(self.data.permissions)
+    pub fn permissions(&self) -> TeamPermissions {
+        TeamPermissions::from_bits_truncate(self.data.permissions)
     }
 
     /// Set this role's name.
@@ -156,7 +179,7 @@ impl Role {
     pub fn set_permissions(
         &mut self,
         db: &Connection,
-        permissions: PermissionBits,
+        permissions: TeamPermissions,
     ) -> Result<(), DbError> {
         let data = diesel::update(&self.data)
             .set(roles::permissions.eq(permissions.bits()))
@@ -225,7 +248,7 @@ impl From<DbError> for DeleteRoleError {
 struct LogNewRole<'a> {
     name: &'a str,
     // XXX: we serialize permissions as bits as rmp-serde currently works as
-    // a human-readable format, and serializes PermissionBits as an array of
+    // a human-readable format, and serializes TeamPermissions as an array of
     // strings.
     permissions: i32,
 }

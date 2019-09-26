@@ -1,0 +1,7 @@
+{%- filter translate(key="mail-team-invite-text", url=url, team=team) -%}
+You have been invited to join {{ team }} on Adaptarr!.
+
+To join this team please go to following URL
+
+    {{ url }}
+{%- endfilter -%}

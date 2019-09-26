@@ -18,7 +18,7 @@ use actix_web::{
 use actix_web_actors::ws::{self, WebsocketContext};
 use adaptarr_models::{Event, Model, events};
 use adaptarr_web::{Database, Session};
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -37,7 +37,7 @@ pub fn configure(app: &mut ServiceConfig) {
 struct EventData {
     id: i32,
     kind: &'static str,
-    timestamp: NaiveDateTime,
+    timestamp: DateTime<Utc>,
     #[serde(flatten)]
     data: events::Event,
 }

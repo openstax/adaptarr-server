@@ -25,7 +25,7 @@ use crate::{
         types::SlotPermission,
     },
     events::{DraftAdvanced, EventManager, ProcessCancelled, ProcessEnded},
-    permissions::PermissionBits,
+    permissions::TeamPermissions,
     processing::{TargetProcessor, ProcessDocument},
 };
 use super::{
@@ -36,6 +36,9 @@ use super::{
     FindModelResult,
     Model,
     Module,
+    Optional,
+    Team,
+    TeamResource,
     User,
     editing::{FillSlotError, Seating, Slot, Step, Version},
 };
@@ -49,6 +52,7 @@ pub struct Draft {
 #[derive(Debug, Serialize)]
 pub struct Public {
     pub module: Uuid,
+    pub team: i32,
     #[serde(flatten)]
     pub document: <Document as Model>::Public,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,6 +61,12 @@ pub struct Public {
     pub step: Option<<Step as Model>::Public>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub books: Option<Vec<Uuid>>,
+}
+
+impl TeamResource for Draft {
+    fn team_id(&self) -> <Team as Model>::Id {
+        self.data.team
+    }
 }
 
 impl Model for Draft {
@@ -94,6 +104,7 @@ impl Model for Draft {
     fn get_public(&self) -> Public {
         Public {
             module: self.data.module,
+            team: self.data.team,
             document: self.document.get_public(),
             permissions: None,
             step: None,
@@ -101,13 +112,14 @@ impl Model for Draft {
         }
     }
 
-    fn get_public_full(&self, db: &Connection, user: i32) -> Result<Public, DbError> {
+    fn get_public_full(&self, db: &Connection, &user: &i32) -> Result<Public, DbError> {
         Ok(Public {
             module: self.data.module,
+            team: self.data.team,
             document: self.document.get_public(),
             permissions: self.get_permissions(db, user).map(Some)?,
             step: self.get_step(db)?
-                .get_public_full(db, (Some(self.data.module), Some(user)))
+                .get_public_full(db, &(Some(self.data.module), Some(user)))
                 .map(Some)?,
             books: self.get_books(db).map(Some)?,
         })
@@ -200,8 +212,10 @@ impl Draft {
     pub fn check_access(&self, db: &Connection, user: &User)
     -> Result<bool, DbError> {
         // Process managers have access to all drafts.
-        if user.permissions(true).contains(PermissionBits::MANAGE_PROCESS) {
-            return Ok(true);
+        if let Some(membership) = self.get_team(db)?.get_member(&db, user).optional()? {
+            if membership.permissions().contains(TeamPermissions::MANAGE_PROCESS) {
+                return Ok(true);
+            }
         }
 
         let member = draft_slots::table
@@ -214,7 +228,7 @@ impl Draft {
             return Ok(true);
         }
 
-        let could_assign = Slot::free_in_draft_for(db, self, user.role)?;
+        let could_assign = Slot::free_in_draft_for(db, self)?;
         Ok(could_assign)
     }
 

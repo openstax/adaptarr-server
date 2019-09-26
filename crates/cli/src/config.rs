@@ -40,7 +40,7 @@ impl Config {
     /// ([`Config::global`]).
     pub fn register(&'static self) {
         self.mail.register();
-        self.model.register(&self.server.domain);
+        self.model.register(&self.server.domain, &self.server.secret);
     }
 }
 

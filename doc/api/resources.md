@@ -9,6 +9,7 @@
 ```
 {
     id: uuid,
+    team: number,
     name: string,
     parent: uuid?,
     kind: 'file' | 'directory',
@@ -18,6 +19,8 @@
 This model is used throughout the API to describe resources. The fields are
 
 - `id`: resource's UUID;
+
+- `team`: ID of the team owning this resource;
 
 - `name`: resource's name;
 
@@ -34,8 +37,10 @@ This model is used throughout the API to describe resources. The fields are
 
 ### `GET /api/v1/resources`
 
-Return list of all resources in the system as a JSON array of objects of the
-[`Resource`](#resource) model.
+Return list of all resources in teams current users is a member of as a JSON
+array of objects of the [`Resource`](#resource) model.
+
+In elevated sessions list of all resources is returned instead.
 
 ### `POST /api/v1/resources`
 
@@ -43,14 +48,14 @@ Create a new resource. Accepts a `multipart/form-data` with following fields
 
 - `name`: new resource's name'
 
+- `team`: ID of the team in which to create the resource. Current user must have
+  the [`resources:manage`](../#p-resources-manage) permission in this team.
+
 - `file`: if present, the new resource will be a file and this field contains
   its contents. Otherwise the new resource will be a directory;
 
 - `parent`: if present, contains UUID of the resource directory in which to
   create the new one.
-
-This endpoint is only available in elevated sessions with the
-[`resources:manage`](../#p-resources-manage) permission.
 
 #### Status codes
 
@@ -78,8 +83,8 @@ object with following fields/properties:
 
 - `name`: resource's new name.
 
-This endpoint is only available in elevated sessions with the
-[`resources:manage`](../#p-resources-manage) permission.
+This endpoint is only available to users with the [`resources:manage`](
+../#p-resources-manage) permission in the team owning the resource.
 
 #### Status codes
 
@@ -97,8 +102,8 @@ resources.
 Modify contents of this resource. This endpoint is only available on `'file'`
 resources.
 
-This endpoint is only available in elevated sessions with the
-[`resources:manage`](../#p-resources-manage) permission.
+This endpoint is only available to users with the [`resources:manage`](
+../#p-resources-manage) permission in the team owning the resource.
 
 #### Status codes
 

@@ -31,12 +31,12 @@ const CNXML_NS: &str = "http://cnx.rice.edu/cnxml";
 ///
 /// This function will insert new records into database, but will do so without
 /// a transaction. You'll probably want to wrap it in one.
-pub fn process_document(dbconn: &Connection, document: &db::Document)
+pub fn process_document(db: &Connection, document: &db::Document)
     -> Result<(), Error>
 {
     debug!("Processing reference targets for {}", document.id);
 
-    let index = File::by_id(dbconn, document.index)?;
+    let index = File::by_id(db, document.index)?;
     let content = index.read_to_string()?;
     let root = Element::from_str(&content)?;
 
@@ -116,12 +116,12 @@ pub fn process_document(dbconn: &Connection, document: &db::Document)
             .on_conflict((xref_targets::document, xref_targets::element))
             .do_update()
             .set(&target)
-            .execute(dbconn)?;
+            .execute(db)?;
     }
 
     diesel::update(document)
         .set(documents::xrefs_ready.eq(true))
-        .execute(dbconn)?;
+        .execute(db)?;
 
     Ok(())
 }
@@ -133,17 +133,17 @@ pub fn process_document(dbconn: &Connection, document: &db::Document)
 /// modified, but in some cases it might be possible that the server exited
 /// before their generation was completed. This function will be called each
 /// time the server starts to process such documents.
-pub fn process_stale(dbconn: &Connection) -> Result<(), Error> {
-    dbconn.transaction(|| {
+pub fn process_stale(db: &Connection) -> Result<(), Error> {
+    db.transaction(|| {
         let documents = modules::table
             .inner_join(documents::table)
             .filter(documents::xrefs_ready.eq(false))
-            .get_results::<(db::Module, db::Document)>(dbconn)?;
+            .get_results::<(db::Module, db::Document)>(db)?;
 
         trace!("Processing stale documents ({})", documents.len());
 
         for (module, document) in documents {
-            if let Err(err) = process_document(dbconn, &document) {
+            if let Err(err) = process_document(db, &document) {
                 error!(
                     "Could not process stale document {} (from module {}): {}",
                     document.id,

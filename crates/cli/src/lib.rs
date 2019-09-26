@@ -8,8 +8,8 @@ use structopt::StructOpt;
 
 mod config;
 mod document;
-mod role;
 mod server;
+mod team;
 mod user;
 mod util;
 
@@ -35,12 +35,12 @@ enum Command {
     /// Manage documents
     #[structopt(name = "document")]
     Document(document::Opts),
-    /// Manage roles
-    #[structopt(name = "role")]
-    Role(role::Opts),
     /// Manage users
     #[structopt(name = "user")]
     User(user::Opts),
+    /// Manage teams
+    #[structopt(name = "team")]
+    Team(team::Opts),
 }
 
 pub fn main() -> Result<(), Error> {
@@ -60,8 +60,8 @@ pub fn main() -> Result<(), Error> {
     match opts.command {
         Command::Server(opts) => server::main(config.clone(), opts),
         Command::Document(opts) => with_system(document::main, &config, opts),
-        Command::Role(opts) => with_system(role::main, &config, opts),
         Command::User(opts) => with_system(user::main, &config, opts),
+        Command::Team(opts) => with_system(team::main, &config, opts),
     }
 }
 

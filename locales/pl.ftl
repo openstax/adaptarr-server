@@ -77,6 +77,16 @@ register-error = { $code ->
 
 
 
+## Team invitation page
+
+join-team-title = Zostałeś/aś zaproszony/a do dołączenia do zespołu { $team }
+
+join-team-reject = Odrzuć
+
+join-team-accept = Dołącz do { $team }
+
+
+
 ## Password reset page
 
 reset-field-password = Hasło
@@ -146,6 +156,48 @@ mail-invite-after-button =
 mail-invite-footer = Powyższe zaproszenie dla { $email } do dołączenia do
     aplikacji { -brand-name } zostało wysłane przez członka
     zespołu { -org-name }.
+
+
+
+## Team invitation email
+
+mail-team-invite-subject = Zaproszenie
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-text =
+    Zostałeś/aś zaproszony/a do dołączenia do zespołu { $team } w { -brand-name }.
+
+    Aby dołączyć do zespołu, przejdź pod poniższy adres
+
+        { $url }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-before-button =
+    Zostałeś/aś zaproszony/a do dołączenia do zespołu { $team } w { -brand-name }.
+
+    Aby dołączyć do zespołu, przejdź pod poniższy adres
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+mail-team-invite-join-button = Dołącz do { $team }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-after-button =
+    Albo skopiuj poniższy adres do paska przeglądarki:
+    { -mail-url(url: $url, text: $url) }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-footer = Wiadomość została do Ciebie wysłana, ponieważ
+    posiadasz konto w { -brand-name } oraz jesteś zaproszony/a do zespołu
+    { $team }.
 
 
 

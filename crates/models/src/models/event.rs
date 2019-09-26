@@ -47,20 +47,20 @@ impl Model for Event {
 
 impl Event {
     /// Get all unread events.
-    pub fn unread(dbconn: &Connection, user: i32) -> Result<Vec<Event>, DbError> {
+    pub fn unread(db: &Connection, user: i32) -> Result<Vec<Event>, DbError> {
         events::table
             .filter(events::user.eq(user)
                 .and(events::is_unread.eq(true)))
-            .get_results::<db::Event>(dbconn)
+            .get_results::<db::Event>(db)
             .map(|v| v.into_iter().map(|data| Event { data }).collect())
     }
 
     /// Change this event's unread state.
-    pub fn set_unread(&mut self, dbconn: &Connection, is_unread: bool)
+    pub fn set_unread(&mut self, db: &Connection, is_unread: bool)
     -> Result<(), DbError> {
         diesel::update(&self.data)
             .set(events::is_unread.eq(is_unread))
-            .execute(dbconn)?;
+            .execute(db)?;
         self.data.is_unread = is_unread;
         Ok(())
     }

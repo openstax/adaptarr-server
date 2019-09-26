@@ -8,7 +8,7 @@ pub mod multipart;
 pub mod session;
 
 pub use self::{
-    extractors::{Database, FormOrJson, Locale, Secret},
+    extractors::{Database, FormOrJson, Locale, Secret, TeamScoped},
     file_ext::FileExt,
     guards::ContentType,
     responders::{Created, WithStatus},

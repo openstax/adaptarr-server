@@ -10,17 +10,22 @@ use adaptarr_models::{
     AdvanceResult,
     Draft,
     File,
-    FindModelError,
     Model,
     Module,
     User,
-    UserFields,
     db::{Connection, Pool, types::SlotPermission},
     editing::{Version, Slot},
     permissions::ManageProcess,
 };
 use adaptarr_util::futures::void;
-use adaptarr_web::{Database, FileExt, FormOrJson, Session, etag::IfMatch};
+use adaptarr_web::{
+    Database,
+    FileExt,
+    FormOrJson,
+    Session,
+    TeamScoped,
+    etag::IfMatch,
+};
 use failure::Fail;
 use futures::{Future, Stream, future};
 use serde::{Deserialize, Serialize};
@@ -64,7 +69,7 @@ pub fn configure(app: &mut ServiceConfig) {
 fn list_drafts(db: Database, session: Session)
 -> Result<Json<Vec<<Draft as Model>::Public>>> {
     Ok(Json(Draft::all_of(&db, session.user)?
-        .get_public_full(&db, session.user_id())?))
+        .get_public_full(&db, &session.user_id())?))
 }
 
 /// Get a draft by ID.
@@ -74,16 +79,9 @@ fn list_drafts(db: Database, session: Session)
 /// ```text
 /// GET /drafts/:id
 /// ```
-fn get_draft(db: Database, session: Session, id: Path<Uuid>)
+fn get_draft(db: Database, scope: TeamScoped<Draft>, session: Session)
 -> Result<Json<<Draft as Model>::Public>> {
-    let draft = Draft::by_id(&db, *id)?;
-    let user = session.user(&db)?;
-
-    if !draft.check_access(&db, &user)? {
-        return Err(FindModelError::<Draft>::not_found().into());
-    }
-
-    Ok(Json(draft.get_public_full(&db, user.id())?))
+    Ok(Json(scope.resource().get_public_full(&db, &session.user)?))
 }
 
 #[derive(Deserialize)]
@@ -112,7 +110,7 @@ fn update_draft(
 
     draft.set_title(&db, &update.title)?;
 
-    Ok(Json(draft.get_public_full(&db, session.user_id())?))
+    Ok(Json(draft.get_public_full(&db, &session.user_id())?))
 }
 
 /// Delete a draft.
@@ -122,9 +120,11 @@ fn update_draft(
 /// ```text
 /// DELETE /drafts/:id
 /// ```
-fn delete_draft(db: Database, _: Session<ManageProcess>, id: Path<Uuid>)
--> Result<HttpResponse> {
-    Draft::by_id(&db, *id)?.delete(&db)?;
+fn delete_draft(
+    db: Database,
+    scope: TeamScoped<Draft, ManageProcess>,
+) -> Result<HttpResponse> {
+    scope.into_resource().delete(&db)?;
 
     Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
@@ -209,16 +209,9 @@ struct FileInfo {
 /// ```text
 /// GET /drafts/:id/files
 /// ```
-fn list_files(db: Database, session: Session, id: Path<Uuid>)
+fn list_files(db: Database, scope: TeamScoped<Draft>)
 -> Result<Json<Vec<FileInfo>>> {
-    let draft = Draft::by_id(&db, *id)?;
-    let user = session.user(&db)?;
-
-    if !draft.check_access(&db, &user)? {
-        return Err(FindModelError::<Draft>::not_found().into());
-    }
-
-    Ok(Json(draft.get_files(&db)?
+    Ok(Json(scope.resource().get_files(&db)?
         .into_iter()
         .map(|(name, file)| FileInfo {
             name,
@@ -234,18 +227,11 @@ fn list_files(db: Database, session: Session, id: Path<Uuid>)
 /// ```text
 /// GET /drafts/:id/files/:name
 /// ```
-fn get_file(db: Database, session: Session, path: Path<(Uuid, String)>)
+fn get_file(db: Database, scope: TeamScoped<Draft>, path: Path<(Uuid, String)>)
 -> Result<impl Responder> {
-    let (id, name) = path.into_inner();
-    let draft = Draft::by_id(&db, id)?;
-    let user = session.user(&db)?;
-
-    if !draft.check_access(&*db, &user)? {
-        return Err(FindModelError::<Draft>::not_found().into());
-    }
-
+    let (_, name) = path.into_inner();
     let storage_path = &adaptarr_models::Config::global().storage.path;
-    Ok(draft.get_file(&db, &name)?.stream(storage_path))
+    Ok(scope.resource().get_file(&db, &name)?.stream(storage_path))
 }
 
 /// Update a file in a draft.
@@ -364,16 +350,9 @@ fn delete_file(
 /// ```text
 /// GET /drafts/:id/books
 /// ```
-fn list_containing_books(db: Database, session: Session, id: Path<Uuid>)
+fn list_containing_books(db: Database, scope: TeamScoped<Draft>)
 -> Result<Json<Vec<Uuid>>> {
-    let draft = Draft::by_id(&db, *id)?;
-    let user = session.user(&db)?;
-
-    if !draft.check_access(&db, &user)? {
-        return Err(FindModelError::<Draft>::not_found().into());
-    }
-
-    Ok(Json(draft.get_books(&db)?))
+    Ok(Json(scope.resource().get_books(&db)?))
 }
 
 #[derive(Serialize)]
@@ -399,23 +378,17 @@ struct ProcessDetails {
 /// ```
 fn get_process_details(
     db: Database,
-    session: Session<ManageProcess>,
-    id: Path<Uuid>,
+    scope: TeamScoped<Draft, ManageProcess>,
 ) -> Result<Json<ProcessDetails>> {
-    let draft = Draft::by_id(&db, *id)?;
-
-    if !draft.check_access(&db, &session.user(&db)?)? {
-        return Err(FindModelError::<Draft>::not_found().into());
-    }
-
+    let draft = scope.resource();
     let process = draft.get_process(&db)?;
 
     let slots = process.get_slots(&db)?
         .into_iter()
         .map(|slot| Ok(SlotSeating {
-            slot: slot.get_public_full(&db, ())?,
+            slot: slot.get_public_full(&db, &())?,
             user: slot.get_occupant(&db, &draft)?
-                .map(|user| user.get_public_full(&db, UserFields::empty()))
+                .map(|user| user.get_public_full(&db, &Default::default()))
                 .transpose()?
         }))
         .collect::<Result<Vec<_>>>()?;
@@ -435,12 +408,12 @@ fn get_process_details(
 /// ```
 fn assign_slot(
     db: Database,
-    _: Session<ManageProcess>,
+    scope: TeamScoped<Draft, ManageProcess>,
     path: Path<(Uuid, i32)>,
     user: Json<i32>,
 ) -> Result<HttpResponse> {
-    let (draft_id, slot_id) = path.into_inner();
-    let draft = Draft::by_id(&db, draft_id)?;
+    let (_, slot_id) = path.into_inner();
+    let draft = scope.resource();
     let slot = Slot::by_id(&db, slot_id)?;
     let user = User::by_id(&db, *user)?;
 

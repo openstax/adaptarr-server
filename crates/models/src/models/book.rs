@@ -1,9 +1,9 @@
-use diesel::{prelude::*, result::Error as DbError};
+use diesel::{expression::dsl::any, prelude::*, result::Error as DbError};
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{audit, db::{Connection, models as db, schema::books}};
-use super::{AssertExists, BookPart, FindModelResult, Model};
+use super::{AssertExists, BookPart, FindModelResult, Model, Team, TeamResource};
 
 /// A book is a collection of modules and their structure.
 #[derive(Debug)]
@@ -16,6 +16,7 @@ pub struct Book {
 pub struct Public {
     id: Uuid,
     title: String,
+    team: i32,
 }
 
 impl Model for Book {
@@ -50,7 +51,14 @@ impl Model for Book {
         Public {
             id: self.data.id,
             title: self.data.title.clone(),
+            team: self.data.team,
         }
+    }
+}
+
+impl TeamResource for Book {
+    fn team_id(&self) -> <Team as Model>::Id {
+        self.data.team
     }
 }
 
@@ -65,12 +73,25 @@ impl Book {
             .map(|v| v.into_iter().map(|data| Book { data }).collect())
     }
 
+    /// Get all books in specified teams.
+    ///
+    /// *Warning*: this function is temporary and will be removed once we figure
+    /// out how to do pagination.
+    pub fn by_team(db: &Connection, teams: &[i32]) -> Result<Vec<Book>, DbError> {
+        books::table
+            .filter(books::team.eq(any(teams)))
+            .get_results::<db::Book>(db)
+            .map(Model::from_db)
+    }
+
     /// Create a new book.
-    pub fn create(db: &Connection, title: &str) -> Result<Book, DbError> {
+    pub fn create(db: &Connection, team: &Team, title: &str)
+    -> Result<Book, DbError> {
         let data = diesel::insert_into(books::table)
             .values(db::NewBook {
                 id: Uuid::new_v4(),
                 title,
+                team: team.id(),
             })
             .get_result::<db::Book>(db)?;
 
@@ -89,9 +110,14 @@ impl Book {
         Ok(())
     }
 
+    /// Load a [`BookPart`] by ID.
+    pub fn get_part(&self, db: &Connection, id: i32) -> FindModelResult<BookPart> {
+        BookPart::by_id(db, (self.data.id, id))
+    }
+
     /// Load root part of this book.
     pub fn root_part(&self, db: &Connection) -> Result<BookPart, DbError> {
-        BookPart::by_id(db, (self.data.id, 0)).assert_exists()
+        self.get_part(db, 0).assert_exists()
     }
 
     /// Change title of this book.

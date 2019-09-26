@@ -7,6 +7,8 @@ static CONFIG: SingleInit<&'static Config> = SingleInit::uninit();
 
 static DOMAIN: SingleInit<String> = SingleInit::uninit();
 
+static SECRET: SingleInit<Box<[u8]>> = SingleInit::uninit();
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub database: Option<DbConfig>,
@@ -38,13 +40,24 @@ impl Config {
     /// This function will panic if called before [`Config::register`].
     pub fn domain() -> &'static str {
         DOMAIN.get().expect("model configuration must be initialized before \
-            calling Config::global")
+            calling Config::domain")
+    }
+
+    /// Get configured secret.
+    ///
+    /// ## Panics
+    ///
+    /// This function will panic if called before [`Config::register`].
+    pub fn secret() -> &'static [u8] {
+        SECRET.get().expect("model configuration must be initialized before \
+            calling Config::secret")
     }
 
     /// Register this configuration as the global static configuration
     /// ([`Config::global`]).
-    pub fn register(&'static self, domain: &str) {
+    pub fn register(&'static self, domain: &str, secret: &[u8]) {
         CONFIG.get_or_init(|| self);
         DOMAIN.get_or_init(|| domain.to_string());
+        SECRET.get_or_init(|| secret.to_vec().into_boxed_slice());
     }
 }

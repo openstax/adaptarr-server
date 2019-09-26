@@ -14,13 +14,14 @@ use crate::{
     audit,
     db::{Connection, Pool},
     models::{
-        Book,
         CNXML_MIME,
+        Book,
         CreateFileError,
         CreatePartError,
         File,
         Module,
         ReplaceModuleError,
+        Team,
     },
 };
 
@@ -37,6 +38,7 @@ pub struct ImportModule {
     pub title: String,
     pub file: NamedTempFile,
     pub actor: audit::Actor,
+    pub team: Team,
 }
 
 impl Message for ImportModule {
@@ -60,6 +62,7 @@ pub struct ImportBook {
     pub title: String,
     pub file: NamedTempFile,
     pub actor: audit::Actor,
+    pub team: Team,
 }
 
 impl Message for ImportBook {
@@ -72,6 +75,7 @@ pub struct ReplaceBook {
     pub book: Book,
     pub file: NamedTempFile,
     pub actor: audit::Actor,
+    pub team: Team,
 }
 
 impl Message for ReplaceBook {
@@ -194,14 +198,14 @@ impl Importer {
     }
 
     /// Create a new module from a ZIP of its contents.
-    fn create_module(&mut self, title: String, file: NamedTempFile)
+    fn create_module(&mut self, team: &Team, title: String, file: NamedTempFile)
     -> Result<Module, ImportError> {
         let ModuleZip {
             language, index, files, ..
         } = self.process_module_zip(file)?;
 
         let db = self.pool.get()?;
-        let module = Module::create(&*db, &title, &language, index, files)?;
+        let module = Module::create(&*db, team, &title, &language, index, files)?;
 
         Ok(module)
     }
@@ -259,7 +263,7 @@ impl Importer {
     /// Import a single module from a collection ZIP.
     fn load_collection_module(
         &mut self,
-        dbconn: &Connection,
+        db: &Connection,
         zip: &mut ZipArchive<&mut std::fs::File>,
         base_path: PathBuf,
     ) -> Result<ModuleZip, ImportError> {
@@ -276,7 +280,7 @@ impl Importer {
         let index_file = {
             let index = zip.by_name(index_path)?;
             File::from_read(
-                dbconn,
+                db,
                 &self.storage_path,
                 index,
                 Some(&*CNXML_MIME),
@@ -315,7 +319,7 @@ impl Importer {
                 continue;
             }
 
-            let file = File::from_read(dbconn, &self.storage_path, file, None)?;
+            let file = File::from_read(db, &self.storage_path, file, None)?;
             files.push((name, file));
         }
 
@@ -330,13 +334,14 @@ impl Importer {
     /// Load contents of a book from a collection ZIP.
     fn load_collection_zip(
         &mut self,
-        dbconn: &Connection,
+        db: &Connection,
+        team: &Team,
         book: &mut Book,
         mut zip: ZipArchive<&mut std::fs::File>,
         coldata: Collection,
         base: PathBuf,
     ) -> Result<(), ImportError> {
-        let root = book.root_part(dbconn)?;
+        let root = book.root_part(db)?;
 
         let mut queue = vec![(root, &coldata.content)];
 
@@ -348,16 +353,17 @@ impl Importer {
                         let ModuleZip {
                             language, index, files, ..
                         } = self.load_collection_module(
-                            dbconn, &mut zip, path)?;
-                        let module = Module::create(dbconn, &title, &language, index, files)?;
-                        group.insert_module(dbconn, inx as i32, &title, &module)
+                            db, &mut zip, path)?;
+                        let module = Module::create(
+                            db, team, &title, &language, index, files)?;
+                        group.insert_module(db, inx as i32, &title, &module)
                             .map_err(|e| match e {
                                 CreatePartError::Database(e) => e,
                                 CreatePartError::IsAModule => unreachable!(),
                             })?;
                     }
                     Element::Subcollection(Subcollection { title, content }) => {
-                        let new = group.create_group(dbconn, inx as i32, &title)
+                        let new = group.create_group(db, inx as i32, &title)
                             .map_err(|e| match e {
                                 CreatePartError::Database(e) => e,
                                 CreatePartError::IsAModule => unreachable!(),
@@ -372,31 +378,32 @@ impl Importer {
     }
 
     /// Create a new book for a ZIP of its contents.
-    fn create_book(&mut self, title: String, mut file: NamedTempFile)
+    fn create_book(&mut self, team: &Team, title: String, mut file: NamedTempFile)
     -> Result<Book, ImportError> {
         let (zip, coldata, base) = self.preprocess_collection_zip(&mut file)?;
 
         let db = self.pool.get()?;
-        let dbconn = &*db;
+        let db = &*db;
 
-        dbconn.transaction(|| {
-            let mut book = Book::create(dbconn, &title)?;
-            self.load_collection_zip(dbconn, &mut book, zip, coldata, base)?;
+        db.transaction(|| {
+            let mut book = Book::create(db, team, &title)?;
+            self.load_collection_zip(
+                db, team, &mut book, zip, coldata, base)?;
             Ok(book)
         })
     }
 
     /// Replace contents of a book from a collection ZIP.
-    fn replace_book(&mut self, mut book: Book, mut file: NamedTempFile)
+    fn replace_book(&mut self, team: &Team, mut book: Book, mut file: NamedTempFile)
     -> Result<Book, ImportError> {
         let (zip, coldata, base) = self.preprocess_collection_zip(&mut file)?;
 
         let db = self.pool.get()?;
-        let dbconn = &*db;
+        let db = &*db;
 
-        dbconn.transaction(|| {
-            book.root_part(dbconn)?.clear(dbconn)?;
-            self.load_collection_zip(dbconn, &mut book, zip, coldata, base)?;
+        db.transaction(|| {
+            book.root_part(db)?.clear(db)?;
+            self.load_collection_zip(db, team, &mut book, zip, coldata, base)?;
             Ok(book)
         })
     }
@@ -418,9 +425,9 @@ impl Handler<ImportModule> for Importer {
     type Result = Result<Module, ImportError>;
 
     fn handle(&mut self, msg: ImportModule, _: &mut Self::Context) -> Self::Result {
-        let ImportModule { title, file, actor } = msg;
+        let ImportModule { title, file, actor, team } = msg;
 
-        audit::with_actor(actor, || self.create_module(title, file))
+        audit::with_actor(actor, || self.create_module(&team, title, file))
     }
 }
 
@@ -438,9 +445,9 @@ impl Handler<ImportBook> for Importer {
     type Result = Result<Book, ImportError>;
 
     fn handle(&mut self, msg: ImportBook, _: &mut Self::Context) -> Self::Result {
-        let ImportBook { title, file, actor } = msg;
+        let ImportBook { title, file, actor, team } = msg;
 
-        audit::with_actor(actor, || self.create_book(title, file))
+        audit::with_actor(actor, || self.create_book(&team, title, file))
     }
 }
 
@@ -448,9 +455,9 @@ impl Handler<ReplaceBook> for Importer {
     type Result = Result<Book, ImportError>;
 
     fn handle(&mut self, msg: ReplaceBook, _: &mut Self::Context) -> Self::Result {
-        let ReplaceBook { book, file, actor } = msg;
+        let ReplaceBook { book, file, actor, team } = msg;
 
-        audit::with_actor(actor, || self.replace_book(book, file))
+        audit::with_actor(actor, || self.replace_book(&team, book, file))
     }
 }
 

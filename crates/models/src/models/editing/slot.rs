@@ -3,6 +3,7 @@ use adaptarr_macros::From;
 use diesel::{
     Connection as _,
     prelude::*,
+    expression::dsl::exists,
     result::{DatabaseErrorKind, Error as DbError},
 };
 use failure::Fail;
@@ -22,6 +23,10 @@ use crate::{
             edit_process_slot_roles,
             edit_process_slots,
             edit_process_step_slots,
+            edit_process_steps,
+            edit_process_versions,
+            edit_processes,
+            team_members,
             users,
         },
         functions::count_distinct,
@@ -82,7 +87,7 @@ impl Model for Slot {
         }
     }
 
-    fn get_public_full(&self, db: &Connection, _: ()) -> Result<Public, DbError> {
+    fn get_public_full(&self, db: &Connection, _: &()) -> Result<Public, DbError> {
         let db::EditProcessSlot { id, ref name, .. } = self.data;
 
         Ok(Public {
@@ -96,9 +101,9 @@ impl Model for Slot {
 impl Slot {
     /// Get list of all currently unoccupied slots to which a user with given
     /// role can assign themselves.
-    pub fn all_free(db: &Connection, role: Option<i32>)
+    pub fn all_free(db: &Connection, user: &User)
     -> Result<Vec<(Draft, Slot)>, DbError> {
-        let query = drafts::table
+        Ok(drafts::table
             .inner_join(edit_process_step_slots::table
                 .on(drafts::step.eq(edit_process_step_slots::step)))
             .left_join(draft_slots::table
@@ -109,34 +114,27 @@ impl Slot {
                 .on(edit_process_step_slots::slot.eq(edit_process_slots::id)))
             .left_join(edit_process_slot_roles::table
                 .on(edit_process_slots::id.eq(edit_process_slot_roles::slot)))
+            .inner_join(edit_process_steps::table)
+            .inner_join(edit_process_versions::table
+                .on(edit_process_steps::process.eq(edit_process_versions::id)))
+            .inner_join(edit_processes::table
+                .on(edit_process_versions::process.eq(edit_processes::id)))
+            .inner_join(team_members::table
+                .on(edit_processes::team.eq(team_members::team)))
             .select((
                 drafts::all_columns,
                 documents::all_columns,
                 edit_process_slots::all_columns,
-            ));
-
-        let slots = if let Some(role) = role {
-            query
-                .filter(draft_slots::user.is_null()
-                    .and(edit_process_slot_roles::role.is_null()
-                        .or(edit_process_slot_roles::role.eq(role))))
-                .get_results::<(
-                    db::Draft,
-                    db::Document,
-                    db::EditProcessSlot,
-                )>(db)?
-        } else {
-            query
-                .filter(draft_slots::user.is_null()
-                    .and(edit_process_slot_roles::role.is_null()))
-                .get_results::<(
-                    db::Draft,
-                    db::Document,
-                    db::EditProcessSlot,
-                )>(db)?
-        };
-
-        Ok(slots
+            ))
+            .filter(draft_slots::user.is_null()
+                .and(edit_process_slot_roles::role.is_null()
+                    .or(edit_process_slot_roles::role.nullable().eq(team_members::role)))
+                .and(team_members::user.eq(user.id())))
+            .get_results::<(
+                db::Draft,
+                db::Document,
+                db::EditProcessSlot,
+            )>(db)?
             .into_iter()
             .map(|(draft, document, slot)| (
                 Draft::from_db((draft, document)),
@@ -145,12 +143,12 @@ impl Slot {
             .collect())
     }
 
-    /// Does a draft have any unoccupied slots to which a user with given role
-    /// can assign themselves?
-    pub fn free_in_draft_for(db: &Connection, draft: &Draft, role: Option<i32>)
+    /// Does a draft have any unoccupied slots to which a user can assign
+    /// themselves?
+    pub fn free_in_draft_for(db: &Connection, draft: &Draft)
     -> Result<bool, DbError> {
         // TODO: fold this and all_free into a single helper function?
-        let query = drafts::table
+        Ok(drafts::table
             .inner_join(edit_process_step_slots::table
                 .on(drafts::step.eq(edit_process_step_slots::step)))
             .left_join(draft_slots::table
@@ -159,26 +157,21 @@ impl Slot {
             .inner_join(edit_process_slots::table
                 .on(edit_process_step_slots::slot.eq(edit_process_slots::id)))
             .left_join(edit_process_slot_roles::table
-                .on(edit_process_slots::id.eq(edit_process_slot_roles::slot)));
-
-        let count = if let Some(role) = role {
-            query
-                .filter(draft_slots::user.is_null()
-                    .and(edit_process_slot_roles::role.is_null()
-                        .or(edit_process_slot_roles::role.eq(role)))
-                    .and(drafts::module.eq(draft.id())))
-                .count()
-                .get_result::<i64>(db)?
-        } else {
-            query
-                .filter(draft_slots::user.is_null()
-                    .and(edit_process_slot_roles::role.is_null())
-                    .and(drafts::module.eq(draft.id())))
-                .count()
-                .get_result::<i64>(db)?
-        };
-
-        Ok(count > 0)
+                .on(edit_process_slots::id.eq(edit_process_slot_roles::slot)))
+            .inner_join(edit_process_steps::table)
+            .inner_join(edit_process_versions::table
+                .on(edit_process_steps::process.eq(edit_process_versions::id)))
+            .inner_join(edit_processes::table
+                .on(edit_process_versions::process.eq(edit_processes::id)))
+            .inner_join(team_members::table
+                .on(edit_processes::team.eq(team_members::team)))
+            .filter(draft_slots::user.is_null()
+                .and(edit_process_slot_roles::role.is_null()
+                    .or(edit_process_slot_roles::role.nullable().eq(team_members::role)))
+                .and(drafts::module.eq(draft.id())))
+            .count()
+            .get_result::<i64>(db)?
+            > 0)
     }
 
     /// Get current occupant of this slot in a draft.
@@ -205,12 +198,26 @@ impl Slot {
 
     /// Is this slot limited to only users with a specific role?
     pub fn is_role_limited(&self, db: &Connection) -> Result<bool, DbError> {
-        edit_process_slot_roles::table
-            .filter(edit_process_slot_roles::slot.eq(self.data.id))
-            .limit(1)
-            .count()
-            .get_result::<i64>(db)
-            .map(|r| r != 0)
+        diesel::select(exists(
+            edit_process_slot_roles::table
+                .filter(edit_process_slot_roles::slot.eq(self.data.id))
+        )).get_result(db)
+    }
+
+    /// Does the role limit allow a user to occupy this slot?
+    pub fn is_allowed_to_occupy(&self, db: &Connection, user: &db::User)
+    -> Result<bool, DbError> {
+        if !self.is_role_limited(db)? {
+            return Ok(true);
+        }
+
+        diesel::select(exists(
+            team_members::table
+                .inner_join(edit_process_slot_roles::table
+                    .on(team_members::role.eq(edit_process_slot_roles::role.nullable())))
+                .filter(edit_process_slot_roles::slot.eq(self.data.id)
+                    .and(team_members::user.eq(user.id)))
+        )).get_result(db)
     }
 
     /// Fill this slot with an auto-selected user for a particular draft.
@@ -221,8 +228,9 @@ impl Slot {
         }
 
         let user = users::table
+            .inner_join(team_members::table)
             .inner_join(edit_process_slot_roles::table
-                .on(users::role.eq(edit_process_slot_roles::role.nullable())))
+                .on(team_members::role.eq(edit_process_slot_roles::role.nullable())))
             .inner_join(draft_slots::table)
             .select(users::all_columns)
             .group_by((users::all_columns, draft_slots::draft))
@@ -239,10 +247,7 @@ impl Slot {
     /// Fill this slot with a user for a particular draft.
     pub fn fill_with(&self, db: &Connection, draft: &Draft, user: &db::User)
     -> Result<(), FillSlotError> {
-        let roles = self.get_role_limit(db)?;
-
-        if !roles.is_empty()
-        && !user.role.map_or(false, |r| roles.iter().any(|&role| r == role)) {
+        if !self.is_allowed_to_occupy(db, user)? {
             return Err(FillSlotError::BadRole);
         }
 

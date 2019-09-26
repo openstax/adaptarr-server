@@ -1,0 +1,22 @@
+{% extends "_base.html" %}
+{% block body %}
+    <div>
+        <h1>
+            {% filter translate(key="join-team-title", team=team) %}
+                You have been invited to join {{ team }}
+            {% endfilter %}
+        </h1>
+
+        <form method="post">
+            <input type="hidden" name="invite" value="{{ invite }}" required>
+            <input type="hidden" name="action" value="reject" required>
+            <input type="submit" value="{{ _(key="join-team-reject") }}">
+        </form>
+
+        <form method="post">
+            <input type="hidden" name="invite" value="{{ invite }}" required>
+            <input type="hidden" name="action" value="accept" required>
+            <input type="submit" value="{{ _(key="join-team-accept", team=team) }}">
+        </form>
+    </div>
+{% endblock %}

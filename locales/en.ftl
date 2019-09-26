@@ -4,6 +4,8 @@ locale-name = English
 
 -brand-name = Adaptarr!
 
+-brand-name-article = an { -brand-name }
+
 
 
 ## Login page
@@ -77,6 +79,16 @@ register-error = { $code ->
 
 
 
+## Team invitation page
+
+join-team-title = You have been invited to join { $team }
+
+join-team-reject = Reject
+
+join-team-accept = Join { $team }
+
+
+
 ## Password reset page
 
 reset-field-password = Password
@@ -113,7 +125,7 @@ reset-error = { $code ->
 mail-logo-alt = { -org-name }™ logo
 
 mail-footer = This message was auto-generated, please do not respond to it.
-    You are receiving it because you have an { -brand-name } account.
+    You are receiving it because you have { -brand-name-article } account.
 
 
 
@@ -147,8 +159,49 @@ mail-invite-after-button =
 
 # Variables:
 # - $email (string): invitee's email address
-mail-invite-footer = You are receiving this message because a member of
+mail-invite-footer = You are receiving this message because you are a member of
     { -org-name } has invited { $email } to join { -brand-name }.
+
+
+
+## Team invitation email
+
+mail-team-invite-subject = Invitation
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-text =
+    You have been invited to join { $team } on { -brand-name }.
+
+    To join this team please go to following URL
+
+        { $url }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-before-button =
+    You have been invited to join { $team } on { -brand-name }.
+
+    To join this team please click the button below
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+mail-team-invite-join-button = Join { $team }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-after-button =
+    Or copy the following URL into your address bar:
+    { -mail-url(url: $url, text: $url) }
+
+# Variables:
+# - $team (string): name of the team to which the user is invited
+# - $url (string): invitation URL
+mail-team-invite-footer = You are receiving this message because you have
+    { -brand-name-article } account and someone has invited you to join { $team }.
 
 
 

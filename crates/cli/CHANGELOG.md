@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.0 - 2019-09-26
+
+Implemented teams.
+
 ## 0.4.0 - 2019-09-09
 
 - Restructured code, splitting it into a number of crates. Minor bugfixes and

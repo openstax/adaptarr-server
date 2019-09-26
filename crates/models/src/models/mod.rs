@@ -17,6 +17,8 @@ mod module;
 mod password;
 mod resource;
 mod role;
+mod team;
+mod team_member;
 mod user;
 mod xref_target;
 
@@ -34,12 +36,14 @@ pub use self::{
     password::PasswordResetToken,
     resource::{Resource, ResourceFileError},
     role::Role,
+    team::{Team, TeamResource},
+    team_member::TeamMember,
     user::{
         ChangePasswordError,
         CreateUserError,
-        Fields as UserFields,
         User,
         UserAuthenticateError,
+        PublicParams as UserPublicParams,
     },
     xref_target::XrefTarget,
 };
@@ -80,7 +84,7 @@ pub trait Model: Sized {
     fn get_public(&self) -> Self::Public;
 
     /// Get the public portion of this book's data.
-    fn get_public_full(&self, _: &Connection, _: Self::PublicParams)
+    fn get_public_full(&self, _: &Connection, _: &Self::PublicParams)
     -> Result<Self::Public, DbError> {
         Ok(self.get_public())
     }
@@ -186,10 +190,74 @@ impl<M: Model> From<DbError> for FindModelError<M> {
     }
 }
 
+pub trait Optional {
+    /// Result after allowing nullability.
+    type Output;
+
+    fn optional(self) -> Self::Output;
+}
+
+impl<M: Model> Optional for Result<M, FindModelError<M>> {
+    type Output = Result<Option<M>, DbError>;
+
+    fn optional(self) -> Self::Output {
+        match self {
+            Ok(model) => Ok(Some(model)),
+            Err(FindModelError::NotFound(_)) => Ok(None),
+            Err(FindModelError::Database(_, err)) => Err(err),
+        }
+    }
+}
+
+impl<M: Model> Model for Option<M> {
+    const ERROR_CATEGORY: &'static str = <M as Model>::ERROR_CATEGORY;
+
+    type Id = Option<M::Id>;
+    type Database = Option<M::Database>;
+    type Public = Option<M::Public>;
+    type PublicParams = M::PublicParams;
+
+    fn by_id(db: &Connection, id: Self::Id) -> FindModelResult<Self> {
+        match id {
+            None => Ok(None),
+            Some(id) => match M::by_id(db, id) {
+                Ok(model) => Ok(Some(model)),
+                Err(FindModelError::Database(_, err)) =>
+                    Err(FindModelError::Database(PhantomData, err)),
+                Err(FindModelError::NotFound(_)) =>
+                    Err(FindModelError::NotFound(PhantomData)),
+            }
+        }
+    }
+
+    fn from_db(data: Self::Database) -> Self {
+        data.map(M::from_db)
+    }
+
+    fn into_db(self) -> Self::Database {
+        self.map(M::into_db)
+    }
+
+    fn id(&self) -> Self::Id {
+        self.as_ref().map(M::id)
+    }
+
+    fn get_public(&self) -> Self::Public {
+        self.as_ref().map(M::get_public)
+    }
+
+    fn get_public_full(&self, db: &Connection, params: &Self::PublicParams)
+    -> Result<Self::Public, DbError> {
+        match self {
+            None => Ok(None),
+            Some(model) => Ok(Some(model.get_public_full(db, params)?)),
+        }
+    }
+}
+
 impl<T> Model for Vec<T>
 where
     T: Model,
-    T::PublicParams: Clone,
 {
     const ERROR_CATEGORY: &'static str = <T as Model>::ERROR_CATEGORY;
 
@@ -218,8 +286,8 @@ where
         self.iter().map(T::get_public).collect()
     }
 
-    fn get_public_full(&self, db: &Connection, params: Self::PublicParams)
+    fn get_public_full(&self, db: &Connection, params: &Self::PublicParams)
     -> Result<Self::Public, DbError> {
-        self.iter().map(|t| t.get_public_full(db, params.clone())).collect()
+        self.iter().map(|t| t.get_public_full(db, params)).collect()
     }
 }

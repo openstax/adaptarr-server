@@ -9,11 +9,12 @@ use adaptarr_models::{
     Draft,
     Model,
     Role,
+    Team,
     db::Connection,
     editing::{Link, Process, Slot, Step, Version, structure},
-    permissions::EditProcess,
+    permissions::{EditProcess, PermissionBits, TeamPermissions},
 };
-use adaptarr_web::{Created, Database, FormOrJson, Session};
+use adaptarr_web::{Created, Database, FormOrJson, Session, TeamScoped};
 use diesel::Connection as _;
 use serde::Deserialize;
 use serde::Serialize;
@@ -94,9 +95,19 @@ pub fn configure(app: &mut ServiceConfig) {
 /// ```text
 /// GET /processes
 /// ```
-fn list_processes(db: Database, _: Session)
+fn list_processes(db: Database, session: Session)
 -> Result<Json<Vec<<Process as Model>::Public>>> {
-    Ok(Json(Process::all(&db)?.get_public()))
+    let user = session.user(&db)?;
+    let teams = user.get_team_ids(&db)?;
+
+    Ok(Json(Process::by_team(&db, &teams)?.get_public()))
+}
+
+#[derive(Deserialize)]
+struct NewProcess {
+    team: i32,
+    #[serde(flatten)]
+    structure: structure::Process,
 }
 
 /// Create a new editing process.
@@ -109,10 +120,18 @@ fn list_processes(db: Database, _: Session)
 fn create_process(
     req: HttpRequest,
     db: Database,
-    _: Session<EditProcess>,
-    data: Json<structure::Process>,
+    session: Session,
+    data: Json<NewProcess>,
 ) -> Result<Created<String, Json<<Process as Model>::Public>>> {
-    let process = Process::create(&db, &*data)?;
+    let team = Team::by_id(&db, data.team)?;
+
+    if !session.is_elevated {
+        team.get_member(&db, &session.user(&db)?)?
+            .permissions()
+            .require(TeamPermissions::EDIT_PROCESS)?;
+    }
+
+    let process = Process::create(&db, &team, &data.structure)?;
     let location = format!("{}/api/v1/processes/{}",
         req.app_config().host(), process.process().id);
 
@@ -162,11 +181,13 @@ struct FreeSlot {
 /// ```
 fn list_free_slots(db: Database, session: Session)
 -> Result<Json<Vec<FreeSlot>>> {
-    Ok(Json(Slot::all_free(&db, session.user(&db)?.role)?
+    let user = session.user(&db)?;
+
+    Ok(Json(Slot::all_free(&db, &user)?
         .into_iter()
         .map(|(draft, slot)| Ok(FreeSlot {
-            slot: slot.get_public_full(&db, ())?,
-            draft: draft.get_public(),
+            slot: slot.get_public_full(&db, &())?,
+            draft: draft.get_public_full(&db, &user.id())?,
         }))
         .collect::<Result<Vec<_>>>()?))
 }
@@ -178,9 +199,9 @@ fn list_free_slots(db: Database, session: Session)
 /// ```text
 /// GET /processes/:id
 /// ```
-fn get_process(db: Database, _: Session, id: Path<i32>)
+fn get_process(scope: TeamScoped<Process>)
 -> Result<Json<<Process as Model>::Public>> {
-    Ok(Json(Process::by_id(&db, *id)?.get_public()))
+    Ok(Json(scope.resource().get_public()))
 }
 
 #[derive(Deserialize)]
@@ -197,11 +218,10 @@ struct ProcessUpdate {
 /// ```
 fn update_process(
     db: Database,
-    _: Session<EditProcess>,
-    id: Path<i32>,
+    scope: TeamScoped<Process, EditProcess>,
     update: Json<ProcessUpdate>,
 ) -> Result<Json<<Process as Model>::Public>> {
-    let mut process = Process::by_id(&db, id.into_inner())?;
+    let mut process = scope.into_resource();
 
     process.set_name(&db, &update.name)?;
 
@@ -215,9 +235,9 @@ fn update_process(
 /// ```text
 /// DELETE /processes/:id
 /// ```
-fn delete_process(db: Database, _: Session<EditProcess>, id: Path<i32>)
+fn delete_process(db: Database, scope: TeamScoped<Process, EditProcess>)
 -> Result<HttpResponse> {
-    Process::by_id(&db, id.into_inner())?.delete(&db)?;
+    scope.into_resource().delete(&db)?;
 
     Ok(HttpResponse::new(StatusCode::NO_CONTENT))
 }
@@ -229,12 +249,12 @@ fn delete_process(db: Database, _: Session<EditProcess>, id: Path<i32>)
 /// ```text
 /// GET /processes/:id/slots
 /// ```
-fn list_slots_in_process(db: Database, _: Session, id: Path<i32>)
+fn list_slots_in_process(db: Database, scope: TeamScoped<Process>)
 -> Result<Json<Vec<<Slot as Model>::Public>>> {
-    Ok(Json(Process::by_id(&db, *id)?
+    Ok(Json(scope.resource()
         .get_current(&db)?
         .get_slots(&db)?
-        .get_public_full(&db, ())?))
+        .get_public_full(&db, &())?))
 }
 
 /// Get details of a particular slot in an editing process.
@@ -244,14 +264,17 @@ fn list_slots_in_process(db: Database, _: Session, id: Path<i32>)
 /// ```text
 /// GET /processes/:id/slots/:slot
 /// ```
-fn get_slot_in_process(db: Database, _: Session, path: Path<(i32, i32)>)
--> Result<Json<<Slot as Model>::Public>> {
-    let (process_id, slot_id) = path.into_inner();
+fn get_slot_in_process(
+    db: Database,
+    scope: TeamScoped<Process>,
+    path: Path<(i32, i32)>,
+) -> Result<Json<<Slot as Model>::Public>> {
+    let (_, slot_id) = path.into_inner();
 
-    Ok(Json(Process::by_id(&db, process_id)?
+    Ok(Json(scope.resource()
         .get_current(&db)?
         .get_slot(&db, slot_id)?
-        .get_public_full(&db, ())?))
+        .get_public_full(&db, &())?))
 }
 
 /// Modify a slot in an editing process.
@@ -263,15 +286,15 @@ fn get_slot_in_process(db: Database, _: Session, path: Path<(i32, i32)>)
 /// ```
 fn modify_slot_in_process(
     db: Database,
-    _: Session<EditProcess>,
+    scope: TeamScoped<Process, EditProcess>,
     path: Path<(i32, i32)>,
     data: Json<SlotUpdate>,
 ) -> Result<Json<<Slot as Model>::Public>> {
-    let (process_id, slot_id) = path.into_inner();
+    let (_, slot_id) = path.into_inner();
 
     modify_slot(
         &db,
-        &Process::by_id(&db, process_id)?.get_current(&db)?,
+        &scope.resource().get_current(&db)?,
         slot_id,
         data.into_inner(),
     )
@@ -284,9 +307,9 @@ fn modify_slot_in_process(
 /// ```text
 /// GET /processes/:id/steps
 /// ```
-fn list_steps_in_process(db: Database, _: Session, id: Path<i32>)
+fn list_steps_in_process(db: Database, scope: TeamScoped<Process>)
 -> Result<Json<Vec<<Step as Model>::Public>>> {
-    Ok(Json(Process::by_id(&db, *id)?
+    Ok(Json(scope.resource()
         .get_current(&db)?
         .get_steps(&db)?
         .get_public()))
@@ -299,11 +322,14 @@ fn list_steps_in_process(db: Database, _: Session, id: Path<i32>)
 /// ```text
 /// GET /processes/:id/steps/:step
 /// ```
-fn get_step_in_process(db: Database, _: Session, path: Path<(i32, i32)>)
--> Result<Json<<Step as Model>::Public>> {
-    let (process_id, step_id) = path.into_inner();
+fn get_step_in_process(
+    db: Database,
+    scope: TeamScoped<Process>,
+    path: Path<(i32, i32)>,
+) -> Result<Json<<Step as Model>::Public>> {
+    let (_, step_id) = path.into_inner();
 
-    Ok(Json(Process::by_id(&db, process_id)?
+    Ok(Json(scope.resource()
         .get_current(&db)?
         .get_step(&db, step_id)?
         .get_public()))
@@ -318,12 +344,12 @@ fn get_step_in_process(db: Database, _: Session, path: Path<(i32, i32)>)
 /// ```
 fn modify_step_in_process(
     db: Database,
-    _: Session<EditProcess>,
+    scope: TeamScoped<Process, EditProcess>,
     path: Path<(i32, i32)>,
     data: Json<StepUpdate>,
 ) -> Result<Json<<Step as Model>::Public>> {
-    let (process_id, step_id) = path.into_inner();
-    let mut step = Process::by_id(&db, process_id)?
+    let (_, step_id) = path.into_inner();
+    let mut step = scope.resource()
         .get_current(&db)?
         .get_step(&db, step_id)?;
 
@@ -339,12 +365,12 @@ fn modify_step_in_process(
 /// ```
 fn list_links_in_process(
     db: Database,
-    _: Session,
+    scope: TeamScoped<Process>,
     path: Path<(i32, i32)>,
 ) -> Result<Json<Vec<<Link as Model>::Public>>> {
-    let (process_id, step_id) = path.into_inner();
+    let (_, step_id) = path.into_inner();
 
-    Ok(Json(Process::by_id(&db, process_id)?
+    Ok(Json(scope.resource()
         .get_current(&db)?
         .get_step(&db, step_id)?
         .get_links(&db, None)?
@@ -360,12 +386,12 @@ fn list_links_in_process(
 /// ```
 fn get_link_in_process(
     db: Database,
-    _: Session,
+    scope: TeamScoped<Process>,
     path: Path<(i32, i32, i32, i32)>,
 ) -> Result<Json<<Link as Model>::Public>> {
-    let (process_id, step_id, slot_id, target_id) = path.into_inner();
+    let (_, step_id, slot_id, target_id) = path.into_inner();
 
-    Ok(Json(Process::by_id(&db, process_id)?
+    Ok(Json(scope.resource()
         .get_current(&db)?
         .get_step(&db, step_id)?
         .get_link(&db, slot_id, target_id)?
@@ -381,12 +407,12 @@ fn get_link_in_process(
 /// ```
 fn modify_link_in_process(
     db: Database,
-    _: Session<EditProcess>,
+    scope: TeamScoped<Process, EditProcess>,
     path: Path<(i32, i32, i32, i32)>,
     data: Json<LinkUpdate>,
 ) -> Result<Json<<Link as Model>::Public>> {
-    let (process_id, step_id, slot_id, target_id) = path.into_inner();
-    let step = Process::by_id(&db, process_id)?
+    let (_, step_id, slot_id, target_id) = path.into_inner();
+    let step = scope.resource()
         .get_current(&db)?
         .get_step(&db, step_id)?;
 
@@ -400,9 +426,9 @@ fn modify_link_in_process(
 /// ```text
 /// GET /processes/:id/structure
 /// ```
-fn get_process_structure(db: Database, _: Session, id: Path<i32>)
+fn get_process_structure(db: Database, scope: TeamScoped<Process>)
 -> Result<Json<structure::Process>> {
-    Ok(Json(Process::by_id(&db, *id)?.get_current(&db)?.get_structure(&db)?))
+    Ok(Json(scope.resource().get_current(&db)?.get_structure(&db)?))
 }
 
 /// Get list of all versions of an editing process.
@@ -412,9 +438,9 @@ fn get_process_structure(db: Database, _: Session, id: Path<i32>)
 /// ```text
 /// GET /processes/:id/versions
 /// ```
-fn list_process_versions(db: Database, _: Session, id: Path<i32>)
+fn list_process_versions(db: Database, scope: TeamScoped<Process>)
 -> Result<Json<Vec<<Version as Model>::Public>>> {
-    Ok(Json(Process::by_id(&db, *id)?.get_versions(&db)?.get_public()))
+    Ok(Json(scope.resource().get_versions(&db)?.get_public()))
 }
 
 /// Create a new version of an editing process
@@ -427,11 +453,11 @@ fn list_process_versions(db: Database, _: Session, id: Path<i32>)
 fn create_version(
     req: HttpRequest,
     db: Database,
-    _: Session<EditProcess>,
+    scope: TeamScoped<Process, EditProcess>,
     id: Path<i32>,
     data: Json<structure::Process>,
 ) -> Result<Created<String, Json<<Version as Model>::Public>>> {
-    let process = Process::by_id(&db, *id)?;
+    let process = scope.into_resource();
     let version = Version::create(&db, process, &*data)?;
     let location = format!("{}/api/v1/processes/{}/versions/{}",
         req.app_config().host(), *id, version.id);
@@ -446,9 +472,14 @@ fn create_version(
 /// ```text
 /// GET /processes/:id/versions/:version
 /// ```
-fn get_process_version(db: Database, _: Session, id: Path<(i32, i32)>)
--> Result<Json<<Version as Model>::Public>> {
-    Ok(Json(Version::by_id(&db, *id)?.get_public()))
+fn get_process_version(
+    db: Database,
+    scope: TeamScoped<Process>,
+    id: Path<(i32, i32)>,
+) -> Result<Json<<Version as Model>::Public>> {
+    let (_, version_id) = id.into_inner();
+
+    Ok(Json(scope.resource().get_version(&db, version_id)?.get_public()))
 }
 
 /// Get list of all slots in a particular version of an editing process.
@@ -458,9 +489,17 @@ fn get_process_version(db: Database, _: Session, id: Path<(i32, i32)>)
 /// ```text
 /// GET /processes/:id/versions/:version/slots
 /// ```
-fn list_slots_in_version(db: Database, _: Session, id: Path<(i32, i32)>)
--> Result<Json<Vec<<Slot as Model>::Public>>> {
-    Ok(Json(Version::by_id(&db, *id)?.get_slots(&db)?.get_public_full(&db, ())?))
+fn list_slots_in_version(
+    db: Database,
+    scope: TeamScoped<Process>,
+    id: Path<(i32, i32)>,
+) -> Result<Json<Vec<<Slot as Model>::Public>>> {
+    let (_, version_id) = id.into_inner();
+
+    Ok(Json(scope.resource()
+        .get_version(&db, version_id)?
+        .get_slots(&db)?
+        .get_public_full(&db, &())?))
 }
 
 /// Get details of a particular slot in a particular version of an editing
@@ -473,14 +512,14 @@ fn list_slots_in_version(db: Database, _: Session, id: Path<(i32, i32)>)
 /// ```
 fn get_slot_in_version(
     db: Database,
-    _: Session,
+    scope: TeamScoped<Process>,
     path: Path<(i32, i32, i32)>,
 ) -> Result<Json<<Slot as Model>::Public>> {
-    let (process_id, version_id, slot_id) = path.into_inner();
+    let (_, version_id, slot_id) = path.into_inner();
 
-    Ok(Json(Version::by_id(&db, (process_id, version_id))?
+    Ok(Json(scope.resource().get_version(&db, version_id)?
         .get_slot(&db, slot_id)?
-        .get_public_full(&db, ())?))
+        .get_public_full(&db, &())?))
 }
 
 /// Modify a slot in a particular version of an editing process.
@@ -492,15 +531,15 @@ fn get_slot_in_version(
 /// ```
 fn modify_slot_in_version(
     db: Database,
-    _: Session<EditProcess>,
+    scope: TeamScoped<Process, EditProcess>,
     path: Path<(i32, i32, i32)>,
     data: Json<SlotUpdate>,
 ) -> Result<Json<<Slot as Model>::Public>> {
-    let (process_id, version_id, slot_id) = path.into_inner();
+    let (_, version_id, slot_id) = path.into_inner();
 
     modify_slot(
         &db,
-        &Version::by_id(&db, (process_id, version_id))?,
+        &scope.resource().get_version(&db, version_id)?,
         slot_id,
         data.into_inner(),
     )
@@ -531,7 +570,7 @@ fn modify_slot(db: &Connection, version: &Version, slot: i32, data: SlotUpdate)
         Ok(())
     })?;
 
-    Ok(Json(slot.get_public_full(db, ())?))
+    Ok(Json(slot.get_public_full(db, &())?))
 }
 
 /// Get list of all steps in a particular version of an editing process.
@@ -541,11 +580,16 @@ fn modify_slot(db: &Connection, version: &Version, slot: i32, data: SlotUpdate)
 /// ```text
 /// GET /processes/:id/versions/:version/steps
 /// ```
-fn list_steps_in_version(db: Database, _: Session, id: Path<(i32, i32)>)
--> Result<Json<Vec<<Step as Model>::Public>>> {
-    Ok(Json(Version::by_id(&db, *id)?
+fn list_steps_in_version(
+    db: Database,
+    scope: TeamScoped<Process>,
+    id: Path<(i32, i32)>,
+) -> Result<Json<Vec<<Step as Model>::Public>>> {
+    let (_, version_id) = id.into_inner();
+
+    Ok(Json(scope.resource().get_version(&db, version_id)?
         .get_steps(&db)?
-        .get_public_full(&db, (None, None))?))
+        .get_public_full(&db, &(None, None))?))
 }
 
 /// Get details of a particular step in a particular version of an editing
@@ -558,14 +602,14 @@ fn list_steps_in_version(db: Database, _: Session, id: Path<(i32, i32)>)
 /// ```
 fn get_step_in_version(
     db: Database,
-    _: Session,
+    scope: TeamScoped<Process>,
     path: Path<(i32, i32, i32)>,
 ) -> Result<Json<<Step as Model>::Public>> {
-    let (process_id, version_id, step_id) = path.into_inner();
+    let (_, version_id, step_id) = path.into_inner();
 
-    Ok(Json(Version::by_id(&db, (process_id, version_id))?
+    Ok(Json(scope.resource().get_version(&db, version_id)?
         .get_step(&db, step_id)?
-        .get_public_full(&db, (None, None))?))
+        .get_public_full(&db, &(None, None))?))
 }
 
 /// Modify a step in a particular version of an editing process.
@@ -577,12 +621,12 @@ fn get_step_in_version(
 /// ```
 fn modify_step_in_version(
     db: Database,
-    _: Session,
+    scope: TeamScoped<Process, EditProcess>,
     path: Path<(i32, i32, i32)>,
     data: Json<StepUpdate>,
 ) -> Result<Json<<Step as Model>::Public>> {
-    let (process_id, version_id, step_id) = path.into_inner();
-    let mut step = Version::by_id(&db, (process_id, version_id))?
+    let (_, version_id, step_id) = path.into_inner();
+    let mut step = scope.resource().get_version(&db, version_id)?
         .get_step(&db, step_id)?;
 
     modify_step(&db, &mut step, data.into_inner())
@@ -597,7 +641,7 @@ fn modify_step(db: &Connection, step: &mut Step, data: StepUpdate)
 -> Result<Json<<Step as Model>::Public>> {
     step.set_name(db, &data.name)?;
 
-    Ok(Json(step.get_public_full(&db, (None, None))?))
+    Ok(Json(step.get_public_full(&db, &(None, None))?))
 }
 
 /// Get list of all links in a particular step in a version of an editing
@@ -610,17 +654,19 @@ fn modify_step(db: &Connection, step: &mut Step, data: StepUpdate)
 /// ```
 fn list_links_in_version(
     db: Database,
-    _: Session,
+    scope: TeamScoped<Process>,
     path: Path<(i32, i32, i32)>,
 ) -> Result<Json<Vec<<Link as Model>::Public>>> {
-    let (process_id, version_id, step_id) = path.into_inner();
-    let step = Version::by_id(&db, (process_id, version_id))?
+    let (_, version_id, step_id) = path.into_inner();
+    let step = scope.resource()
+        .get_version(&db, version_id)?
         .get_step(&db, step_id)?;
 
     list_links(&db, &step)
 }
 
-fn list_links(db: &Connection, step: &Step) -> Result<Json<Vec<<Link as Model>::Public>>> {
+fn list_links(db: &Connection, step: &Step)
+-> Result<Json<Vec<<Link as Model>::Public>>> {
     Ok(Json(step.get_links(db, None)?.get_public()))
 }
 
@@ -633,11 +679,12 @@ fn list_links(db: &Connection, step: &Step) -> Result<Json<Vec<<Link as Model>::
 /// GET /processes/:id/versions/:version/steps/:step/links/:slot/:target
 fn get_link_in_version(
     db: Database,
-    _: Session,
+    scope: TeamScoped<Process>,
     path: Path<(i32, i32, i32, i32, i32)>,
 ) -> Result<Json<<Link as Model>::Public>> {
-    let (process_id, version_id, step_id, slot_id, target_id) = path.into_inner();
-    let step = Version::by_id(&db, (process_id, version_id))?
+    let (_, version_id, step_id, slot_id, target_id) = path.into_inner();
+    let step = scope.resource()
+        .get_version(&db, version_id)?
         .get_step(&db, step_id)?;
 
     get_link(&db, &step, slot_id, target_id)
@@ -657,12 +704,13 @@ fn get_link(db: &Connection, step: &Step, slot_id: i32, target_id: i32)
 /// ```
 fn modify_link_in_version(
     db: Database,
-    _: Session<EditProcess>,
+    scope: TeamScoped<Process, EditProcess>,
     path: Path<(i32, i32, i32, i32, i32)>,
     data: Json<LinkUpdate>,
 ) -> Result<Json<<Link as Model>::Public>> {
-    let (process_id, version_id, step_id, slot_id, target_id) = path.into_inner();
-    let step = Version::by_id(&db, (process_id, version_id))?
+    let (_, version_id, step_id, slot_id, target_id) = path.into_inner();
+    let step = scope.resource()
+        .get_version(&db, version_id)?
         .get_step(&db, step_id)?;
 
     modify_link(&db, &step, slot_id, target_id, data.into_inner())
@@ -695,7 +743,12 @@ fn modify_link(
 /// ```text
 /// GET /processes/:id/versions/:version/structure
 /// ```
-fn get_version_structure(db: Database, _: Session, id: Path<(i32, i32)>)
--> Result<Json<structure::Process>> {
-    Ok(Json(Version::by_id(&db, *id)?.get_structure(&db)?))
+fn get_version_structure(
+    db: Database,
+    scope: TeamScoped<Process>,
+    id: Path<(i32, i32)>,
+) -> Result<Json<structure::Process>> {
+    let (_, version_id) = id.into_inner();
+
+    Ok(Json(scope.resource().get_version(&db, version_id)?.get_structure(&db)?))
 }
