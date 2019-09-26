@@ -1,0 +1,18 @@
+[package]
+name = "adaptarr-pages"
+version = "0.2.0"
+authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix-web = "1.0.7"
+adaptarr-error = { path = "../error" }
+adaptarr-i18n = { path = "../i18n" }
+adaptarr-models = { path = "../models" }
+adaptarr-web = { path = "../web" }
+lazy_static = "1.4.0"
+log = "0.4.8"
+
+[dependencies.serde]
+version = "1.0.99"
+features = ["derive"]

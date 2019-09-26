@@ -9,12 +9,16 @@
 ```
 {
     id: uuid,
+    team: number,
     title: string,
     language: string,
     process: {
         process: number,
         version: number,
-        step: number,
+        step: {
+            id: number,
+            name: string,
+        },
     }?,
 }
 ```
@@ -22,6 +26,8 @@
 This model is used throughout the API to describe modules. The fields are
 
 - `id`: module's UUID;
+
+- `team`: ID of the team owning this module;
 
 - `title`: module's title;
 
@@ -35,7 +41,9 @@ This model is used throughout the API to describe modules. The fields are
 
 - `process.version`: process's version;
 
-- `process.step`: step this draft is currently at.
+- `process.step.id`: ID of the step this draft is currently at.
+
+- `process.step.name`: `process.step.id`'s name.
 
 
 
@@ -43,8 +51,10 @@ This model is used throughout the API to describe modules. The fields are
 
 ### `GET /api/v1/modules`
 
-Return list of all modules in the system, as a JSON array of objects of the
-[`Module`](#module) model.
+Return list of all modules in teams current user is a member of, as a JSON array
+of objects of the [`Module`](#module) model.
+
+In elevated session list of all modules in the system is returned instead.
 
 ### `POST /api/v1/modules`
 
@@ -54,10 +64,14 @@ both formats include following fields/properties:
 ```
 {
     title: string,
+    team: number,
 }
 ```
 
 - `title`: new module's title.
+
+- `team`: ID of the team in which to create the module. Current user must have
+  the [`module:edit`](../#p-module-edit) permission in this team.
 
 The first form (JSON object) also accepts following properties:
 
@@ -74,9 +88,6 @@ This form will create an empty module.
 
 The second form (`multipart/form-data`) requires an additional field, `file`,
 containing a CNX ZIP export of a module, and creates a module from that export.
-
-This endpoint is only available in elevated sessions with the [`module:edit`](
-../#p-module-edit) permission.
 
 [BCP47]: https://tools.ietf.org/rfc/bcp/bcp47.txt
 
@@ -110,8 +121,8 @@ Begin an editing process for a module. Accepts either an
 - `slots`: list of mappings from slot IDs to user IDs, specifying which users to
   assign to which slots at the beginning of a process.
 
-This endpoint is only available in elevated sessions with the
-[`process:manage`](../#p-process-manage) permission.
+This endpoint is only available to users with the [`process:manage`](
+../#p-process-manage) permission in the team owning the module.
 
 #### Status code
 
@@ -128,8 +139,8 @@ This endpoint is only available in elevated sessions with the
 Modify a module. Accepts a ZIP file containing a CNX ZIP export of a module, and
 replaces this module's content from that export.
 
-This endpoint is only available in elevated sessions with the [`module:edit`](
-../#p-module-edit) permission.
+This endpoint is only available to users with the [`module:edit`](
+../#p-module-edit) permission in the team owning the module.
 
 #### Status code
 
@@ -167,7 +178,7 @@ Get contents of a particular file in a module.
 
 #### Status codes
 
-- 404 `fild:not-found`: no file with such name could be found in this module.
+- 404 `file:not-found`: no file with such name could be found in this module.
 
 ### `GET /api/v1/modules/:id/xref-targets`
 

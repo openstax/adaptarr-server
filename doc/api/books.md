@@ -10,6 +10,7 @@
 {
     id: uuid,
     title: string,
+    team: number,
 }
 ```
 
@@ -17,7 +18,9 @@ This model is used throughout the API to describe books. The fields are
 
 - `id`: book's UUID;
 
-- `title`: book's title.
+- `title`: book's title;
+
+- `team`: ID of the team owning this book.
 
 ### `Tree`
 
@@ -81,7 +84,6 @@ This model describes structure of a new book part. The fields are:
     number: number,
     title: string,
     kind: 'module' | 'group',
-    id: uuid,
     parts: number[],
 }
 ```
@@ -92,11 +94,11 @@ This model describes structure of a new book part. The fields are:
 
 - `kind`: part's kind;
 
-- `id`: UUID of the module this part represents. Only present when `kind` is
-  `'module'`.
-
 - `parts`: ordered list of IDs of parts in this sub-tree. Only present when
   `kind` is `'group'`.
+
+When `kind` is `'module'`, this model also includes all fields of the
+[`Module`](../modules.md#module) model.
 
 ### `:id`
 
@@ -108,8 +110,10 @@ In endpoint names `:id` stands for a book's UUID, formatted as a string.
 
 ### `GET /api/v1/books`
 
-Return list of all books in the system, as a JSON array of objects of the
-[`Book`](#book) model.
+Return list of all books in teams current user is a member of, as a JSON array
+of objects of the [`Book`](#book) model.
+
+In elevated sessions all book in the system are returned instead.
 
 ### `POST /api/v1/books`
 
@@ -119,18 +123,19 @@ formats including following fields/properties:
 ```
 {
     title: string,
+    team: number,
 }
 ```
 
 - `title`: new book's title.
 
+- `team`: ID of the team in which to create this book. Current user must have
+  the [`book:edit`](../#p-book-edit) permission in this team.
+
 In the first form (a JSON object) an empty book will be created. The second form
 (`multipart/form-data`) requires an additional field, `file`, containing a CNX
 ZIP export of a collection, and creates a book from that export (including
 creation of any modules contained in it).
-
-This endpoint is only available in elevated sessions with the [`book:edit`](
-../#p-book-edit) permission.
 
 #### Status codes
 
@@ -163,8 +168,8 @@ This form modifies book's properties without affecting its contents. The second
 form (raw ZIP upload) doesn't touch book's properties and instead replaces its
 contents with a new book imported from a CNX collection export.
 
-This endpoint is only available in elevated sessions with the [`book:edit`](
-../#p-book-edit) permission.
+This endpoint is only available to users with the [`book:edit`](../#p-book-edit)
+permission in the team owning the book.
 
 #### Status codes
 
@@ -185,8 +190,8 @@ This endpoint can also return all error codes returned by the
 
 Delete a book.
 
-This endpoint is only available in elevated sessions with the [`book:edit`](
-../#p-book-edit) permission.
+This endpoint is only available to users with the [`book:edit`](../#p-book-edit)
+permission in the team owning this book.
 
 #### Status codes
 
@@ -214,8 +219,8 @@ model wit additional properties:
 
 - `index`: index inside `parent` at which this new part is to be created.
 
-This endpoint is only available in elevated sessions with the [`book:edit`](
-../#p-book-edit) permission.
+This endpoint is only available to users with the [`book:edit`](../#p-book-edit)
+permission in the team owning this book.
 
 #### Status codes
 
@@ -232,6 +237,9 @@ the [`BookPart`](#bookpart) model.
 ### `DELETE /api/v1/books/:id/parts/:number`
 
 Delete a part of a book.
+
+This endpoint is only available to users with the [`book:edit`](../#p-book-edit)
+permission in the team owning this book.
 
 #### Status codes
 
@@ -261,6 +269,9 @@ Modify a part of a book. Accepts a JSON object with following properties
 All fields may be omitted, in which case no action is taken. Fields `parent` and
 `index` must be used together. This endpoint is only available in elevates
 sessions with the [`book:edit`](../#p-book-edit) permission.
+
+This endpoint is only available to users with the [`book:edit`](../#p-book-edit)
+permission in the team owning this book.
 
 #### Status codes returned
 

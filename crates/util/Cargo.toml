@@ -1,0 +1,15 @@
+[package]
+name = "adaptarr-util"
+version = "0.1.0"
+authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+adaptarr-macros = { path = "../macros" }
+bytes = "0.4.12"
+failure = "0.1.5"
+futures = "0.1.28"
+rand = "0.7.0"
+ring = "0.16.8"
+rmps = { version = "0.13.7", package = "rmp-serde" }
+serde = "1.0.99"

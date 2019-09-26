@@ -1,0 +1,16 @@
+[package]
+name = "adaptarr-error"
+version = "0.1.0"
+authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix = "0.8.3"
+actix-web = "1.0.7"
+adaptarr-macros = { path = "../macros" }
+diesel = "1.4.2"
+failure = "0.1.5"
+log = "0.4.8"
+r2d2 = "0.8.5"
+serde = "1.0.99"
+tera = "0.11.20"

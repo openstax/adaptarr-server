@@ -1,0 +1,28 @@
+[package]
+name = "adaptarr-web"
+version = "0.2.0"
+authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix-files = "0.1.4"
+actix-multipart = "0.1.3"
+actix-web = "1.0.7"
+adaptarr-error = { path = "../error" }
+adaptarr-i18n = { path = "../i18n" }
+adaptarr-macros = { path = "../macros" }
+adaptarr-models = { path = "../models" }
+adaptarr-util = { path = "../util" }
+base64 = "0.10.1"
+bytes = "0.4.12"
+chrono = "0.4.7"
+failure = "0.1.5"
+futures = "0.1.28"
+log = "0.4.8"
+mime = "0.3.13"
+serde = "1.0.99"
+tempfile = "3.1.0"
+
+[dependencies.diesel]
+version = "1.4.2"
+features = ["chrono", "uuidv07"]

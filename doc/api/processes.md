@@ -10,6 +10,7 @@
 {
     id: number,
     name: string,
+    team: number,
 }
 ```
 
@@ -18,6 +19,8 @@ This model is used throughout the API to describe processes. The fields are
 - `id`: process's ID;
 
 - `name`: process's name;
+
+- `team`: ID of the team owning this process;
 
 ### `Version`
 
@@ -147,6 +150,7 @@ Used to represent a single slot in an editing process.
     id: number,
     process: [number, number],
     name: string,
+    slots: StepSlot[],
     links: Link[],
 }
 ```
@@ -159,7 +163,29 @@ Used to represent a single step in an editing process.
 
 - `name`: step's name;
 
+- `slots`:
+
 - `links`: list of links originating at this step.
+
+### `StepSlot`
+
+```
+{
+    slot: number,
+    permissions: SlotPermission[],
+    user: number | null,
+}
+```
+
+Used to represent assignment of slots to steps.
+
+- `slot`: slot's ID;
+
+- `permissions`: list of permissions a given slot has in a particular step;
+
+- `user`: if this model is returned in context of a draft, this field contains
+  ID of the user currently assigned to `slot` (or `null` if there isn't one).
+  In all other contexts this field is `null`.
 
 ### `Link`
 
@@ -185,15 +211,24 @@ Used to represent a single link in an editing process.
 
 ### `GET /api/v1/processes`
 
-Return list of all processes in the system, as a JSON array of objects of the
-[`Process`](#process) model.
+Return list of all processes in teams current user is a member of, as a JSON
+array of objects of the [`Process`](#process) model.
+
+In elevated sessions list of all processes in the system is returned instead.
 
 ### `POST /api/v1/processes`
 
-Create a new process. Accepts a JSON object of the [`NewTree`](#newtree) model.
+Create a new process. Accepts a JSON object of the [`NewTree`](#newtree) model,
+with following additional properties:
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-process-edit) permission.
+```
+{
+    team: number,
+}
+```
+
+- `team`: ID of the team in which to create the process. Current user must have
+  the [`editing-process:edit`](../#p-process-edit) permission in this team.
 
 #### Status codes
 
@@ -261,8 +296,8 @@ Modify a process. Accepts a JSON object with following properties
 
 - `name`: process's new name.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status code
 
@@ -273,8 +308,8 @@ This endpoint is only available in elevated sessions with the
 
 Delete a process. Only processes which have never been used can be deleted.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status codes
 
@@ -296,8 +331,8 @@ Modify a slot in the newest version of a process. Accepts the same body as
 [`PUT /api/v1/processes/:id/versions/:version/slots/:slot`](
 #put-apiv1processesidversionsversionslotsslot).
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 ### `GET /api/v1/processes/:id/steps`
 
@@ -315,8 +350,8 @@ Modify a step in the newest version of a process. Accepts the same body as
 [`PUT /api/v1/processes/:id/versions/:version/steps/:step`](
 #put-apiv1processesidversionsversionstepsstep).
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 ### `GET /api/v1/processes/:id/steps/:step/links`
 
@@ -334,8 +369,8 @@ Modify a link in the newest version of a process. Accepts the same body as
 [`PUT /api/v1/processes/:id/versions/:version/steps/:step/links/:slot/:target`](
 #put-apiv1processesidversionsversionstepssteplinksslottarget).
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 ### `GET /api/v1/processes/:id/structure`
 
@@ -352,8 +387,8 @@ Return list of all versions of a process, as a JSON array of objects of the
 Create a new version of an editing process. Accepts a JSON object of the
 [`NewTree`](#newtree) model.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
 #### Status codes
 
@@ -368,17 +403,17 @@ This endpoint is only available in elevated sessions with the
 Return detailed information about a process's version, as a JSON object of the
 [`Version`](#version) model.
 
-### `GET /api/v1/processes/versions/:version/:id/slots`
+### `GET /api/v1/processes/:id/versions/:version/:id/slots`
 
 Return list of all slots in a particular version of a process, as a JSON array
 of objects of the [`Slot`](#slot) model.
 
-### `GET /api/v1/processes/versions/:version/:id/slots/:slot`
+### `GET /api/v1/processes/:id/versions/:version/:id/slots/:slot`
 
 Return detailed information about a particular slot in a version of a process,
 as a JSON object of the [`Slot`](#slot) model.
 
-### `PUT /api/v1/processes/versions/:version/:id/slots/:slot`
+### `PUT /api/v1/processes/:id/versions/:version/:id/slots/:slot`
 
 Modify a slot in a particular version of a process. Accepts a JSON object with
 following properties:
@@ -395,22 +430,30 @@ following properties:
 - `roles`: slot's new role limit.
 
 Optional fields may be omitted, in which case the corresponding property will
-remain unchanged. This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+remain unchanged. This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
-### `GET /api/v1/processes/versions/:version/:id/steps`
+#### Status codes
 
-Return list of all steps in the newest version of a process, as a JSON array of
-objects of the [`Step`](#step) model.
+- 200: slot was updated. Response contains a JSON object of the [`Slot`](#slot)
+  model describing the slot with changes applied.
 
-### `GET /api/v1/processes/versions/:version/:id/steps/:step`
+- 400 `edit-process:slot:name:duplicate`: rename would result in two slots
+  sharing the same name.
 
-Return detailed information about a particular step in the newset version of
+### `GET /api/v1/processes/:id/versions/:version/:id/steps`
+
+Return list of all steps in a particular version of a process, as a JSON array
+of objects of the [`Step`](#step) model.
+
+### `GET /api/v1/processes/:id/versions/:version/:id/steps/:step`
+
+Return detailed information about a particular step in the a version of
 a process, as a JSON object of the [`Step`](#step) model.
 
-### `PUT /api/v1/processes/versions/:version/:id/steps/:step`
+### `PUT /api/v1/processes/:id/versions/:version/:id/steps/:step`
 
-Modify a step in the newest version of a process. Accepts a JSON object with
+Modify a step in a particular version of a process. Accepts a JSON object with
 following properties:
 
 ```
@@ -421,22 +464,30 @@ following properties:
 
 - `name`: step's new name.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
 
-### `GET /api/v1/processes/versions/:version/:id/steps/:step/links`
+#### Status codes
 
-Return list of all link in a particular step in the newest version of a process,
+- 200: step was updated. Response contains a JSON object of the [`Step`](#step)
+  model describing the step with changes applied.
+
+- 400 `edit-process:step:name:duplicate`: rename would result in two steps
+  sharing the same name.
+
+### `GET /api/v1/processes/:id/versions/:version/:id/steps/:step/links`
+
+Return list of all link in a particular step in a version of a process,
 as a JSON array of objects of the [`Link`](#link) model.
 
-### `GET /api/v1/processes/versions/:version/:id/steps/:step/links/:slot/:target`
+### `GET /api/v1/processes/:id/versions/:version/:id/steps/:step/links/:slot/:target`
 
-Return detailed information about a particular link in a step of the newest
-version of a process, as a JSON object of the [`Link`](#link) model.
+Return detailed information about a particular link in a step of a version of
+a process, as a JSON object of the [`Link`](#link) model.
 
-### `PUT /api/v1/processes/versions/:version/:id/steps/:step/links/:slot/:target`
+### `PUT /api/v1/processes/:id/versions/:version/:id/steps/:step/links/:slot/:target`
 
-Modify a link in the newest version of a process. Accepts a JSON object with
+Modify a link in a particular version of a process. Accepts a JSON object with
 following properties:
 
 ```
@@ -447,8 +498,16 @@ following properties:
 
 - `name`: link's new name.
 
-This endpoint is only available in elevated sessions with the
-[`editing-process:edit`](../#p-editing-process-edit) permission.
+This endpoint is only available to users with the [`editing-process:edit`](
+../#p-editing-process-edit) permission in the team owning the process.
+
+#### Status codes
+
+- 200: link was updated. Response contains a JSON object of the [`Link`](#link)
+  model describing the link with changes applied.
+
+- 400 `edit-process:link:name:duplicate`: rename would result in two links
+  sharing the same name.
 
 ### `GET /api/v1/processes/:id/versions/:version/structure`
 
