@@ -8,7 +8,7 @@ use failure::Fail;
 use serde::Serialize;
 
 use crate::{
-    audit,
+    audit::{self, Actor},
     config::Config,
     db::{Connection, models as db, schema::{invites, users, teams}},
     permissions::{SystemPermissions, TeamPermissions},
@@ -178,8 +178,11 @@ impl Invite {
             let permissions = TeamPermissions::from_bits_truncate(
                 self.data.permissions);
 
-            self.team.add_member(db, &user, permissions, role.as_ref())?;
-            audit::log_db_actor(db, user.id, "invites", self.id, "fulfil", ());
+            audit::with_actor::<Actor, _, Result<(), FulfilInviteError>>(Actor::from(user.id), || {
+                self.team.add_member(db, &user, permissions, role.as_ref())?;
+                audit::log_db(db, "invites", self.id, "fulfil", ());
+                Ok(())
+            })?;
 
             diesel::delete(&self.data).execute(db)?;
 
