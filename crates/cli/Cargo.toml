@@ -19,7 +19,7 @@ adaptarr-rest-api = { path = "../rest-api" }
 adaptarr-util = { path = "../util" }
 adaptarr-web = { path = "../web" }
 diesel = "1.4.2"
-env_logger = "0.6.2"
+env_logger = "0.7.0"
 failure = "0.1.5"
 futures = "0.1.28"
 listenfd = "0.3.3"
