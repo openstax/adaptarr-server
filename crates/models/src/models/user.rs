@@ -27,7 +27,7 @@ use crate::{
             users,
         },
     },
-    permissions::SystemPermissions,
+    permissions::{TeamPermissions, SystemPermissions},
 };
 use super::{FindModelError, FindModelResult, Model, Role, Team};
 
@@ -68,6 +68,7 @@ pub struct TeamInfo {
     team: i32,
     role: Option<<Role as Model>::Public>,
     name: String,
+    permissions: TeamPermissions,
 }
 
 #[derive(Default)]
@@ -154,6 +155,7 @@ impl Model for User {
                     .get_public_full(db, &params.include_permissions))
                     .transpose()?,
                 name: team.name,
+                permissions: TeamPermissions::from_bits_truncate(member.permissions),
             }))
             .collect::<Result<Vec<TeamInfo>, DbError>>()?;
 
