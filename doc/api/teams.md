@@ -36,7 +36,8 @@ Used throughout the API to describe members of a team. The fields are
 
 - `user`: ID of a [`User`](../users.md#User) who is a member of a team;
 
-- `permissions`: list of team permissions `user` has;
+- `permissions`: list of team permissions `user` has, excluding ones granted by
+  their role;
 
 - `role`: [`Role`](#role) held by `user` in the team.
 

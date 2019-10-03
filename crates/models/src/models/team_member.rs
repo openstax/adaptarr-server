@@ -60,7 +60,7 @@ impl Model for TeamMember {
     fn get_public(&self) -> Self::Public {
         Public {
             user: self.data.user,
-            permissions: self.permissions(),
+            permissions: self.own_permissions(),
             role: self.role.get_public(),
         }
     }
@@ -69,7 +69,7 @@ impl Model for TeamMember {
     -> Result<Self::Public, DbError> {
         Ok(Public {
             user: self.data.user,
-            permissions: self.permissions(),
+            permissions: self.own_permissions(),
             role: self.role.get_public_full(db, sensitive)?,
         })
     }
@@ -88,7 +88,13 @@ impl TeamMember {
             .map(Role::permissions)
             .unwrap_or_else(TeamPermissions::empty);
 
-        TeamPermissions::from_bits_truncate(self.data.permissions) | role
+        self.own_permissions() | role
+    }
+
+    /// Get permissions this team members has, excluding ones granted by their
+    /// role.
+    pub fn own_permissions(&self) -> TeamPermissions {
+        TeamPermissions::from_bits_truncate(self.data.permissions)
     }
 
     pub fn get_user(&self, db: &Connection) -> Result<User, DbError> {
