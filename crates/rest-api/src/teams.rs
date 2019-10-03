@@ -383,7 +383,7 @@ fn update_member(
             scope.permissions().require(TeamPermissions::ASSIGN_ROLE)?;
 
             let role = role.map(|id| team.get_role(&db, id)).transpose()?;
-            member.set_role(&db, role.as_ref())?;
+            member.set_role(&db, role)?;
         }
 
         Ok(())

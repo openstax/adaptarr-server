@@ -345,7 +345,7 @@ fn modify_member(cfg: &Config, opts: &Opts, modify: &ModifyMemberOpts) -> Result
 
         if let Some(ref role) = modify.role {
             let role = role.get(&db, &team)?;
-            member.set_role(&db, role.as_ref())?;
+            member.set_role(&db, role)?;
         }
 
         Ok(())

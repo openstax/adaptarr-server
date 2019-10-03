@@ -122,9 +122,9 @@ impl TeamMember {
     }
 
     /// Change this member's role.
-    pub fn set_role(&mut self, db: &Connection, role: Option<&Role>)
+    pub fn set_role(&mut self, db: &Connection, role: Option<Role>)
     -> Result<(), SetRoleError> {
-        if role.map(TeamResource::team_id).unwrap_or(self.data.team)
+        if role.as_ref().map(TeamResource::team_id).unwrap_or(self.data.team)
         != self.data.team {
             return Err(SetRoleError::BadRole);
         }
@@ -137,13 +137,15 @@ impl TeamMember {
                 "set-member-role",
                 LogSetRole {
                     member: self.data.user,
-                    role: role.map(Model::id),
+                    role: role.as_ref().map(Model::id),
                 },
             );
 
             self.data = diesel::update(&self.data)
-                .set(team_members::role.eq(role.map(Model::id)))
+                .set(team_members::role.eq(role.as_ref().map(Model::id)))
                 .get_result(db)?;
+
+            self.role = role;
 
             Ok(())
         })
