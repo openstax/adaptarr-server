@@ -374,7 +374,7 @@ impl<T: NotifyTarget> NotifyTarget for Vec<T> {
 struct NotifyMailArgs<'a> {
     /// List of new events to include in the email.
     events: &'a [(Group, Vec<ExpandedEvent>)],
-    // /// Various URLs which can be used in the email.
+    /// Various URLs which can be used in the email.
     urls: NotifyMailArgsUrls<'a>,
 }
 

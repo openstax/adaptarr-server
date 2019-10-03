@@ -27,6 +27,8 @@ use crate::{
             xref_targets,
         },
     },
+    events::{EventManager, SlotFilled},
+    processing::TargetProcessor,
 };
 use super::{
     Document,
@@ -201,7 +203,7 @@ impl Module {
             Ok(Module { data, document })
         })?;
 
-        // TargetProcessor::process(module.document.clone());
+        TargetProcessor::process(module.document.clone());
 
         Ok(module)
     }
@@ -285,11 +287,11 @@ impl Module {
             });
 
             for slot in slots {
-                // EventManager::notify(slot.user, SlotFilled {
-                //     slot: slot.slot,
-                //     module: self.data.id,
-                //     document: document.id,
-                // });
+                EventManager::notify(slot.user, SlotFilled {
+                    slot: slot.slot,
+                    module: self.data.id,
+                    document: document.id,
+                });
                 audit::log_db(
                     db, "drafts", self.data.id, "fill-slot", LogFill {
                         slot: slot.slot,
@@ -336,7 +338,7 @@ impl Module {
             Ok(())
         })?;
 
-        // TargetProcessor::process(self.document.clone());
+        TargetProcessor::process(self.document.clone());
 
         Ok(())
     }
