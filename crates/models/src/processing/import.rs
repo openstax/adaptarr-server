@@ -23,6 +23,7 @@ use crate::{
         ReplaceModuleError,
         Team,
     },
+    processing::TargetProcessor,
 };
 
 /// CNX includes in its ZIP exports a number of artefacts which we have no use
@@ -389,12 +390,16 @@ impl Importer {
         let db = self.pool.get()?;
         let db = &*db;
 
-        db.transaction(|| {
+        let book = db.transaction::<_, ImportError, _>(|| {
             let mut book = Book::create(db, team, &title)?;
             self.load_collection_zip(
                 db, team, &mut book, zip, coldata, base)?;
             Ok(book)
-        })
+        })?;
+
+        TargetProcessor::process_stale();
+
+        Ok(book)
     }
 
     /// Replace contents of a book from a collection ZIP.
@@ -405,11 +410,15 @@ impl Importer {
         let db = self.pool.get()?;
         let db = &*db;
 
-        db.transaction(|| {
+        let book = db.transaction::<_, ImportError, _>(|| {
             book.root_part(db)?.clear(db)?;
             self.load_collection_zip(db, team, &mut book, zip, coldata, base)?;
             Ok(book)
-        })
+        })?;
+
+        TargetProcessor::process_stale();
+
+        Ok(book)
     }
 }
 

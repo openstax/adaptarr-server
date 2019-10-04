@@ -8,6 +8,7 @@ use adaptarr_models::{
     Team,
     TeamResource,
     db::{self, models, schema::{documents, drafts, modules, module_versions}},
+    processing::TargetProcessor,
 };
 use adaptarr_util::bytes_to_hex;
 use diesel::prelude::*;
@@ -237,6 +238,8 @@ fn new(cfg: &Config, opts: &Opts, new: &NewOpts) -> Result<()> {
             Ok(module.id())
         }
     })?;
+
+    TargetProcessor::process_stale();
 
     inspect(cfg, &Opts {
         document: Some(document),

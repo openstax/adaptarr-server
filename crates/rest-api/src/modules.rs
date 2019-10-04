@@ -17,7 +17,7 @@ use adaptarr_models::{
     XrefTarget,
     editing::Process,
     permissions::{EditModule, ManageProcess, PermissionBits, TeamPermissions},
-    processing::import::{Importer, ImportModule, ReplaceModule},
+    processing::{TargetProcessor, import::{Importer, ImportModule, ReplaceModule}},
 };
 use adaptarr_web::{
     ContentType,
@@ -132,6 +132,8 @@ fn create_module(
 
     let module = Module::create::<&str, _>(
         &db, &team, &data.title, &data.language, index, std::iter::empty())?;
+
+    TargetProcessor::process(module.clone());
 
     let public = module.get_public_full(&db, &())?;
 

@@ -260,6 +260,12 @@ impl Message for ProcessDocument {
     type Result = ();
 }
 
+struct ProcessStale;
+
+impl Message for ProcessStale {
+    type Result = ();
+}
+
 /// Actix actor handling generation of cross-reference target lists for newly
 /// uploaded documents.
 pub struct TargetProcessor {
@@ -277,6 +283,10 @@ impl TargetProcessor {
 
     /// Try to send a document for processing
     ///
+    /// Note that references will be processed in a separate transaction, so
+    /// this method must not be called from a transaction that created or
+    /// modified the document.
+    ///
     /// Errors will be logged, but otherwise ignored.
     pub fn process(document: db::Document) {
         let processor = TargetProcessor::from_registry();
@@ -286,6 +296,11 @@ impl TargetProcessor {
         if let Err(err) = processor.try_send(message) {
             error!("Could not send document {} for processing: {}", id, err);
         }
+    }
+
+    /// Process references to stale documents.
+    pub fn process_stale() {
+        TargetProcessor::from_registry().do_send(ProcessStale);
     }
 }
 
@@ -303,7 +318,15 @@ impl Actor for TargetProcessor {
 impl Handler<ProcessDocument> for TargetProcessor {
     type Result = ();
 
-    fn handle(&mut self, msg: ProcessDocument, _: &mut Self::Context) {
+    fn handle(&mut self, msg: ProcessDocument, _: &mut Self::Context) -> () {
+        self.processor.do_send(msg);
+    }
+}
+
+impl Handler<ProcessStale> for TargetProcessor {
+    type Result = ();
+
+    fn handle(&mut self, msg: ProcessStale, _: &mut Self::Context) -> () {
         self.processor.do_send(msg);
     }
 }
@@ -336,7 +359,7 @@ impl RealProcessor {
 impl Actor for RealProcessor {
     type Context = SyncContext<Self>;
 
-    fn started(&mut self, _: &mut Self::Context) {
+    fn started(&mut self, ctx: &mut Self::Context) {
         if let Err(err) = self.process_stale() {
             error!("Could not process stale documents: {}", err);
         }
@@ -350,6 +373,16 @@ impl Handler<ProcessDocument> for RealProcessor {
         if let Err(err) = self.process(&msg.document) {
             error!("Could not process xrefs for document {}: {}",
                 msg.document.id, err);
+        }
+    }
+}
+
+impl Handler<ProcessStale> for RealProcessor {
+    type Result = ();
+
+    fn handle(&mut self, _: ProcessStale, _: &mut Self::Context) {
+        if let Err(err) = self.process_stale() {
+            error!("Could not process stale documents: {}", err);
         }
     }
 }

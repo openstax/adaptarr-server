@@ -203,8 +203,6 @@ impl Module {
             Ok(Module { data, document })
         })?;
 
-        TargetProcessor::process(module.document.clone());
-
         Ok(module)
     }
 
