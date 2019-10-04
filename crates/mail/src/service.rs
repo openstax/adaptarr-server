@@ -175,6 +175,7 @@ impl<'a> IntoSubject for &'a str {
     }
 }
 
+#[allow(clippy::implicit_hasher)]
 impl<'a> IntoSubject for (&'a str, &'a HashMap<&str, FluentValue<'a>>) {
     fn into_subject(self, locale: &Locale) -> String {
         let (key, args) = self;

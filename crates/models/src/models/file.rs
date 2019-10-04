@@ -80,9 +80,7 @@ impl File {
         P: AsRef<Path>,
         S: futures::Stream<Item=I>,
         I: AsRef<[u8]>,
-        E: From<CreateFileError>,
-        E: From<S::Error>,
-        E: From<io::Error>,
+        E: From<CreateFileError> + From<S::Error> + From<io::Error>,
     {
         future::result(TempBuilder::new().tempfile_in(storage_path.as_ref()))
             .map_err(E::from)
@@ -283,8 +281,7 @@ where
     S: futures::Stream<Item=C>,
     C: AsRef<[u8]>,
     W: Write,
-    E: From<S::Error>,
-    E: From<io::Error>,
+    E: From<S::Error> + From<io::Error>,
 {
     let digest = Blake2b::new(nn);
 
