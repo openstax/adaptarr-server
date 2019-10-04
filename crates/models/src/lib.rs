@@ -16,5 +16,5 @@ pub mod processing;
 pub use self::{
     config::Config,
     models::*,
-    permissions::{PermissionBits, SystemPermissions, TeamPermissions},
+    permissions::{PermissionBits, TeamPermissions},
 };

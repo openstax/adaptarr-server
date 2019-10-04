@@ -95,22 +95,8 @@ different teams. Those are:
   and removing resources.
 
 <a name="systempermissions"></a>**SystemPermissions** define what administrative
-actions a user can take. Every user has only a single set of system permissions.
-Those are:
-
-- <a name="p-user-invite"></a> `user:invite` allows inviting new users to the
-  platform.
-
-- <a name="p-user-delete"></a> `user:delete` allows removing existing users from
-  the platform.
-
-- <a name="p-user-edit-permissions"></a> `user:edit-permissions` allows changing
-  other user's system permissions.
-
-- <a name="p-user-edit"></a> `user:edit` allows editing other users.
-
-- <a name="p-team-manage"></a> `team:manage` allows creating, editing, and
-  removing teams.
+actions a user can take. There are currently no specific system permissions;
+user are able to perform either all administrative actions or none of them.
 
 
 

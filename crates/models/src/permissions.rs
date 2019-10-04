@@ -44,71 +44,6 @@ impl<B: PermissionBits> fmt::Display for RequirePermissionsError<B> {
 }
 
 bitflags! {
-    /// System-wide permissions.
-    pub struct SystemPermissions: i32 {
-        /// All currently allocated bits.
-        const ALL_BITS = 0x0100_f00f;
-        /// Bits which used to name permissions, but those permissions were
-        /// deprecated.
-        const DEPRECATED_BITS = 0x0000_0000;
-        /// All bits allocated for user management permissions.
-        const MANAGE_USERS_BITS = 0x0000_f00f;
-        /// Permission holder can invite new users into the platform.
-        const INVITE_USER = 0x0000_0001;
-        /// Permission holder can remove existing users from the platform.
-        const DELETE_USER = 0x0000_0002;
-        /// Permission holder can change other user's permissions.
-        const EDIT_USER_PERMISSIONS = 0x0000_0004;
-        /// Permission holder can edit data for other users.
-        const EDIT_USER = 0x0000_1000;
-        /// All bits allocated for team management permissions.
-        const MANAGE_TEAMS_BITS = 0x0100_0000;
-        /// Permission holder can create, edit, and delete teams.
-        const MANAGE_TEAM = 0x0100_0000;
-    }
-}
-
-impl PermissionBits for SystemPermissions {
-    fn empty() -> Self { Self::empty() }
-
-    fn from_bits(bits: i32) -> Option<Self> { Self::from_bits(bits) }
-
-    fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "user:delete" => Some(Self::DELETE_USER),
-            "user:edit-permissions" => Some(Self::EDIT_USER_PERMISSIONS),
-            "user:edit" => Some(Self::EDIT_USER),
-            "team:manage" => Some(Self::MANAGE_TEAM),
-            _ => None,
-        }
-    }
-
-    fn require(self, permissions: SystemPermissions)
-    -> Result<(), RequirePermissionsError<Self>> {
-        if self.contains(permissions) {
-            Ok(())
-        } else {
-            log::trace!("Missing permissions: {:?}", permissions - self);
-            Err(RequirePermissionsError(permissions - self))
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::DELETE_USER => "user:delete",
-            Self::EDIT_USER_PERMISSIONS => "user:edit-permissions",
-            Self::EDIT_USER => "user:edit",
-            _ if Self::MANAGE_USERS_BITS.contains(self) => "user",
-            Self::MANAGE_TEAM => "team:manage",
-            _ if Self::MANAGE_TEAMS_BITS.contains(self) => "team",
-            _ => "*",
-        }
-    }
-
-    fn insert(&mut self, permissions: Self) { self.insert(permissions); }
-}
-
-bitflags! {
     /// Permissions within a specific team.
     pub struct TeamPermissions: i32 {
         /// All currently allocated bits.
@@ -233,7 +168,6 @@ macro_rules! permission {
     };
 }
 
-permission!(ManageTeams: SystemPermissions = MANAGE_TEAM);
 permission!(AddMember: TeamPermissions = ADD_MEMBER);
 permission!(RemoveMember: TeamPermissions = REMOVE_MEMBER);
 permission!(EditBook: TeamPermissions = EDIT_BOOK);
@@ -276,45 +210,6 @@ impl<P: PermissionBits> Permission for NoPermissions<P> {
     type Bits = P;
 
     fn bits() -> P { P::empty() }
-}
-
-impl ser::Serialize for SystemPermissions {
-    fn serialize<S>(&self, ser: S) -> Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        if !ser.is_human_readable() {
-            return ser.serialize_i32(self.bits());
-        }
-
-        let mut seq = ser.serialize_seq(Some(self.bits().count_ones() as usize))?;
-        if self.contains(SystemPermissions::DELETE_USER) {
-            seq.serialize_element("user:delete")?;
-        }
-        if self.contains(SystemPermissions::EDIT_USER_PERMISSIONS) {
-            seq.serialize_element("user:edit-permissions")?;
-        }
-        if self.contains(SystemPermissions::EDIT_USER) {
-            seq.serialize_element("user:edit")?;
-        }
-        if self.contains(SystemPermissions::MANAGE_TEAM) {
-            seq.serialize_element("team:manage")?;
-        }
-        seq.end()
-    }
-}
-
-impl<'de> de::Deserialize<'de> for SystemPermissions {
-    fn deserialize<D>(de: D) -> Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        if !de.is_human_readable() {
-            de.deserialize_i32(BitsVisitor(PhantomData))
-        } else {
-            de.deserialize_any(BitsVisitor(PhantomData))
-        }
-    }
 }
 
 impl ser::Serialize for TeamPermissions {

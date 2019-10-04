@@ -12,7 +12,6 @@
     name: string,
     is_super: boolean,
     language: string,
-    permissions: Permission[]?,
     teams: [
         {
             id: number,
@@ -30,12 +29,6 @@ This model is used throughout the API to describe users. The fields are
 - `name`: users' name;
 
 - `language`: user's preferred language. Server guarantees that it is supported;
-
-- `permissions`: list of system permissions this user has.
-
-  This field is only returned to users with the [`user:edit-permissions`](
-  ../#p-user-edit-permissions) permission, and in a few specific cases listed in
-  endpoint documentation.
 
 - `teams`: list of teams this user is member of. Only includes the teams which
   the requesting user is a member of;
@@ -131,20 +124,12 @@ object with following fields/properties:
 ```
 {
     language: string?,
-    permissions: SystemPermission[]?,
     name: string?,
 }
 ```
 
 - `language`: a [BCP 47][BCP47] language tag naming language to which user's
   preferred language will be set;
-
-- `permissions`: a set of permissions to assign to the user. Any permissions
-  which user already has but which are not present in this field will be
-  removed.
-
-  This field can only be used by a user with the [`user:edit-permissions`](
-  ../#p-user-edit-permissions) system permission.
 
 - `name`: user's name;
 
@@ -158,8 +143,7 @@ session with the [`user:edit`](../#p-user-edit) permission.
   model, describing the user with changes applied.
 
 - 400: `language` was not a valid language tag or did not name a supported
-  language, or `permissions` did not name existing permissions, or `role` did
-  not name an existing role.
+  language, or `role` did not name an existing role.
 
 ### `GET /api/v1/users/:id/drafts`
 
@@ -207,7 +191,6 @@ properties:
 {
     expires: date,
     is_elevated: boolean,
-    permissions: Permission[],
 }
 ```
 
@@ -215,8 +198,6 @@ properties:
   to re-authenticate;
 
 - `is_elevated`: is this an elevated session;
-
-- `permissions`: set of permissions the user has in this session.
 
 ### `POST /reset`
 

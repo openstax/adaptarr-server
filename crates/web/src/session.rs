@@ -20,12 +20,6 @@ use adaptarr_models::{
         schema::sessions,
     },
     models::{AssertExists, FindModelError, Model, User},
-    permissions::{
-        Permission,
-        PermissionBits,
-        RequirePermissionsError,
-        SystemPermissions,
-    },
 };
 use chrono::{Duration, Utc};
 use diesel::{prelude::*, result::{Error as DbError}};
@@ -108,6 +102,11 @@ pub enum Validation<E = Error> {
 /// This is the default policy.
 pub struct Normal;
 
+/// Elevated policy.
+///
+/// This policy allows only super sessions to pass.
+pub struct Elevated;
+
 /// Data internal to the session manager.
 struct SessionData {
     /// Existing session, if any.
@@ -147,7 +146,6 @@ impl SessionManager {
         if ses.is_elevated && diff > Duration::minutes(SUPER_EXPIRATION) {
             return Validation::Update(SessionUpdate {
                 is_elevated: Some(false),
-                permissions: Some(ses.permissions),
                 .. SessionUpdate::default()
             }, true);
         }
@@ -331,21 +329,12 @@ where
 
 impl<P> Session<P> {
     pub fn create(req: &HttpRequest, user: &User, is_elevated: bool) {
-        let permissions = if is_elevated && user.is_super {
-            SystemPermissions::all()
-        } else if is_elevated {
-            user.permissions()
-        } else {
-            SystemPermissions::empty()
-        };
-
         let now = Utc::now();
         let new = NewSession {
             user: user.id,
             is_elevated: user.is_super && is_elevated,
             expires: now + Duration::days(MAX_DURATION),
             last_used: now,
-            permissions: permissions.bits(),
         };
 
         let mut extensions = req.extensions_mut();
@@ -377,10 +366,6 @@ impl<P> Session<P> {
 
     pub fn user(&self, db: &Connection) -> Result<User, DbError> {
         User::by_id(db, self.data.user).map_err(FindModelError::assert_exists)
-    }
-
-    pub fn permissions(&self) -> SystemPermissions {
-        SystemPermissions::from_bits_truncate(self.data.permissions)
     }
 }
 
@@ -444,19 +429,14 @@ impl Policy for Normal {
     }
 }
 
-impl<P> Policy for P
-where
-    P: Permission<Bits = SystemPermissions>,
-{
-    type Error = RequirePermissionsError<P::Bits>;
+impl Policy for Elevated {
+    type Error = Error;
 
-    fn validate(session: &DbSession) -> Validation<RequirePermissionsError<P::Bits>> {
-        let bits = P::Bits::from_bits(session.permissions)
-            .unwrap_or_else(P::Bits::empty);
-
-        match bits.require(P::bits()) {
-            Ok(()) => Validation::Pass,
-            Err(err) => Validation::Error(err),
+    fn validate(ses: &DbSession) -> Validation {
+        if ses.is_elevated {
+            Validation::Pass
+        } else {
+            Validation::Reject
         }
     }
 }

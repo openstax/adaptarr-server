@@ -19,8 +19,6 @@ pub struct User {
     pub is_super: bool,
     /// User's preferred language
     pub language: String,
-    /// System permissions this user has.
-    pub permissions: i32,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -32,7 +30,6 @@ pub struct NewUser<'a> {
     pub salt: &'a [u8],
     pub is_super: bool,
     pub language: &'a str,
-    pub permissions: i32,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug)]
@@ -58,8 +55,6 @@ pub struct Session {
     /// are granted for a short time, after which they become normal sessions
     /// again.
     pub is_elevated: bool,
-    /// System permissions this session has.
-    pub permissions: i32,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -69,7 +64,6 @@ pub struct NewSession {
     pub expires: DateTime<Utc>,
     pub last_used: DateTime<Utc>,
     pub is_elevated: bool,
-    pub permissions: i32,
 }
 
 #[derive(AsChangeset, Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -78,7 +72,6 @@ pub struct SessionUpdate {
     pub expires: Option<DateTime<Utc>>,
     pub last_used: Option<DateTime<Utc>>,
     pub is_elevated: Option<bool>,
-    pub permissions: Option<i32>,
 }
 
 #[derive(Clone, Debug, Identifiable, Queryable)]

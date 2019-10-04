@@ -206,7 +206,6 @@ table! {
         expires -> Timestamptz,
         last_used -> Timestamptz,
         is_elevated -> Bool,
-        permissions -> Int4,
     }
 }
 
@@ -235,7 +234,6 @@ table! {
         salt -> Bytea,
         is_super -> Bool,
         language -> Varchar,
-        permissions -> Int4,
     }
 }
 

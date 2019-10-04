@@ -9,7 +9,7 @@ use adaptarr_models::{
     Team,
     User,
     db::{self, Connection},
-    permissions::{SystemPermissions, TeamPermissions},
+    permissions::TeamPermissions,
 };
 use diesel::Connection as _;
 use failure::{Error, Fail};
@@ -18,7 +18,7 @@ use std::str::FromStr;
 use structopt::StructOpt;
 
 use crate::{Config, Result};
-use super::util::{format, parse_permissions, print_table};
+use super::util::{parse_permissions, print_table};
 
 #[derive(StructOpt)]
 pub struct Opts {
@@ -62,11 +62,10 @@ pub fn list(cfg: &Config) -> Result<()> {
             user.name.as_str(),
             user.email.as_str(),
             user.language.as_str(),
-            format(user.permissions()),
         ))
         .collect::<Vec<_>>();
 
-    print_table(("ID", "Name", "Email", "Lng", "Permissions"), &rows);
+    print_table(("ID", "Name", "Email", "Lng"), &rows);
 
     Ok(())
 }
@@ -99,7 +98,6 @@ pub fn add_user(cfg: &Config, opts: AddOpts) -> Result<()> {
         &opts.password,
         opts.is_super,
         opts.language.as_str(),
-        SystemPermissions::empty(),
     )?;
 
     println!("Created user {}", user.id);
@@ -165,9 +163,6 @@ pub struct ModifyOpts {
     /// Set user's language
     #[structopt(long = "language", alias = "lang")]
     language: Option<LanguageTag>,
-    /// Set user's permissions
-    #[structopt(long = "permissions", parse(try_from_str = parse_permissions))]
-    permissions: Option<SystemPermissions>,
 }
 
 pub fn modify(cfg: &Config, opts: ModifyOpts) -> Result<()> {
@@ -181,10 +176,6 @@ pub fn modify(cfg: &Config, opts: ModifyOpts) -> Result<()> {
 
         if let Some(lang) = opts.language {
             user.set_language(&db, &lang)?;
-        }
-
-        if let Some(permissions) = opts.permissions {
-            user.set_permissions(&db, permissions)?;
         }
 
         Ok(())

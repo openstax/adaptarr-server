@@ -27,7 +27,7 @@ use crate::{
             users,
         },
     },
-    permissions::{TeamPermissions, SystemPermissions},
+    permissions::TeamPermissions,
 };
 use super::{FindModelError, FindModelResult, Model, Role, Team};
 
@@ -56,8 +56,6 @@ pub struct Public {
     name: String,
     is_super: bool,
     language: String,
-    #[serde(skip_serializing_if="Option::is_none")]
-    permissions: Option<SystemPermissions>,
     #[serde(skip_serializing_if="Option::is_none")]
     teams: Option<Vec<TeamInfo>>,
 }
@@ -120,7 +118,6 @@ impl Model for User {
             name: name.clone(),
             is_super,
             language: language.clone(),
-            permissions: None,
             teams: None,
         }
     }
@@ -128,12 +125,6 @@ impl Model for User {
     fn get_public_full(&self, db: &Connection, params: &PublicParams)
     -> Result<Public, DbError> {
         let db::User { id, ref name, is_super, ref language, .. } = self.data;
-
-        let permissions = if params.include_permissions {
-            Some(SystemPermissions::from_bits_truncate(self.data.permissions))
-        } else {
-            None
-        };
 
         let teams = match params.include_teams {
             Some(ref teams) => team_members::table
@@ -164,7 +155,6 @@ impl Model for User {
             name: name.clone(),
             is_super,
             language: language.clone(),
-            permissions,
             teams: Some(teams),
         })
     }
@@ -209,7 +199,6 @@ impl User {
         password: &str,
         is_super: bool,
         language: &str,
-        permissions: SystemPermissions,
     ) -> Result<User, CreateUserError> {
         if name.is_empty() {
             return Err(CreateUserError::EmptyName);
@@ -244,11 +233,6 @@ impl User {
                     salt: &salt,
                     is_super,
                     language,
-                    permissions: if is_super {
-                        std::i32::MAX
-                    } else {
-                        permissions.bits()
-                    },
                 })
                 .get_result::<db::User>(db)?;
 
@@ -259,7 +243,6 @@ impl User {
                     name,
                     is_super,
                     language,
-                    permissions: data.permissions,
                 });
 
             Ok(User { data })
@@ -301,11 +284,6 @@ impl User {
             .expect("locale data should be loaded at this point")
             .find_locale(&self.language())
             .expect("locale data missing for user's language")
-    }
-
-    /// Get all system permissions this user has.
-    pub fn permissions(&self) -> SystemPermissions {
-        SystemPermissions::from_bits_truncate(self.data.permissions)
     }
 
     pub fn mailbox(&self) -> Mailbox {
@@ -407,39 +385,6 @@ impl User {
         Ok(())
     }
 
-    /// Change user's system permissions.
-    pub fn set_permissions(
-        &mut self,
-        db: &Connection,
-        permissions: SystemPermissions,
-    ) -> Result<(), DbError> {
-        // Superusers have all permissions.
-        if self.data.is_super {
-            return Ok(());
-        }
-
-        let data = db.transaction(|| {
-            audit::log_db(
-                db, "users", self.id, "set-permissions", permissions.bits());
-
-            // Since we might be removing a permission we also need to update
-            // user's sessions.
-            diesel::update(sessions::table.filter(
-                    sessions::user.eq(self.id).and(
-                        sessions::permissions.ne(0))))
-                .set(sessions::permissions.eq(permissions.bits()))
-                .execute(db)?;
-
-            diesel::update(&self.data)
-                .set(users::permissions.eq(permissions.bits()))
-                .get_result::<db::User>(db)
-        })?;
-
-        self.data = data;
-
-        Ok(())
-    }
-
     pub fn do_send_mail<S, C>(
         &self,
         template: &str,
@@ -532,8 +477,4 @@ struct LogNewUser<'a> {
     name: &'a str,
     is_super: bool,
     language: &'a str,
-    // XXX: we serialize permissions as bits as rmp-serde currently works as
-    // a human-readable format, and serializes SystemPermissions as an array of
-    // strings.
-    permissions: i32,
 }

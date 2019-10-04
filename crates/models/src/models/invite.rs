@@ -11,7 +11,7 @@ use crate::{
     audit::{self, Actor},
     config::Config,
     db::{Connection, models as db, schema::{invites, users, teams}},
-    permissions::{SystemPermissions, TeamPermissions},
+    permissions::TeamPermissions,
 };
 use super::{
     AssertExists,
@@ -170,7 +170,6 @@ impl Invite {
                     password,
                     false,
                     language,
-                    SystemPermissions::empty(),
                 )?,
                 Some(user) => User::by_id(db, user).assert_exists()?,
             };

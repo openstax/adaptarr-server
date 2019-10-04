@@ -15,7 +15,7 @@ use adaptarr_models::{
     Team,
     TeamResource,
     Tree,
-    permissions::{EditBook, PermissionBits, TeamPermissions, SystemPermissions},
+    permissions::{EditBook, PermissionBits, TeamPermissions},
     processing::import::{Importer, ImportBook, ReplaceBook},
 };
 use adaptarr_web::{
@@ -73,7 +73,7 @@ pub fn configure(cfg: &mut ServiceConfig) {
 /// ```
 fn list_books(db: Database, session: Session)
 -> Result<Json<Vec<<Book as Model>::Public>>> {
-    let books = if session.permissions().contains(SystemPermissions::MANAGE_TEAM) {
+    let books = if session.is_elevated {
         Book::all(&db)?
     } else {
         let user = session.user(&db)?;

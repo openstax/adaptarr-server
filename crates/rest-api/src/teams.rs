@@ -16,13 +16,17 @@ use adaptarr_models::{
     permissions::{
         AddMember,
         EditRole,
-        ManageTeams,
         PermissionBits,
         RemoveMember,
-        SystemPermissions,
     },
 };
-use adaptarr_web::{Created, Database, FormOrJson, Session, TeamScoped};
+use adaptarr_web::{
+    Created,
+    Database,
+    FormOrJson,
+    TeamScoped,
+    session::{Elevated, Session},
+};
 use diesel::Connection as _;
 use serde::Deserialize;
 
@@ -72,7 +76,7 @@ pub fn configure(app: &mut ServiceConfig) {
 /// ```
 fn list_teams(db: Database, session: Session)
 -> Result<Json<Vec<<Team as Model>::Public>>> {
-    let teams = if session.permissions().contains(SystemPermissions::MANAGE_TEAM) {
+    let teams = if session.is_elevated {
         Team::all(&db)?
     } else {
         session.user(&db)?.get_teams(&db)?
@@ -96,7 +100,7 @@ struct NewTeam {
 fn create_team(
     req: HttpRequest,
     db: Database,
-    _: Session<ManageTeams>,
+    _: Session<Elevated>,
     data: FormOrJson<NewTeam>,
 ) -> Result<Created<String, Json<<Team as Model>::Public>>> {
     let team = Team::create(&db, &data.name)?;
@@ -131,7 +135,7 @@ struct TeamUpdate {
 /// ```
 fn update_team(
     db: Database,
-    _: Session<ManageTeams>,
+    _: Session<Elevated>,
     _: TeamScoped<Team>,
     id: Path<i32>,
     update: FormOrJson<TeamUpdate>,

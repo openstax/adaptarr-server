@@ -13,7 +13,6 @@ use adaptarr_models::{
     Optional,
     PermissionBits,
     Role,
-    SystemPermissions,
     Team,
     TeamPermissions,
     TeamResource,
@@ -57,7 +56,6 @@ pub fn configure(app: &mut ServiceConfig) {
 fn list_users(db: Database, session: Session)
 -> Result<Json<Vec<<User as Model>::Public>>> {
     let user = session.user(&db)?;
-    let permissions = user.permissions();
 
     let (users, teams) = if session.is_elevated {
         (User::all(&db)?, None)
@@ -69,8 +67,7 @@ fn list_users(db: Database, session: Session)
     };
 
     let params = UserPublicParams {
-        include_permissions: permissions.contains(
-            SystemPermissions::EDIT_USER_PERMISSIONS),
+        include_permissions: session.is_elevated,
         include_teams: teams,
     };
 
@@ -115,8 +112,8 @@ fn create_invitation(
     let role = Option::<Role>::by_id(&db, params.role)?;
     let invitee = User::by_email(&db, &params.email).optional()?;
 
-    if invitee.is_none() {
-        session.permissions().require(SystemPermissions::INVITE_USER)?;
+    if invitee.is_none() && !session.is_elevated {
+        unimplemented!()
     }
 
     let locale = i18n.find_locale(&params.language).ok_or(NoSuchLocaleError)?;
@@ -139,7 +136,6 @@ fn create_invitation(
 fn get_user(db: Database, session: Session, id: Path<UserId>)
 -> Result<Json<<User as Model>::Public>> {
     let user = session.user(&db)?;
-    let permissions = user.permissions();
 
     let teams = if session.is_elevated {
         None
@@ -148,8 +144,7 @@ fn get_user(db: Database, session: Session, id: Path<UserId>)
     };
 
     let params = UserPublicParams {
-        include_permissions: id.is_current()
-            || permissions.contains(SystemPermissions::EDIT_USER_PERMISSIONS),
+        include_permissions: id.is_current() || session.is_elevated,
         include_teams: teams,
     };
 
@@ -159,7 +154,6 @@ fn get_user(db: Database, session: Session, id: Path<UserId>)
 #[derive(Deserialize)]
 struct UserUpdate {
     language: Option<LanguageTag>,
-    permissions: Option<SystemPermissions>,
     name: Option<String>,
 }
 
@@ -178,14 +172,13 @@ fn modify_user(
     form: FormOrJson<UserUpdate>,
 ) -> Result<Json<<User as Model>::Public>> {
     let form = form.into_inner();
-    let permissions = session.permissions();
     let mut user = id.get_user(&db, &session)?;
 
     let db = &db;
     db.transaction::<_, Error, _>(|| {
         if let Some(language) = form.language {
-            if !id.is_current() {
-                permissions.require(SystemPermissions::EDIT_USER)?;
+            if !id.is_current() && !session.is_elevated {
+                unimplemented!()
             }
 
             let locale = i18n.find_locale(&language).ok_or(NoSuchLocaleError)?;
@@ -193,24 +186,18 @@ fn modify_user(
         }
 
         if let Some(name) = form.name {
-            if !id.is_current() {
-                permissions.require(SystemPermissions::EDIT_USER)?;
+            if !id.is_current() && !session.is_elevated {
+                unimplemented!()
             }
 
             user.set_name(db, &name)?;
-        }
-
-        if let Some(new_perms) = form.permissions {
-            permissions.require(SystemPermissions::EDIT_USER_PERMISSIONS)?;
-            user.set_permissions(db, new_perms)?;
         }
 
         Ok(())
     })?;
 
     let params = UserPublicParams {
-        include_permissions: id.is_current()
-            || permissions.contains(SystemPermissions::EDIT_USER_PERMISSIONS),
+        include_permissions: id.is_current() || session.is_elevated,
         include_teams: if session.is_elevated {
             None
         } else {
@@ -291,7 +278,6 @@ fn modify_password(
 struct SessionData {
     expires: DateTime<Utc>,
     is_elevated: bool,
-    permissions: SystemPermissions,
 }
 
 /// Get details about current session.
@@ -305,7 +291,6 @@ fn get_session(session: Session) -> Json<SessionData> {
     Json(SessionData {
         expires: session.expires,
         is_elevated: session.is_elevated,
-        permissions: session.permissions(),
     })
 }
 
