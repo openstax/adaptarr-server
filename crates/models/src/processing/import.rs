@@ -109,7 +109,7 @@ impl Importer {
 
     /// Process a zipped module and extract index.cnxml and other media files
     /// from it.
-    fn process_module_zip(&mut self, mut file: NamedTempFile)
+    fn process_module_zip(&mut self, db: &Connection, mut file: NamedTempFile)
     -> Result<ModuleZip, ImportError> {
         let mut zip = ZipArchive::new(file.as_file_mut())?;
 
@@ -143,10 +143,8 @@ impl Importer {
             .map_err(|e| ImportError::MalformedIndexCnxml(
                 "index.cnxml".to_string(), e))?;
 
-        let db = self.pool.get()?;
-
         let index_file = File::from_read(
-            &*db,
+            db,
             &self.storage_path,
             zip.by_index(index)?,
             Some(&*CNXML_MIME),
@@ -184,7 +182,7 @@ impl Importer {
                 continue;
             }
 
-            let file = File::from_read(&*db, &self.storage_path, file, None)?;
+            let file = File::from_read(db, &self.storage_path, file, None)?;
 
             files.push((name, file));
         }
@@ -200,25 +198,31 @@ impl Importer {
     /// Create a new module from a ZIP of its contents.
     fn create_module(&mut self, team: &Team, title: String, file: NamedTempFile)
     -> Result<Module, ImportError> {
-        let ModuleZip {
-            language, index, files, ..
-        } = self.process_module_zip(file)?;
-
         let db = self.pool.get()?;
-        let module = Module::create(&*db, team, &title, &language, index, files)?;
 
-        Ok(module)
+        db.transaction(|| {
+            let ModuleZip {
+                language, index, files, ..
+            } = self.process_module_zip(&*db, file)?;
+
+            let module = Module::create(&*db, team, &title, &language, index, files)?;
+
+            Ok(module)
+        })
     }
 
     /// Import a zipped module onto an existing one.
     fn replace_module(&mut self, mut module: Module, file: NamedTempFile)
     -> Result<Module, ImportError> {
-        let ModuleZip { index, files, .. } = self.process_module_zip(file)?;
-
         let db = self.pool.get()?;
-        module.replace(&*db, index, files)?;
 
-        Ok(module)
+        db.transaction(|| {
+            let ModuleZip { index, files, .. } = self.process_module_zip(&*db, file)?;
+
+            module.replace(&*db, index, files)?;
+
+            Ok(module)
+        })
     }
 
     /// Process a zipped collection and extract from it collection.xml, list
