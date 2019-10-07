@@ -12,6 +12,7 @@ use adaptarr_models::{
     Team,
     TeamMember,
     TeamPermissions,
+    TeamPublicParams,
     User,
     permissions::{
         AddMember,
@@ -82,7 +83,9 @@ fn list_teams(db: Database, session: Session)
         session.user(&db)?.get_teams(&db)?
     };
 
-    Ok(Json(teams.get_public_full(&db, &())?))
+    Ok(Json(teams.get_public_full(&db, &TeamPublicParams {
+        include_role_permissions: session.is_elevated,
+    })?))
 }
 
 #[derive(Deserialize)]
@@ -106,7 +109,9 @@ fn create_team(
     let team = Team::create(&db, &data.name)?;
     let location = req.url_for("team", &[team.id().to_string()])?.to_string();
 
-    Ok(Created(location, Json(team.get_public_full(&db, &())?)))
+    Ok(Created(location, Json(team.get_public_full(&db, &TeamPublicParams {
+        include_role_permissions: true,
+    })?)))
 }
 
 /// Get a team by ID.
@@ -116,9 +121,12 @@ fn create_team(
 /// ```text
 /// GET /teams/:id
 /// ```
-fn get_team(db: Database, _: TeamScoped<Team>, id: Path<i32>)
+fn get_team(db: Database, session: Session, team: TeamScoped<Team>, id: Path<i32>)
 -> Result<Json<<Team as Model>::Public>> {
-    Ok(Json(Team::by_id(&db, *id)?.get_public_full(&db, &())?))
+    Ok(Json(Team::by_id(&db, *id)?.get_public_full(&db, &TeamPublicParams {
+        include_role_permissions: session.is_elevated
+            | team.permissions().contains(TeamPermissions::EDIT_ROLE),
+    })?))
 }
 
 #[derive(Deserialize)]
@@ -144,7 +152,9 @@ fn update_team(
 
     team.set_name(&db, &update.name)?;
 
-    Ok(Json(team.get_public_full(&db, &())?))
+    Ok(Json(team.get_public_full(&db, &TeamPublicParams {
+        include_role_permissions: true,
+    })?))
 }
 
 /// Get list of all roles in a team.

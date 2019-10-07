@@ -36,7 +36,7 @@ pub use self::{
     password::PasswordResetToken,
     resource::{Resource, ResourceFileError},
     role::Role,
-    team::{Team, TeamResource},
+    team::{Team, TeamResource, PublicParams as TeamPublicParams},
     team_member::TeamMember,
     user::{
         ChangePasswordError,

@@ -32,6 +32,12 @@ pub struct Public {
     pub roles: Option<Vec<<Role as Model>::Public>>,
 }
 
+#[derive(Default)]
+pub struct PublicParams {
+    /// Include role's permissions in [`Public::roles`].
+    pub include_role_permissions: bool,
+}
+
 impl TeamResource for Team {
     fn team_id(&self) -> <Team as Model>::Id {
         self.data.id
@@ -44,7 +50,7 @@ impl Model for Team {
     type Id = i32;
     type Database = db::Team;
     type Public = Public;
-    type PublicParams = ();
+    type PublicParams = PublicParams;
 
     fn by_id(db: &Connection, id: Self::Id) -> FindModelResult<Self> {
         teams::table
@@ -76,14 +82,15 @@ impl Model for Team {
         }
     }
 
-    fn get_public_full(&self, db: &Connection, _: &())
+    fn get_public_full(&self, db: &Connection, params: &PublicParams)
     -> Result<Self::Public, DbError> {
         let db::Team { id, ref name } = self.data;
 
         Ok(Public {
             id,
             name: name.clone(),
-            roles: Some(self.get_roles(db)?.get_public_full(db, &false)?),
+            roles: Some(self.get_roles(db)?
+                .get_public_full(db, &params.include_role_permissions)?),
         })
     }
 }
