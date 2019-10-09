@@ -83,7 +83,7 @@ join-team-title = Zostałeś/aś zaproszony/a do dołączenia do zespołu { $tea
 
 join-team-reject = Odrzuć
 
-join-team-accept = Dołącz do { $team }
+join-team-accept = Dołącz do zespołu
 
 
 
