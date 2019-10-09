@@ -88,6 +88,11 @@ struct InviteParams {
 #[fail(display = "No such locale")]
 struct NoSuchLocaleError;
 
+#[derive(ApiError, Debug, Fail)]
+#[api(status = "FORBIDDEN", code = "user:session:rejected")]
+#[fail(display = "Can't invite external user")]
+struct InviteExternalError;
+
 /// Create an invitation.
 ///
 /// This endpoint is only accessible in an elevated session.
@@ -103,23 +108,30 @@ fn create_invitation(
     session: Session,
     params: FormOrJson<InviteParams>,
 ) -> Result<HttpResponse> {
-    let user = session.user(&db)?;
     let team = Team::by_id(&db, params.team)?;
-    let member = team.get_member(&db, &user)?;
-
-    member.permissions().require(TeamPermissions::ADD_MEMBER)?;
-
     let role = Option::<Role>::by_id(&db, params.role)?;
     let invitee = User::by_email(&db, &params.email).optional()?;
 
-    if invitee.is_none() && !session.is_elevated {
-        unimplemented!()
-    }
+    let permissions = if session.is_elevated {
+        params.permissions
+    } else {
+        let user = session.user(&db)?;
+        let member = team.get_member(&db, &user)?;
+
+        member.permissions().require(TeamPermissions::ADD_MEMBER)?;
+
+        params.permissions & member.permissions()
+    };
+
+    let invite = match invitee {
+        Some(invitee) => Invite::create_for_existing(
+            &db, team, role.as_ref(), permissions, invitee)?,
+        None if session.is_elevated => Invite::create(
+            &db, team, &params.email, role.as_ref(), params.permissions)?,
+        None => return Err(InviteExternalError.into()),
+    };
 
     let locale = i18n.find_locale(&params.language).ok_or(NoSuchLocaleError)?;
-    let permissions = params.permissions & member.permissions();
-    let invite = Invite::create(
-        &db, team, &params.email, role.as_ref(), permissions)?;
 
     invite.do_send_mail(locale);
 
