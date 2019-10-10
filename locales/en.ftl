@@ -85,7 +85,7 @@ join-team-title = You have been invited to join { $team }
 
 join-team-reject = Reject
 
-join-team-accept = Join { $team }
+join-team-accept = Join team
 
 
 
