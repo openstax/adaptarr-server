@@ -20,6 +20,8 @@
             {% set header = "mail-notify-group-header-slot-assignment" %}
         {% elif group == "draft-advanced" %}
             {% set header = "mail-notify-group-header-draft-advanced" %}
+        {% elif group == "conversation" %}
+            {% set header = "mail-notify-group-header-conversation" %}
         {% else %}
             {% set_global num_unknown = num_unknown + count %}
             {% continue %}
@@ -79,6 +81,35 @@
                     bookurl=event.book.url,
                     bookcount=event.book.count
                 ) %}
+            {% elif event.kind == "new-message" %}
+                {{ m::expand_paras(paras=_(
+                    key="mail-notify-event-new-message",
+                    authorname=event.author.name,
+                    authorurl=event.author.url,
+                    messageurl=event.message.url
+                )) }}
+                <tr>
+                    <td style="padding: 0 14px 10px 14px;">
+                        <a
+                            href="{{ event.message.url }}"
+                            target="_blank"
+                            rel="noopener"
+                            style="text-decoration: none; color: inherit; display: block;"
+                            >
+                            <table
+                                align="center"
+                                border="0"
+                                cellpadding="0"
+                                cellspacing="0"
+                                width="100%"
+                                style="border-collapse: collapse; border: 1px solid #bbbbbb;"
+                                >
+                                {{ event.message.html | safe }}
+                            </table>
+                        </a>
+                    </td>
+                </tr>
+                {% continue %}
             {% endif %}
 
             {{ m::expand_paras(paras=message) }}

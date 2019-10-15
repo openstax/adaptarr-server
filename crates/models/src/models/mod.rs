@@ -22,6 +22,7 @@ mod team_member;
 mod user;
 mod xref_target;
 
+pub mod conversation;
 pub mod editing;
 
 pub use self::{

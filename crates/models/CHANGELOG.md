@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Implemented conversations.
+
 ## 0.3.0 - 2019-10-15
 
 Removed system permissions.

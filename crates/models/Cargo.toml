@@ -15,6 +15,7 @@ adaptarr-util = { path = "../util" }
 base64 = "0.10.1"
 bitflags = "1.1.0"
 blake2 = { version = "0.2.18", package = "blake2-rfc" }
+bytes = "0.4.12"
 diesel_migrations = "1.4.0"
 failure = "0.1.5"
 futures = "0.1.28"
@@ -28,6 +29,7 @@ rand = "0.7.0"
 rmps = { version = "0.13.7", package = "rmp-serde" }
 rust-argon2 = "0.5.1"
 tempfile = "3.1.0"
+tera = "0.11.20"
 zip = "0.5.3"
 
 [dependencies.chrono]

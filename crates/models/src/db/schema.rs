@@ -31,6 +31,30 @@ table! {
 }
 
 table! {
+    conversation_events (id) {
+        id -> Int4,
+        conversation -> Int4,
+        kind -> Varchar,
+        timestamp -> Timestamptz,
+        author -> Nullable<Int4>,
+        data -> Bytea,
+    }
+}
+
+table! {
+    conversation_members (conversation, user) {
+        conversation -> Int4,
+        user -> Int4,
+    }
+}
+
+table! {
+    conversations (id) {
+        id -> Int4,
+    }
+}
+
+table! {
     document_files (id) {
         id -> Int4,
         document -> Int4,
@@ -253,6 +277,10 @@ joinable!(audit_log -> users (actor));
 joinable!(book_parts -> books (book));
 joinable!(book_parts -> modules (module));
 joinable!(books -> teams (team));
+joinable!(conversation_events -> conversations (conversation));
+joinable!(conversation_events -> users (author));
+joinable!(conversation_members -> conversations (conversation));
+joinable!(conversation_members -> users (user));
 joinable!(document_files -> documents (document));
 joinable!(document_files -> files (file));
 joinable!(documents -> files (index));
@@ -293,6 +321,9 @@ allow_tables_to_appear_in_same_query!(
     audit_log,
     book_parts,
     books,
+    conversation_events,
+    conversation_members,
+    conversations,
     document_files,
     documents,
     drafts,

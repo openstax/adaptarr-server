@@ -385,6 +385,21 @@ mail-notify-event-draft-advanced =
             -mail-url(url: $bookurl, text: $booktitle) }.
     }
 
+# Header displayed before notifications about conversations.
+mail-notify-group-header-conversation =
+    Informacja o rozmowach, w których uczestniczysz
+
+# A new message was added to a conversation.
+#
+# Variables:
+# - $authorname (string): name of the user who sent this message
+# - $authorurl (string): URL to $authorname's profile
+# - $messageurl (string): URL to the message
+mail-notify-event-new-message-text =
+    { $authorname } wysłał/a nową wiadomość ({ $messageurl }):
+mail-notify-event-new-message =
+    { -mail-url(url: $authorurl, text: $authorname) } wysłał/a nową wiadomość:
+
 -mail-notify-unknown-text =
     Możesz zapoznać się z { $count ->
         [1] nim

@@ -382,6 +382,22 @@ mail-notify-event-draft-advanced =
        *[other] This module is used in { $bookcount } books, including
             { -mail-url(url: $bookurl, text: $booktitle) }.
     }
+
+# Header displayed before notifications about conversations.
+mail-notify-group-header-conversation =
+    Information on your conversations
+
+# A new message was added to a conversation.
+#
+# Variables:
+# - $authorname (string): name of the user who sent this message
+# - $authorurl (string): URL to $authorname's profile
+# - $messageurl (string): URL to the message
+mail-notify-event-new-message-text =
+    { $authorname } sends new message ({ $messageurl }):
+mail-notify-event-new-message =
+    { -mail-url(url: $authorurl, text: $authorname) } sends new message:
+
 -mail-notify-unknown-text =
     You can see { $count ->
         [1] it

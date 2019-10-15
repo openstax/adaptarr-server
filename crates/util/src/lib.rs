@@ -1,11 +1,13 @@
 use serde::de::{Deserialize, Deserializer};
 
+mod bytes_ext;
 mod secure;
 mod single_init;
 
 pub mod futures;
 
 pub use self::{
+    bytes_ext::{BufExt, BufMutExt, ReadBytes},
     secure::*,
     single_init::SingleInit,
 };

@@ -13,6 +13,7 @@ adaptarr-i18n = { path = "../i18n" }
 adaptarr-models = { path = "../models" }
 adaptarr-util = { path = "../util" }
 adaptarr-web = { path = "../web" }
+adaptarr-conversations = { path = "../conversations" }
 base64 = "0.10.1"
 bytes = "0.4.12"
 diesel = "1.4.2"

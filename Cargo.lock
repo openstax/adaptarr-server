@@ -346,6 +346,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "adaptarr-conversations"
+version = "0.1.0"
+dependencies = [
+ "actix 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix-web 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix-web-actors 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "adaptarr-macros 0.2.0",
+ "adaptarr-models 0.2.0",
+ "adaptarr-util 0.1.0",
+ "bitflags 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chrono 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "diesel 1.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "r2d2 0.8.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "adaptarr-error"
 version = "0.1.0"
 dependencies = [
@@ -418,6 +437,7 @@ dependencies = [
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "diesel 1.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "diesel-derive-enum 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -435,6 +455,7 @@ dependencies = [
  "rust-argon2 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tera 0.11.20 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "zip 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -460,6 +481,7 @@ dependencies = [
  "actix 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web-actors 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "adaptarr-conversations 0.1.0",
  "adaptarr-error 0.1.0",
  "adaptarr-i18n 0.1.1",
  "adaptarr-models 0.3.0",
@@ -485,6 +507,7 @@ name = "adaptarr-util"
 version = "0.1.0"
 dependencies = [
  "adaptarr-macros 0.2.0",
+ "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
