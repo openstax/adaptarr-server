@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.6.0 - 2019-10-15
+
+Removed system permissions.
+
 ## 0.5.0 - 2019-09-26
 
 Implemented teams.

@@ -1,6 +1,6 @@
 [package]
 name = "adaptarr-cli"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Krzysztof Mędrzycki <aiwenari@gmail.com>"]
 edition = "2018"
 
