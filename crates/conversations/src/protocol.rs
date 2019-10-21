@@ -295,6 +295,7 @@ impl MessageBody for Connected {
 }
 
 /// Structure representing the body of a _0x0001 new message_ event.
+#[derive(Clone)]
 pub struct NewMessage {
     /// Message's ID.
     pub id: i32,

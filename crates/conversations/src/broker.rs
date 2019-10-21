@@ -12,11 +12,12 @@ use adaptarr_models::{
     },
 };
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use diesel::{prelude::*, result::Error as DbError};
 use failure::Fail;
 use log::error;
 use std::collections::hash_map::{Entry, HashMap};
+
+use super::protocol;
 
 /// Broker messages and events to users.
 pub struct Broker {
@@ -226,12 +227,11 @@ impl Handler<NewMessage> for Broker {
             id, timestamp, data, ..
         } = event.into_db();
 
-        let event = Event {
+        let event = Event::NewMessage(protocol::NewMessage {
             id, timestamp,
             user: author,
-            conversation: conversation_id,
             message: Bytes::from(data),
-        };
+        });
 
         let mut listeners = conversation.listeners.iter();
         let mut members = conversation.members.iter();
@@ -286,23 +286,14 @@ impl Handler<NewMessage> for Broker {
             member = members.next();
         }
 
-        Ok(event.id)
+        Ok(id)
     }
 }
 
 /// Notification about an event in a conversation.
 #[derive(Clone)]
-pub struct Event {
-    /// Conversation in which this event occurred.
-    pub conversation: i32,
-    /// Message's ID.
-    pub id: i32,
-    /// User who send this message.
-    pub user: i32,
-    /// Time when this message was created.
-    pub timestamp: DateTime<Utc>,
-    /// Message data.
-    pub message: Bytes,
+pub enum Event {
+    NewMessage(protocol::NewMessage),
 }
 
 impl Message for Event {
