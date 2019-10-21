@@ -120,7 +120,7 @@ impl Message {
     /// Build a message.
     pub fn build<B: MessageBody>(cookie: Cookie, body: B) -> BytesMut {
         let mut bytes = BytesMut::with_capacity(8 + body.length());
-        Message::header(cookie, B::kind(), body.flags()).write(&mut bytes);
+        Message::header(cookie, body.kind(), body.flags()).write(&mut bytes);
         body.write(&mut bytes);
         bytes
     }
@@ -211,7 +211,7 @@ impl<E: Fail> From<E> for ParseMessageError {
 
 pub trait MessageBody: Sized {
     /// What kind of message is this?
-    fn kind() -> Kind;
+    fn kind(&self) -> Kind;
 
     /// Flags for this message.
     ///
@@ -255,8 +255,8 @@ pub enum AnyMessage {
     HistoryEntries(#[from] HistoryEntries),
 }
 
-impl AnyMessage {
-    pub fn kind(&self) -> Kind {
+impl MessageBody for AnyMessage {
+    fn kind(&self) -> Kind {
         match *self {
             AnyMessage::Connected(_) => Kind::Connected,
             AnyMessage::NewMessage(_) => Kind::NewMessage,
@@ -269,7 +269,33 @@ impl AnyMessage {
         }
     }
 
-    pub fn write(self, into: &mut BytesMut) {
+    fn flags(&self) -> Flags {
+        match self {
+            AnyMessage::Connected(msg) => msg.flags(),
+            AnyMessage::NewMessage(msg) => msg.flags(),
+            AnyMessage::SendMessage(msg) => msg.flags(),
+            AnyMessage::GetHistory(msg) => msg.flags(),
+            AnyMessage::UnknownEvent => UnknownEvent.flags(),
+            AnyMessage::MessageReceived(msg) => msg.flags(),
+            AnyMessage::MessageInvalid(msg) => msg.flags(),
+            AnyMessage::HistoryEntries(msg) => msg.flags(),
+        }
+    }
+
+    fn length(&self) -> usize {
+        match self {
+            AnyMessage::Connected(msg) => msg.length(),
+            AnyMessage::NewMessage(msg) => msg.length(),
+            AnyMessage::SendMessage(msg) => msg.length(),
+            AnyMessage::GetHistory(msg) => msg.length(),
+            AnyMessage::UnknownEvent => UnknownEvent.length(),
+            AnyMessage::MessageReceived(msg) => msg.length(),
+            AnyMessage::MessageInvalid(msg) => msg.length(),
+            AnyMessage::HistoryEntries(msg) => msg.length(),
+        }
+    }
+
+    fn write(self, into: &mut BytesMut) {
         match self {
             AnyMessage::Connected(msg) => msg.write(into),
             AnyMessage::NewMessage(msg) => msg.write(into),
@@ -281,6 +307,10 @@ impl AnyMessage {
             AnyMessage::HistoryEntries(msg) => msg.write(into),
         }
     }
+
+    fn read(_: Bytes) -> Result<Self, ParseMessageError> {
+        panic!("can't read AnyMessage")
+    }
 }
 
 /// First event sent from the server to the client when connection is
@@ -289,7 +319,7 @@ pub struct Connected {
 }
 
 impl MessageBody for Connected {
-    fn kind() -> Kind { Kind::Connected }
+    fn kind(&self) -> Kind { Kind::Connected }
     fn write(self, _: &mut BytesMut) {}
     fn read(_: Bytes) -> Result<Self, ParseMessageError> { Ok(Connected {}) }
 }
@@ -308,7 +338,7 @@ pub struct NewMessage {
 }
 
 impl MessageBody for NewMessage {
-    fn kind() -> Kind { Kind::NewMessage }
+    fn kind(&self) -> Kind { Kind::NewMessage }
 
     fn flags(&self) -> Flags { Flags::MUST_PROCESS }
 
@@ -353,7 +383,7 @@ pub struct SendMessage {
 }
 
 impl MessageBody for SendMessage {
-    fn kind() -> Kind { Kind::SendMessage }
+    fn kind(&self) -> Kind { Kind::SendMessage }
     fn flags(&self) -> Flags { Flags::MUST_PROCESS | Flags::RESPONSE_REQUIRED }
     fn length(&self) -> usize { self.message.len() }
 
@@ -377,7 +407,7 @@ pub struct GetHistory {
 }
 
 impl MessageBody for GetHistory {
-    fn kind() -> Kind { Kind::GetHistory }
+    fn kind(&self) -> Kind { Kind::GetHistory }
     fn flags(&self) -> Flags { Flags::RESPONSE_REQUIRED }
     fn length(&self) -> usize { 6 }
 
@@ -407,7 +437,7 @@ impl MessageBody for GetHistory {
 pub struct UnknownEvent;
 
 impl MessageBody for UnknownEvent {
-    fn kind() -> Kind { Kind::UnknownEvent }
+    fn kind(&self) -> Kind { Kind::UnknownEvent }
     fn write(self, _: &mut BytesMut) {}
     fn read(_: Bytes) -> Result<Self, ParseMessageError> { Ok(UnknownEvent) }
 }
@@ -419,7 +449,7 @@ pub struct MessageReceived {
 }
 
 impl MessageBody for MessageReceived {
-    fn kind() -> Kind { Kind::MessageReceived }
+    fn kind(&self) -> Kind { Kind::MessageReceived }
     fn length(&self) -> usize { 4 }
 
     fn write(self, buf: &mut BytesMut) {
@@ -439,7 +469,7 @@ pub struct MessageInvalid {
 }
 
 impl MessageBody for MessageInvalid {
-    fn kind() -> Kind { Kind::MessageInvalid }
+    fn kind(&self) -> Kind { Kind::MessageInvalid }
 
     fn write(self, buf: &mut BytesMut) {
         buf.extend_from_slice(
@@ -464,7 +494,7 @@ pub struct HistoryEntries {
 }
 
 impl MessageBody for HistoryEntries {
-    fn kind() -> Kind { Kind::HistoryEntries }
+    fn kind(&self) -> Kind { Kind::HistoryEntries }
 
     fn length(&self) -> usize {
         // 2 bytes for number of entries + 2 bytes for each entry's type.

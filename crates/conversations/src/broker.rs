@@ -17,7 +17,7 @@ use failure::Fail;
 use log::error;
 use std::collections::hash_map::{Entry, HashMap};
 
-use super::protocol;
+use super::protocol::{self, AnyMessage};
 
 /// Broker messages and events to users.
 pub struct Broker {
@@ -294,6 +294,14 @@ impl Handler<NewMessage> for Broker {
 #[derive(Clone)]
 pub enum Event {
     NewMessage(protocol::NewMessage),
+}
+
+impl Event {
+    pub fn into_any(self) -> AnyMessage {
+        match self {
+            Event::NewMessage(msg) => AnyMessage::NewMessage(msg),
+        }
+    }
 }
 
 impl Message for Event {

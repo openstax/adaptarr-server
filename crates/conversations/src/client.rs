@@ -181,11 +181,7 @@ impl Handler<Event> for Client {
     type Result = ();
 
     fn handle(&mut self, ev: Event, ctx: &mut Self::Context) {
-        let msg = match ev {
-            Event::NewMessage(msg) => msg,
-        };
-
-        ctx.binary(Message::build(self.cookie.next(), msg));
+        ctx.binary(Message::build(self.cookie.next(), ev.into_any()));
     }
 }
 
