@@ -1,5 +1,9 @@
-mod protocol;
 mod client;
 mod broker;
 
-pub use self::client::Client;
+pub mod protocol;
+
+pub use self::{
+    broker::{Broker, Event},
+    client::Client,
+};

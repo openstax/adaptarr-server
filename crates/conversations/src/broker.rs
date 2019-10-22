@@ -11,11 +11,11 @@ use adaptarr_models::{
         Event as EventModel,
     },
 };
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use diesel::{prelude::*, result::Error as DbError};
 use failure::Fail;
 use log::error;
-use std::collections::hash_map::{Entry, HashMap};
+use std::{collections::hash_map::{Entry, HashMap}, io::Cursor};
 
 use super::protocol::{self, AnyMessage};
 
@@ -33,6 +33,14 @@ impl Default for Broker {
             conversations: HashMap::new(),
             pool: adaptarr_models::db::pool(),
         }
+    }
+}
+
+impl Broker {
+    /// Dispatch an event to a conversation.
+    pub fn dispatch(conversation: i32, event: EventModel) {
+        let event = deserialize_event(event.into_db());
+        Broker::from_registry().do_send(Dispatch { conversation, event });
     }
 }
 
@@ -178,6 +186,39 @@ impl Handler<Disconnect> for Broker {
 
             if entry.get().listeners.is_empty() {
                 entry.remove();
+            }
+        }
+    }
+}
+
+/// Request to dispatch an event to users in a conversation.
+pub struct Dispatch {
+    /// Conversation to which to dispatch the event.
+    pub conversation: i32,
+    /// Event to dispatch.
+    pub event: Event,
+}
+
+impl Message for Dispatch {
+    type Result = ();
+}
+
+impl Handler<Dispatch> for Broker {
+    type Result = ();
+
+    fn handle(&mut self, msg: Dispatch, ctx: &mut Self::Context) {
+        let Dispatch { conversation: conversation_id, event } = msg;
+
+        if let Some(conversation) = self.conversations.get(&conversation_id) {
+            for lst in conversation.listeners.iter() {
+                if let Err(err) = lst.addr.do_send(event.clone()) {
+                    error!("Can't send message to user {} in conversation {}: {}",
+                        lst.user, conversation_id, err);
+                    ctx.notify(Disconnect {
+                        conversation: conversation_id,
+                        addr: lst.addr.clone(),
+                    });
+                }
             }
         }
     }
@@ -384,5 +425,34 @@ impl Handler<GetHistory> for Broker {
             before.reverse();
             Ok(History { before, after })
         })
+    }
+}
+
+/// Deserialize database representation of a conversation event into
+/// an [`Event`].
+pub fn deserialize_event(event: db::ConversationEvent) -> Event {
+    match event.kind.as_str() {
+        "new-message" => Event::NewMessage(protocol::NewMessage {
+            id: event.id,
+            user: event.author.unwrap(),
+            timestamp: event.timestamp,
+            message: event.data.into(),
+        }),
+        "user-joined" => {
+            let len = event.data.len() / 4;
+            let mut users = Vec::with_capacity(len);
+            let mut buf = Cursor::new(event.data);
+
+            for _ in 0..len {
+                users.push(buf.get_i32_le());
+            }
+
+            Event::UserJoined(protocol::UserJoined {
+                id: event.id,
+                timestamp: event.timestamp,
+                users,
+            })
+        }
+        _ => unreachable!(),
     }
 }
