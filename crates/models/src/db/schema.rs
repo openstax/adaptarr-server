@@ -234,6 +234,22 @@ table! {
 }
 
 table! {
+    support_ticket_authors (ticket, user) {
+        ticket -> Int4,
+        user -> Int4,
+    }
+}
+
+table! {
+    support_tickets (id) {
+        id -> Int4,
+        title -> Varchar,
+        opened -> Timestamptz,
+        conversation -> Int4,
+    }
+}
+
+table! {
     team_members (user, team) {
         team -> Int4,
         user -> Int4,
@@ -258,6 +274,7 @@ table! {
         salt -> Bytea,
         is_super -> Bool,
         language -> Varchar,
+        is_support -> Bool,
     }
 }
 
@@ -312,6 +329,9 @@ joinable!(resources -> files (file));
 joinable!(resources -> teams (team));
 joinable!(roles -> teams (team));
 joinable!(sessions -> users (user));
+joinable!(support_ticket_authors -> support_tickets (ticket));
+joinable!(support_ticket_authors -> users (user));
+joinable!(support_tickets -> conversations (conversation));
 joinable!(team_members -> roles (role));
 joinable!(team_members -> teams (team));
 joinable!(team_members -> users (user));
@@ -344,6 +364,8 @@ allow_tables_to_appear_in_same_query!(
     resources,
     roles,
     sessions,
+    support_ticket_authors,
+    support_tickets,
     team_members,
     teams,
     users,

@@ -19,6 +19,8 @@ pub struct User {
     pub is_super: bool,
     /// User's preferred language
     pub language: String,
+    /// Is this user designated as technical support?
+    pub is_support: bool,
 }
 
 #[derive(Clone, Copy, Debug, Insertable)]
@@ -641,4 +643,32 @@ pub struct NewConversationEvent<'a> {
     pub kind: &'a str,
     pub author: Option<i32>,
     pub data: &'a [u8],
+}
+
+/// A request for support.
+#[derive(Clone, Debug, Identifiable, Queryable)]
+pub struct SupportTicket {
+    /// Ticket's ID.
+    pub id: i32,
+    /// Tickets title.
+    pub title: String,
+    /// Date and time when this ticked was opened.
+    pub opened: DateTime<Utc>,
+    /// ID of conversation associated with this ticket.
+    pub conversation: i32,
+}
+
+#[derive(Clone, Copy, Debug, Insertable)]
+#[table_name = "support_tickets"]
+pub struct NewSupportTicket<'a> {
+    pub title: &'a str,
+    pub conversation: i32,
+}
+
+/// Author(s) of a support ticket.
+#[derive(Clone, Copy, Debug, Identifiable, Insertable, Queryable)]
+#[primary_key(ticket, user)]
+pub struct SupportTicketAuthor {
+    pub ticket: i32,
+    pub user: i32,
 }

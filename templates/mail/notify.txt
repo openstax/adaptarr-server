@@ -17,6 +17,8 @@
     {%- set header = "mail-notify-group-header-draft-advanced" -%}
 {%- elif group == "conversation" -%}
     {%- set header = "mail-notify-group-header-conversation" -%}
+{%- elif group == "support" -%}
+    {%- set header = "mail-notify-group-header-support" -%}
 {%- else -%}
     {%- set_global num_unknown = num_unknown + count -%}
     {%- continue -%}
@@ -93,6 +95,15 @@
 ) }}
 
 {{ event.message.text }}
+{%- elif event.kind == "new-support-ticket" %}
+
+{{ _(
+    key="mail-notify-event-new-support-ticket-text",
+    authorname=event.author.name,
+    authorurl=event.author.url,
+    tickettitle=event.ticket.title,
+    ticketurl=event.ticket.url
+) }}
 {%- endif -%}
 
 {%- endfor -%}

@@ -398,6 +398,27 @@ mail-notify-event-new-message-text =
 mail-notify-event-new-message =
     { -mail-url(url: $authorurl, text: $authorname) } sends new message:
 
+# Header displayed before notifications regarding technical support you request
+# or provide.
+mail-notify-group-header-support =
+    Information on technical support
+
+# User opened a new support ticket.
+#
+# Variables:
+# - $authorname (string): name of the user who opened the ticket
+# - $authorurl (string): URL to $authorname's profile
+# - $tickettitle (string): short description of the ticket
+# - $ticketurl (string): URL to the ticket
+mail-notify-event-new-support-ticket-text =
+    { $authorname } opened a new support ticket: { $tickettitle } ({
+    $ticketurl }).
+mail-notify-event-new-support-ticket =
+    { -mail-url(url: $authorurl, text: $authorname)
+    } opened a new support ticket: {
+        -mail-url(url: $ticketurl, text: $tickettitle)
+    }.
+
 -mail-notify-unknown-text =
     You can see { $count ->
         [1] it

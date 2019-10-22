@@ -9,6 +9,7 @@ use crate::{
     Book,
     Model,
     Module,
+    Ticket,
     User,
     conversation::{
         Event as ConversationEvent,
@@ -29,6 +30,7 @@ pub enum Event {
     SlotVacated(#[from] SlotVacated),
     DraftAdvanced(#[from] DraftAdvanced),
     NewMessage(#[from] NewMessage),
+    NewSupportTicket(#[from] NewSupportTicket),
 }
 
 impl Event {
@@ -48,6 +50,8 @@ impl Event {
                 Ok(Event::DraftAdvanced(rmps::from_slice(&data)?)),
             Kind::NewMessage =>
                 Ok(Event::NewMessage(rmps::from_slice(&data)?)),
+            Kind::NewSupportTicket =>
+                Ok(Event::NewSupportTicket(rmps::from_slice(&data)?)),
             Kind::Other => Err(LoadEventError::UnknownEvent(kind.to_string())),
         }
     }
@@ -132,6 +136,15 @@ pub struct NewMessage {
     pub message: i32,
 }
 
+/// A new support ticket was opened.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NewSupportTicket {
+    /// User who opened the ticket.
+    pub author: i32,
+    /// Ticket's ID.
+    pub ticket: i32,
+}
+
 impl Event {
     pub fn kind(&self) -> &'static str {
         match *self {
@@ -142,6 +155,7 @@ impl Event {
             Event::SlotVacated(_) => "slot-vacated",
             Event::DraftAdvanced(_) => "draft-advanced",
             Event::NewMessage(_) => "new-message",
+            Event::NewSupportTicket(_) => "new-support-ticket",
         }
     }
 }
@@ -154,6 +168,7 @@ pub enum Group {
     SlotAssignment,
     DraftAdvanced,
     Conversation,
+    Support,
     Other,
 }
 
@@ -167,6 +182,7 @@ pub enum Kind {
     SlotVacated,
     DraftAdvanced,
     NewMessage,
+    NewSupportTicket,
     Other,
 }
 
@@ -181,6 +197,7 @@ impl Kind {
             "slot-vacated" => Kind::SlotVacated,
             "draft-advanced" => Kind::DraftAdvanced,
             "new-message" => Kind::NewMessage,
+            "new-support-ticket" => Kind::NewSupportTicket,
             _ => Kind::Other,
         }
     }
@@ -192,6 +209,7 @@ impl Kind {
             Kind::SlotFilled | Kind::SlotVacated => Group::SlotAssignment,
             Kind::DraftAdvanced => Group::DraftAdvanced,
             Kind::NewMessage => Group::Conversation,
+            Kind::NewSupportTicket => Group::Support,
             Kind::Other => Group::Other,
         }
     }
@@ -232,7 +250,11 @@ pub enum ExpandedEvent {
     NewMessage {
         author: ExpandedUser,
         message: ExpandedMessage,
-    }
+    },
+    NewSupportTicket {
+        author: ExpandedUser,
+        ticket: ExpandedSupportTicket,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -292,6 +314,14 @@ pub struct ExpandedMessage {
     pub html: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ExpandedSupportTicket {
+    /// Ticket's title.
+    pub title: String,
+    /// Ticket's URL.
+    pub url: String,
+}
+
 pub fn expand_event(domain: &str, db: &Connection, event: &db::Event)
 -> Result<ExpandedEvent, Error> {
     match Kind::from_str(&event.kind) {
@@ -309,6 +339,8 @@ pub fn expand_event(domain: &str, db: &Connection, event: &db::Event)
             expand_draft_advanced(domain, db, rmps::from_slice(&event.data)?),
         Kind::NewMessage =>
             expand_new_message(domain, db, rmps::from_slice(&event.data)?),
+        Kind::NewSupportTicket =>
+            expand_new_support_ticket(domain, db, rmps::from_slice(&event.data)?),
         Kind::Other => Err(Error::UnknownEvent(event.kind.clone())),
     }
 }
@@ -475,6 +507,23 @@ fn expand_new_message(domain: &str, db: &Connection, ev: NewMessage)
             &message.data.into(), MessageRenderer::new(db, message_url),
         ).expect("Inconsistent database: conversation contains an invalid \
             message"),
+    })
+}
+
+fn expand_new_support_ticket(domain: &str, db: &Connection, ev: NewSupportTicket)
+-> Result<ExpandedEvent, Error> {
+    let ticket = Ticket::by_id(db, ev.ticket).assert_exists()?.into_db();
+    let author = User::by_id(db, ev.author).assert_exists()?.into_db();
+
+    Ok(ExpandedEvent::NewSupportTicket {
+        author: ExpandedUser {
+            name: author.name,
+            url: format!("https://{}/users/{}", domain, author.id),
+        },
+        ticket: ExpandedSupportTicket {
+            title: ticket.title,
+            url: format!("https://{}/support/tickets/{}", domain, ticket.id),
+        },
     })
 }
 

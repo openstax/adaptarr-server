@@ -19,6 +19,7 @@ mod resource;
 mod role;
 mod team;
 mod team_member;
+mod ticket;
 mod user;
 mod xref_target;
 
@@ -39,6 +40,7 @@ pub use self::{
     role::Role,
     team::{Team, TeamResource, PublicParams as TeamPublicParams},
     team_member::TeamMember,
+    ticket::Ticket,
     user::{
         ChangePasswordError,
         CreateUserError,

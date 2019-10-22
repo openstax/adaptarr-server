@@ -400,6 +400,27 @@ mail-notify-event-new-message-text =
 mail-notify-event-new-message =
     { -mail-url(url: $authorurl, text: $authorname) } wysłał/a nową wiadomość:
 
+# Header displayed before notifications regarding technical support you request
+# or provide.
+mail-notify-group-header-support =
+    Informacja o pomocy technicznej
+
+# User opened a new support ticket.
+#
+# Variables:
+# - $authorname (string): name of the user who opened the ticket
+# - $authorurl (string): URL to $authorname's profile
+# - $tickettitle (string): short description of the ticket
+# - $ticketurl (string): URL to the ticket
+mail-notify-event-new-support-ticket-text =
+    { $authorname } zgłosił/a nową proźbę o pomoc: { $tickettitle } ({
+    $ticketurl }).
+mail-notify-event-new-support-ticket =
+    { -mail-url(url: $authorurl, text: $authorname)
+    } zgłosił/a nową prośbę o pomoc: {
+        -mail-url(url: $ticketurl, text: $tickettitle)
+    }.
+
 -mail-notify-unknown-text =
     Możesz zapoznać się z { $count ->
         [1] nim
