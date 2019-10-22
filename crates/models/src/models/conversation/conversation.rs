@@ -5,6 +5,7 @@ use crate::{
     db::{Connection, models as db, schema::{conversations, conversation_members}},
     models::{FindModelResult, Model, User},
 };
+use super::Event;
 
 pub struct Conversation {
     data: db::Conversation,
@@ -111,6 +112,41 @@ impl Conversation {
             .filter(conversation_members::conversation.eq(self.data.id)
                 .and(conversation_members::user.eq(user)));
         diesel::select(diesel::dsl::exists(q)).get_result(db)
+    }
+
+    /// Add a member to this conversation, returning a corresponding
+    /// conversation event.
+    ///
+    /// Note that models can't access conversation broker, so to notify already
+    /// connected users the returned event must be manually dispatched by the
+    /// caller (see `adaptarr_conversations::Broker::dispatch`).
+    ///
+    /// This method is idempotent. Users who were already members will not be
+    /// added again and no events will be generated for them. If all specified
+    /// users are already members no events will be generated at all, and
+    /// `Ok(None)` will be returned.
+    pub fn add_members(&mut self, db: &Connection, users: &[User])
+    -> Result<Option<Event>, DbError> {
+        db.transaction(|| {
+            let users = diesel::insert_into(conversation_members::table)
+                .values(users.iter().map(|user| db::ConversationMember {
+                    conversation: self.data.id,
+                    user: user.id(),
+                }).collect::<Vec<_>>())
+                .on_conflict(
+                    (conversation_members::conversation, conversation_members::user))
+                .do_nothing()
+                .returning(conversation_members::user)
+                .get_results(db)?;
+
+            if users.is_empty() {
+                return Ok(None);
+            }
+
+            let ev = Event::users_join(db, self.data.id, &users)?;
+
+            Ok(Some(ev))
+        })
     }
 }
 

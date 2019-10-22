@@ -1,3 +1,4 @@
+use bytes::BufMut;
 use diesel::{prelude::*, result::Error as DbError};
 
 use crate::{
@@ -56,6 +57,25 @@ impl Event {
                 kind: "new-message",
                 author: Some(author),
                 data: message.body.as_ref(),
+            })
+            .get_result(db)
+            .map(Event::from_db)
+    }
+
+    pub fn users_join(db: &Connection, conversation: i32, users: &[i32])
+    -> Result<Self, DbError> {
+        let mut data = Vec::with_capacity(users.len() * 4);
+
+        for user in users {
+            data.put_i32_le(*user);
+        }
+
+        diesel::insert_into(conversation_events::table)
+            .values(db::NewConversationEvent {
+                conversation,
+                kind: "user-joined",
+                author: None,
+                data: data.as_ref(),
             })
             .get_result(db)
             .map(Event::from_db)

@@ -294,12 +294,14 @@ impl Handler<NewMessage> for Broker {
 #[derive(Clone)]
 pub enum Event {
     NewMessage(protocol::NewMessage),
+    UserJoined(protocol::UserJoined),
 }
 
 impl Event {
     pub fn into_any(self) -> AnyMessage {
         match self {
             Event::NewMessage(msg) => AnyMessage::NewMessage(msg),
+            Event::UserJoined(msg) => AnyMessage::UserJoined(msg),
         }
     }
 }

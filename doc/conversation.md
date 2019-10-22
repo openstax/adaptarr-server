@@ -104,6 +104,20 @@ integer) this event. Node that server may return fewer events than requested
 (e.g. because of rate limiting, or just because there aren't as many events).
 Zero can be used instead of a reference event's ID to request newest events.
 
+#### 0x0004 User joined
+
+Send by the server to inform the client of a new user who joined the
+conversation. Similarly to [`0x0001 New message`](#0x0001-new-message) the body
+starts with a header containing following fields:
+
+- header's length (2 bytes) (includes this field);
+- message's ID (4 bytes)
+- timestamp of when this event occurred (8 bytes, signed), encoded as a number
+  of seconds since the UNIX epoch.
+
+The current version (header size) is 14. Following the header is an array of
+users' IDs, each encoded as a 4 byte integer.
+
 
 
 ### Responses

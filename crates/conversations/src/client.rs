@@ -1,6 +1,7 @@
 use actix::prelude::*;
 use actix_web_actors::ws::{self, CloseCode, WebsocketContext};
-use std::time::Duration;
+use bytes::Buf;
+use std::{io::Cursor, time::Duration};
 use adaptarr_models::db::models as db;
 use log::error;
 
@@ -19,6 +20,7 @@ use super::{
         MessageReceived,
         NewMessage,
         UnknownEvent,
+        UserJoined,
     },
 };
 
@@ -233,6 +235,21 @@ fn serialize_events(events: Vec<db::ConversationEvent>) -> Vec<AnyMessage> {
             timestamp: event.timestamp,
             message: event.data.into(),
         }.into(),
+        "user-joined" => {
+            let len = event.data.len() / 4;
+            let mut users = Vec::with_capacity(len);
+            let mut buf = Cursor::new(event.data);
+
+            for _ in 0..len {
+                users.push(buf.get_i32_le());
+            }
+
+            UserJoined {
+                id: event.id,
+                timestamp: event.timestamp,
+                users,
+            }.into()
+        }
         _ => unreachable!(),
     }).collect()
 }

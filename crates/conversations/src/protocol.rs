@@ -49,6 +49,8 @@ pub enum Kind {
     SendMessage = 2,
     /// Client requests a slice of conversation's history.
     GetHistory = 3,
+    /// User joined the conversation.
+    UserJoined = 4,
     /// Sent as a response to an unrecognised event.
     UnknownEvent = 0x8000,
     /// Message has been successfully added to the conversation.
@@ -77,6 +79,7 @@ impl Kind {
             1 => Some(Kind::NewMessage),
             2 => Some(Kind::SendMessage),
             3 => Some(Kind::GetHistory),
+            4 => Some(Kind::UserJoined),
             0x8000 => Some(Kind::UnknownEvent),
             0x8001 => Some(Kind::MessageReceived),
             0x8002 => Some(Kind::MessageInvalid),
@@ -249,6 +252,7 @@ pub enum AnyMessage {
     NewMessage(#[from] NewMessage),
     SendMessage(#[from] SendMessage),
     GetHistory(#[from] GetHistory),
+    UserJoined(#[from] UserJoined),
     UnknownEvent,
     MessageReceived(#[from] MessageReceived),
     MessageInvalid(#[from] MessageInvalid),
@@ -262,6 +266,7 @@ impl MessageBody for AnyMessage {
             AnyMessage::NewMessage(_) => Kind::NewMessage,
             AnyMessage::SendMessage(_) => Kind::SendMessage,
             AnyMessage::GetHistory(_) => Kind::GetHistory,
+            AnyMessage::UserJoined(_) => Kind::UserJoined,
             AnyMessage::UnknownEvent => Kind::UnknownEvent,
             AnyMessage::MessageReceived(_) => Kind::MessageReceived,
             AnyMessage::MessageInvalid(_) => Kind::MessageInvalid,
@@ -275,6 +280,7 @@ impl MessageBody for AnyMessage {
             AnyMessage::NewMessage(msg) => msg.flags(),
             AnyMessage::SendMessage(msg) => msg.flags(),
             AnyMessage::GetHistory(msg) => msg.flags(),
+            AnyMessage::UserJoined(msg) => msg.flags(),
             AnyMessage::UnknownEvent => UnknownEvent.flags(),
             AnyMessage::MessageReceived(msg) => msg.flags(),
             AnyMessage::MessageInvalid(msg) => msg.flags(),
@@ -288,6 +294,7 @@ impl MessageBody for AnyMessage {
             AnyMessage::NewMessage(msg) => msg.length(),
             AnyMessage::SendMessage(msg) => msg.length(),
             AnyMessage::GetHistory(msg) => msg.length(),
+            AnyMessage::UserJoined(msg) => msg.length(),
             AnyMessage::UnknownEvent => UnknownEvent.length(),
             AnyMessage::MessageReceived(msg) => msg.length(),
             AnyMessage::MessageInvalid(msg) => msg.length(),
@@ -301,6 +308,7 @@ impl MessageBody for AnyMessage {
             AnyMessage::NewMessage(msg) => msg.write(into),
             AnyMessage::SendMessage(msg) => msg.write(into),
             AnyMessage::GetHistory(msg) => msg.write(into),
+            AnyMessage::UserJoined(msg) => msg.write(into),
             AnyMessage::UnknownEvent => UnknownEvent.write(into),
             AnyMessage::MessageReceived(msg) => msg.write(into),
             AnyMessage::MessageInvalid(msg) => msg.write(into),
@@ -429,6 +437,67 @@ impl MessageBody for GetHistory {
             number_before,
             number_after,
         })
+    }
+}
+
+/// Send by the server to notify clients that new user(s) joined the
+/// conversation.
+#[derive(Clone)]
+pub struct UserJoined {
+    /// Event's ID.
+    pub id: i32,
+    /// Date and time when this event occurred.
+    pub timestamp: DateTime<Utc>,
+    /// List of IDs of users who joined the conversation.
+    pub users: Vec<i32>,
+}
+
+impl MessageBody for UserJoined {
+    fn kind(&self) -> Kind { Kind::UserJoined }
+
+    fn length(&self) -> usize {
+        // header length - 2 bytes
+        // ID - 4 bytes
+        // timestamp - 8 bytes
+        // users - 4 bytes per ID
+        14 + self.users.len() * 4
+    }
+
+    fn write(self, into: &mut BytesMut) {
+        into.put_u16_le(14);
+        into.put_i32_le(self.id);
+        into.put_i64_le(self.timestamp.timestamp());
+
+        for id in self.users {
+            into.put_i32_le(id);
+        }
+    }
+
+    fn read(from: Bytes) -> Result<Self, ParseMessageError> {
+        let mut buf = from.into_buf();
+        let length = buf.get_u16_le() as usize;
+
+        if length < 14 {
+            return Err(ParseMessageError::Underflow(14, length));
+        }
+
+        let id = buf.get_i32_le();
+        let timestamp = Utc.timestamp(buf.get_i64_le(), 0);
+        let remaining = buf.remaining();
+
+        if remaining % 4 != 0 {
+            let expected = length + remaining + 4 - remaining % 4;
+            return Err(ParseMessageError::Underflow(length + remaining, expected));
+        }
+
+        let len = remaining / 4;
+        let mut users = Vec::with_capacity(len);
+
+        for _ in 0..len {
+            users.push(buf.get_i32_le());
+        }
+
+        Ok(UserJoined { id, timestamp, users })
     }
 }
 
