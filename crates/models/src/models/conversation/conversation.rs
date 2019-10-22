@@ -79,7 +79,8 @@ impl Conversation {
     }
 
     /// Create a new conversation between users.
-    pub fn create(db: &Connection, members: Vec<User>) -> Result<Self, DbError> {
+    pub fn create(db: &Connection, members: &[<User as Model>::Id])
+    -> Result<Self, DbError> {
         db.transaction(|| {
             let conversation = diesel::insert_into(conversations::table)
                 .default_values()
@@ -88,7 +89,7 @@ impl Conversation {
             diesel::insert_into(conversation_members::table)
                 .values(members.iter().map(|user| db::ConversationMember {
                     conversation: conversation.id,
-                    user: user.id
+                    user: *user,
                 }).collect::<Vec<_>>())
                 .execute(db)?;
 
