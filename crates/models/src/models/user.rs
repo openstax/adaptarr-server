@@ -58,6 +58,7 @@ pub struct Public {
     language: String,
     #[serde(skip_serializing_if="Option::is_none")]
     teams: Option<Vec<TeamInfo>>,
+    is_support: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -111,7 +112,9 @@ impl Model for User {
     }
 
     fn get_public(&self) -> Public {
-        let db::User { id, ref name, is_super, ref language, .. } = self.data;
+        let db::User {
+            id, ref name, is_super, ref language, is_support, ..
+        } = self.data;
 
         Public {
             id,
@@ -119,12 +122,15 @@ impl Model for User {
             is_super,
             language: language.clone(),
             teams: None,
+            is_support,
         }
     }
 
     fn get_public_full(&self, db: &Connection, params: &PublicParams)
     -> Result<Public, DbError> {
-        let db::User { id, ref name, is_super, ref language, .. } = self.data;
+        let db::User {
+            id, ref name, is_super, ref language, is_support, ..
+        } = self.data;
 
         let teams = match params.include_teams {
             Some(ref teams) => team_members::table
@@ -156,6 +162,7 @@ impl Model for User {
             is_super,
             language: language.clone(),
             teams: Some(teams),
+            is_support,
         })
     }
 }
@@ -381,6 +388,18 @@ impl User {
         self.data = data;
 
         audit::log_db(db, "users", self.id, "change-language", language);
+
+        Ok(())
+    }
+
+    /// Change user's is_support flag.
+    pub fn set_is_support(&mut self, db: &Connection, is_support: bool)
+    -> Result<(), DbError> {
+        diesel::update(&self.data)
+            .set(users::is_support.eq(is_support))
+            .execute(db)?;
+
+        self.data.is_support = is_support;
 
         Ok(())
     }

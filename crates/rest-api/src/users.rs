@@ -167,6 +167,7 @@ fn get_user(db: Database, session: Session, id: Path<UserId>)
 struct UserUpdate {
     language: Option<LanguageTag>,
     name: Option<String>,
+    is_support: Option<bool>,
 }
 
 /// Update user information.
@@ -203,6 +204,14 @@ fn modify_user(
             }
 
             user.set_name(db, &name)?;
+        }
+
+        if let Some(is_support) = form.is_support {
+            if !session.is_elevated {
+                return Err(Forbidden.into());
+            }
+
+            user.set_is_support(db, is_support)?;
         }
 
         Ok(())
@@ -305,6 +314,11 @@ fn get_session(session: Session) -> Json<SessionData> {
         is_elevated: session.is_elevated,
     })
 }
+
+#[derive(ApiError, Debug, Fail)]
+#[api(status = "FORBIDDEN", code = "user:insufficient-permissions")]
+#[fail(display = "insufficient permissions to perform this action")]
+struct Forbidden;
 
 /// ID of a user, can be either a number of a string `"me"`.
 enum UserId {

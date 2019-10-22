@@ -11,6 +11,7 @@
     id: number,
     name: string,
     is_super: boolean,
+    is_support: boolean,
     language: string,
     teams: [
         {
@@ -27,6 +28,8 @@ This model is used throughout the API to describe users. The fields are
 - `id`: user's ID number;
 
 - `name`: users' name;
+
+- `is_support`: is this user a member of the support team;
 
 - `language`: user's preferred language. Server guarantees that it is supported;
 
@@ -125,6 +128,7 @@ object with following fields/properties:
 {
     language: string?,
     name: string?,
+    is_support: boolean?,
 }
 ```
 
@@ -133,9 +137,12 @@ object with following fields/properties:
 
 - `name`: user's name;
 
+- `is_support`: is this user a member of the support team;
+
 All fields may be omitted, in which case no action is taken. Fields `language`
 and `name` can only be used by current user (`:id` is `me`) or in an elevated
-session with the [`user:edit`](../#p-user-edit) permission.
+session with the [`user:edit`](../#p-user-edit) permission. `is_support` can
+only be used in an elevated session.
 
 #### Status codes
 
