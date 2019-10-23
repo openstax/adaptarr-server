@@ -191,7 +191,7 @@ fn modify_user(
     db.transaction::<_, Error, _>(|| {
         if let Some(language) = form.language {
             if !id.is_current() && !session.is_elevated {
-                unimplemented!()
+                return Err(Forbidden.into());
             }
 
             let locale = i18n.find_locale(&language).ok_or(NoSuchLocaleError)?;
@@ -200,7 +200,7 @@ fn modify_user(
 
         if let Some(name) = form.name {
             if !id.is_current() && !session.is_elevated {
-                unimplemented!()
+                return Err(Forbidden.into());
             }
 
             user.set_name(db, &name)?;
