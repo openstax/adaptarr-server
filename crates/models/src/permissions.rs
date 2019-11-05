@@ -1,7 +1,6 @@
 //! Fine-grained control over actions a user can take.
 
-use actix_web::http::StatusCode;
-use adaptarr_error::ApiError;
+use adaptarr_error::{ApiError, StatusCode};
 use bitflags::bitflags;
 use failure::Fail;
 use serde::{de, ser::{self, SerializeSeq}};

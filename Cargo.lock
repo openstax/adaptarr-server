@@ -350,7 +350,6 @@ name = "adaptarr-conversations"
 version = "0.1.0"
 dependencies = [
  "actix 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "actix-web 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web-actors 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "adaptarr-macros 0.2.0",
  "adaptarr-models 0.2.0",
@@ -428,7 +427,6 @@ name = "adaptarr-models"
 version = "0.3.0"
 dependencies = [
  "actix 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "actix-web 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "adaptarr-error 0.1.0",
  "adaptarr-i18n 0.1.1",
  "adaptarr-macros 0.2.0",

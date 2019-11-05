@@ -29,11 +29,11 @@ pub fn derive_error(s: Structure) -> TokenStream {
     });
 
     s.gen_impl(quote! {
-        extern crate actix_web;
         use std::borrow::Cow;
+        use adaptarr_error::_reexports::*;
 
         gen impl ApiError for @Self {
-            fn status(&self) -> actix_web::http::StatusCode {
+            fn status(&self) -> StatusCode {
                 match *self { #statuses }
             }
 
@@ -122,10 +122,10 @@ fn find_status(v: &VariantInfo) -> Result<TokenStream, Error> {
         if let Some(item) = internal {
             Err(Error::new(item.span(), "internal errors can't have statuses"))
         } else {
-            Ok(quote!(actix_web::http::StatusCode::#status))
+            Ok(quote!(StatusCode::#status))
         }
     } else {
-        Ok(quote!(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR))
+        Ok(quote!(StatusCode::INTERNAL_SERVER_ERROR))
     }
 }
 

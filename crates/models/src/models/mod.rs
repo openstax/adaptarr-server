@@ -1,5 +1,4 @@
-use actix_web::http::StatusCode;
-use adaptarr_error::ApiError;
+use adaptarr_error::{ApiError, StatusCode};
 use diesel::result::Error as DbError;
 use failure::Fail;
 use std::{borrow::Cow, convert::Infallible, fmt, marker::PhantomData};

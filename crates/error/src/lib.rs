@@ -1,10 +1,11 @@
-use actix_web::{HttpResponse, ResponseError, http::StatusCode};
+use actix_web::{HttpResponse, ResponseError};
 use adaptarr_macros::From;
 use failure::Fail;
 use log::error;
 use serde::Serialize;
 use std::borrow::Cow;
 
+pub use actix_web::http::StatusCode;
 pub use adaptarr_macros::ApiError;
 
 /// An error that occurred while handling an API request.
@@ -129,4 +130,11 @@ impl ResponseError for Error {
 struct ErrorResponse<'s> {
     error: Cow<'s, str>,
     raw: String,
+}
+
+/// This module contains symbols re-exported from libraries which [`ApiError`]
+/// depends on. It's only intended to be used by the derive macro.
+#[doc(hide)]
+pub mod _reexports {
+    pub use actix_web::http::StatusCode;
 }
