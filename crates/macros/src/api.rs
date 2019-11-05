@@ -44,9 +44,9 @@ pub fn derive_error(s: Structure) -> TokenStream {
     })
 }
 
-/// Given a list of attributes find `#[ast(...)]`, and ensure there is only one
+/// Given a list of attributes find `#[api(...)]`, and ensure there is only one
 /// of them.
-fn find_ast(attrs: &[Attribute]) -> Result<Option<MetaList>, Error> {
+fn find_api(attrs: &[Attribute]) -> Result<Option<MetaList>, Error> {
     let mut attrs = attrs.iter()
         .filter_map(|attr| attr.parse_meta().ok())
         .filter(|meta| meta.path().is_ident("api"));
@@ -83,7 +83,7 @@ fn find_ast(attrs: &[Attribute]) -> Result<Option<MetaList>, Error> {
 
 /// Find value of [`ApiError::status()`] for a variant.
 fn find_status(v: &VariantInfo) -> Result<TokenStream, Error> {
-    let meta = match find_ast(v.ast().attrs)? {
+    let meta = match find_api(v.ast().attrs)? {
         Some(meta) => meta,
         None => return v.bindings()
             .iter()
@@ -131,7 +131,7 @@ fn find_status(v: &VariantInfo) -> Result<TokenStream, Error> {
 
 /// Find value of [`ApiError::code()`] for a variant.
 fn find_code(v: &VariantInfo) -> Result<TokenStream, Error> {
-    let meta = match find_ast(v.ast().attrs)? {
+    let meta = match find_api(v.ast().attrs)? {
         Some(meta) => meta,
         None => return v.bindings()
             .iter()
