@@ -7,6 +7,7 @@ use std::borrow::Cow;
 
 pub use actix_web::http::StatusCode;
 pub use adaptarr_macros::ApiError;
+pub use serde_json::{Value, Map, to_value};
 
 /// An error that occurred while handling an API request.
 pub trait ApiError: Fail {
@@ -19,6 +20,14 @@ pub trait ApiError: Fail {
     /// should only be present for errors which are intended to be reported
     /// to the user in detail.
     fn code(&self) -> Option<Cow<str>>;
+
+    /// Additional information about the error to be returned to the user.
+    ///
+    /// If the returned value is a `Some`, it will be included in the error
+    /// response as value of the `"data"` key.
+    ///
+    /// This method should return `None` for internal errors.
+    fn data(&self) -> Option<Value> { None }
 }
 
 /// This implementation is required to make `#[cause]` on a `Box<dyn ApiError>`
@@ -106,6 +115,7 @@ impl ResponseError for Error {
                     .json(ErrorResponse {
                         error: code,
                         raw: err.to_string(),
+                        data: err.data(),
                     }),
                 None => {
                     error!("{}", err);
@@ -130,6 +140,8 @@ impl ResponseError for Error {
 struct ErrorResponse<'s> {
     error: Cow<'s, str>,
     raw: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<Value>,
 }
 
 /// This module contains symbols re-exported from libraries which [`ApiError`]
@@ -137,4 +149,5 @@ struct ErrorResponse<'s> {
 #[doc(hide)]
 pub mod _reexports {
     pub use actix_web::http::StatusCode;
+    pub use serde_json::value::{Value, Map, to_value};
 }

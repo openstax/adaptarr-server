@@ -43,6 +43,7 @@ properties:
 {
     error: string,
     raw: string,
+    data: any,
 }
 ```
 
@@ -51,6 +52,9 @@ properties:
 - `raw`: a message (in English) describing this error. Note that this field is
   generally not intended to be displayed to the user, and is included mostly to
   aid in debugging.
+
+- `data`: additional information about the error. This field's format depends on
+  the error, and it may not be present for every error.
 
 
 

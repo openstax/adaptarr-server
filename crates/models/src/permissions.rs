@@ -1,6 +1,6 @@
 //! Fine-grained control over actions a user can take.
 
-use adaptarr_error::{ApiError, StatusCode};
+use adaptarr_error::{ApiError, StatusCode, Value, Map};
 use bitflags::bitflags;
 use failure::Fail;
 use serde::{de, ser::{self, SerializeSeq}};
@@ -28,11 +28,20 @@ pub trait PermissionBits: Copy + fmt::Debug + Sized + Send + Sync + 'static {
 #[derive(Debug, Fail)]
 pub struct RequirePermissionsError<B: PermissionBits>(B);
 
-impl<B: PermissionBits> ApiError for RequirePermissionsError<B> {
+impl<B: PermissionBits + ser::Serialize> ApiError for RequirePermissionsError<B> {
     fn status(&self) -> StatusCode { StatusCode::FORBIDDEN }
 
     fn code(&self) -> Option<Cow<str>> {
         Some(Cow::Borrowed("user:insufficient-permissions"))
+    }
+
+    fn data(&self) -> Option<Value> {
+        let mut map = Map::default();
+        map.insert(
+            "permissions".to_string(),
+            adaptarr_error::to_value(self.0).expect("serialization error"),
+        );
+        Some(map.into())
     }
 }
 
