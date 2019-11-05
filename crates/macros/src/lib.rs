@@ -11,7 +11,7 @@ mod extra;
 mod test;
 mod multipart;
 
-decl_derive!([ApiError, attributes(api)] => api::derive_error);
+decl_derive!([ApiError, attributes(api, data)] => api::derive_error);
 decl_derive!([From, attributes(from)] => extra::derive_from);
 decl_derive!([FromMultipart] => multipart::derive_from);
 
