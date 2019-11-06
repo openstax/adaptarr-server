@@ -1,5 +1,6 @@
 use actix::{
     Actor,
+    ActorContext,
     Running,
     StreamHandler,
     Handler,
@@ -116,8 +117,6 @@ impl Actor for Listener {
 
     /// Register this stream as an event listener.
     fn started(&mut self, ctx: &mut Self::Context) {
-
-
         events::EventManager::from_registry()
             .send(events::RegisterListener {
                 user: self.user,
@@ -143,8 +142,13 @@ impl Actor for Listener {
 }
 
 impl StreamHandler<ws::Message, ws::ProtocolError> for Listener {
-    fn handle(&mut self, _: ws::Message, _: &mut Self::Context) {
-        // We don't consume messages.
+    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
+        match msg {
+            ws::Message::Ping(data) => ctx.pong(&data),
+            ws::Message::Close(_) => ctx.stop(),
+            // We don't consume messages.
+            _ => (),
+        }
     }
 }
 
