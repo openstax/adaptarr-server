@@ -1,9 +1,17 @@
-# docker option
+# macOS Installation
 
-I use `docker-compose --verbose --log-level DEBUG up` since it takes a long time on my machine.
+This uses a Docker version of Postgres but runs a local server, frontend, and nginx.
 
+We will do the following in order:
 
-# macOS dependencies
+1. install system dependencies
+1. install, configure, and run the server
+1. add a user
+1. install and run the frontend
+1. configure nginx and run it
+1. visit `http://adaptarr.test/`, log in, add a team, import a book, edit the content
+
+## System dependencies
 
 ```
 brew install libmagic
@@ -18,9 +26,17 @@ Change the [line in crates/models/src/models/file.rs](https://github.com/opensta
 
 If you use this option then make sure the config.toml file points to this instance (see below).
 
+
 # Example config.toml file
 
-Create a `config.toml` file like the following:
+Create a `config.toml` file like the following.
+
+Notes:
+
+- `domain =` needs to match the entry in `/etc/hosts` later on.
+- The combination of `transport = "log"` and `level = "debug"` allows you to see the invite link that is sent to users (so you can click it)
+- `url = "..."` connects to Postgres running on docker. if you have a different setup, change it here
+- `secret = "base64:...` arbitrary, but necessary
 
 ```
 # :required: Server configuration.
@@ -131,7 +147,7 @@ then be sure to run `cargo run --release server start` to run the DB migrations.
 
 # Run the server in non-release mode
 
-so that HTTPS is not forced.
+so that HTTPS is not forced: `RUST_LOG=trace cargo run server start`
 
 
 ## Verify Server is running
@@ -214,10 +230,15 @@ server {
 ```
 
 
-# Get the invite link
+# Log in!
 
-Make sure you run with the `RUST_LOG=trace` environment variable set so that you can see the email link. Something like: `RUST_LOG=trace cargo run --release server start`
+Now, visit http://adaptarr.test and log in. Then you will need to create a team and invite yourself to it.
 
+To create teams, you will need to temporarily elevate your permissions (like sudo). Visit http://adaptarr.test/elevate to do that.
+
+When you add yourself to a team be sure to check the terminal for an invite link. Rather than sending you an email, `config.toml` sends the email to your terminal.
+
+Once you add a team, you can add a book. Download a complete zip file from cnx.org go to the books tab, click the lock icon and then the plus icon, select a team, and attach the zip file. Many files should be created in the `./files/` directory in adaptarr-server.
 
 
 
