@@ -2,3 +2,4 @@
 /config.toml
 /src/db/schema.rs.orig
 /target
+/files

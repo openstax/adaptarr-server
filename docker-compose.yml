@@ -1,0 +1,46 @@
+version: "3.5"
+
+services:
+  adaptarr:
+    build: .
+    # image: docker.pkg.naukosfera.com/adaptarr-server:0.6.0
+    command: [server, start]
+    ports:
+      - "8012:80"
+      # - "%(projects.adaptarr-server.port):80"
+    networks:
+      - adaptarr
+    configs:
+      - source: adaptarr
+        target: /var/lib/adaptarr/config.toml
+    secrets:
+      - source: adaptarr-pgpass
+        target: pgpass
+        mode: 0600
+      - source: adaptarr-secret
+        target: server-secret
+    volumes:
+      - adaptarr-storage:/var/lib/adaptarr/storage
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    environment:
+      PGPASSFILE: /run/secrets/pgpass
+
+networks:
+  adaptarr:
+
+configs:
+  adaptarr:
+    name: config.toml
+    # template: ./templates/config.toml
+
+secrets:
+  adaptarr-pgpass:
+    name: pgpass
+  adaptarr-secret:
+    name: secret
+
+volumes:
+  adaptarr-storage:
