@@ -1,6 +1,10 @@
 version: "3.5"
 
 services:
+  db:
+    image: postgres:12
+    environment:
+      POSTGRES_PASSWORD: docker
   adaptarr:
     build: .
     # image: docker.pkg.naukosfera.com/adaptarr-server:0.6.0
@@ -25,6 +29,8 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+    depends_on:
+      - db
     environment:
       PGPASSFILE: /run/secrets/pgpass
 
