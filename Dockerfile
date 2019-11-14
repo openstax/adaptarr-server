@@ -72,3 +72,5 @@ COPY --from=build /usr/src/adaptarr/locales /var/lib/adaptarr/locales
 COPY --from=build /usr/src/adaptarr/templates /var/lib/adaptarr/templates
 EXPOSE 80
 ENTRYPOINT ["/usr/bin/adaptarr"]
+
+COPY ./config.toml ./config.toml

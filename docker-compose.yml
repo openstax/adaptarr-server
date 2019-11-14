@@ -13,12 +13,12 @@ services:
     configs:
       - source: adaptarr
         target: /var/lib/adaptarr/config.toml
-    secrets:
-      - source: adaptarr-pgpass
-        target: pgpass
-        mode: 0600
-      - source: adaptarr-secret
-        target: server-secret
+    # secrets:
+    #   - source: adaptarr-pgpass
+    #     target: pgpass
+    #     mode: 0600
+    #   - source: adaptarr-secret
+    #     target: server-secret
     volumes:
       - adaptarr-storage:/var/lib/adaptarr/storage
     deploy:
@@ -36,11 +36,12 @@ configs:
     name: config.toml
     # template: ./templates/config.toml
 
-secrets:
-  adaptarr-pgpass:
-    name: pgpass
-  adaptarr-secret:
-    name: secret
+# docker-swarm specific
+# secrets:
+#   adaptarr-pgpass:
+#     name: pgpass
+#   adaptarr-secret:
+#     name: secret
 
 volumes:
   adaptarr-storage:
