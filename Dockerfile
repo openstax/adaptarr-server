@@ -45,9 +45,20 @@ RUN cargo build --all --release \
 #
 # Now that our dependencies are cached we can build application proper.
 # Copy sources
-COPY ./ ./
+
+COPY ./crates ./crates
+COPY ./doc ./doc
+COPY ./crates ./crates
+COPY ./locales ./locales
+COPY ./migrations ./migrations
+COPY ./templates ./templates
+COPY ./tests ./tests
+COPY ./diesel.toml ./diesel.toml
+COPY ./.git ./.git
+
 # Build for release
 RUN cargo build --release --bin adaptarr
+
 # --- Create a minimal base image ----------------------------------------------
 #
 # Our current image contains development files and tools, bloating its size to
