@@ -12,8 +12,8 @@ services:
     ports:
       - "8012:80"
       # - "%(projects.adaptarr-server.port):80"
-    networks:
-      - adaptarr
+    # networks:
+    #   - adaptarr
     configs:
       - source: adaptarr
         target: /var/lib/adaptarr/config.toml
@@ -31,8 +31,8 @@ services:
         condition: on-failure
     depends_on:
       - db
-    environment:
-      PGPASSFILE: /run/secrets/pgpass
+    # environment:
+    #   PGPASSFILE: /run/secrets/pgpass
 
 networks:
   adaptarr:
