@@ -54,7 +54,7 @@ COPY ./migrations ./migrations
 COPY ./templates ./templates
 COPY ./tests ./tests
 COPY ./diesel.toml ./diesel.toml
-COPY ./.git ./.git
+# COPY ./.git ./.git
 
 # Build for release
 RUN cargo build --release --bin adaptarr

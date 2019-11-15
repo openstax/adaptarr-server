@@ -1,14 +1,15 @@
 use std::{env, process::Command};
 
 fn main() {
-    let short_sha = output(Command::new("git")
-        .args(&["rev-parse", "--short", "HEAD"]));
-    let date = output(Command::new("git")
-        .args(&["log", "-1", "--date=short", "--pretty=%cd"]));
+    // let short_sha = output(Command::new("git")
+    //     .args(&["rev-parse", "--short", "HEAD"]));
+    // let date = output(Command::new("git")
+    //     .args(&["log", "-1", "--date=short", "--pretty=%cd"]));
 
-    let version = env::var("CARGO_PKG_VERSION").unwrap();
+    // let version = env::var("CARGO_PKG_VERSION").unwrap();
 
-    let version = format!("{} ({} {})", version, short_sha, date);
+    // let version = format!("{} ({} {})", version, short_sha, date);
+    let version = format!("hacked-version (d34d 1/1/1)");
     println!("cargo:rustc-env=VERSION={}", version);
 }
 
