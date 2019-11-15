@@ -1,0 +1,87 @@
+# :required: Server configuration.
+[server]
+# :optional: Internet address and port on which to listen.
+address = "127.0.0.1:8080"
+# :required: Domain (host name) of this server.
+domain = "adaptarr.test"
+# :optional: Secret key, used e.g. to sign session cookies. Must be at least 32
+# bytes long.
+#
+# Value can be specified either as a base64-encoded string (in which case it
+# must be prefixed with "base64:"), or as path to a file containing the value
+# (in which it must be prefixed with "file:").
+#
+# If omitted a random secret will be generated each time the server is started.
+#
+# You can generate a new secure secret with
+# $ echo base64:`openssl rand -base64 32`
+secret = "base64:7iTb+q31r3ZBhydC7MCVWQcuimzzF1gE6S5/I14D4bo="
+
+# :optional: Database configuration.
+[database]
+# :required: Database url. This field is overridden by the DATABASE_URL
+# env variable.
+url = "postgres://postgres:docker@db/postgres"
+
+# :required: Mailing configuration.
+[mail]
+# :required: Email address to send messages as.
+#
+# Address can be anything understood as an address according to RFC 5322 (per
+# the mailbox production in §3.4), in particular:
+# - bare email address, e.g. noreply@example.com
+# - email address with sender's name, e.g. Name <noreply@example.com>
+sender = "Name <noreply@example.com>"
+# :required: What method to use to send mails. Possible values are
+# - "log" to log emails to standard error for debugging,
+# - "sendmail" to use the sendmail(1) command,
+# - "smtp" to use SMTP
+transport = "log"
+
+# Following options are only available for SMTP transport.
+
+# :required: Name of the SMTP host server to connect to.
+host = "mail.example.com"
+# :optional: Port to connect to. Defaults to 25.
+port = 25
+# :optional: TLS configuration. Possible values are:
+# - false: never use TLS
+# - true: use TLS when available, otherwise fall back to unencrypted
+# - "strict" or "always": always use TLS, don't allow unencrypted connections
+use-tls = true
+
+# :required: Backing storage for files.
+[storage]
+# :required: Path to a directory in which user-uploaded files will be kept.
+path = "./files/"
+
+# :optional: Logging configuration
+#
+# There are six possible logging levels: "off" disables logging altogether,
+# "error" logs only critical errors, "warn"logs non-critical errors
+# and warnings, "info" logs informational messages, "debug" logs verbose
+# debugging messages, and "trace" log extremely verbose debugging messages. Each
+# log level also includes messages from all previous (more specific) log levels.
+[logging]
+# :optional: Default logging level. This applies to all logs for which there
+# isn't a more specific setting, or for which a more specific setting exists
+# but is not set.
+#
+# Default value if "info"
+level = "debug"
+# :optional: Logging level for the networking layer. Set to "info" to display
+# incoming requests. Unset by default.
+network = "trace"
+
+# :optional: Custom filters.
+#
+# This can also be set through the RUST_LOG environmental variable.
+[logging.filters]
+# Example: only show incoming requests, silence all other networking logs.
+"actix_net" = "off"
+"actix_web::middleware::logger" = "info"
+
+# :optional: Sentry.io configuration
+#[sentry]
+# :required: Client key.
+#dns = "https://key@instance/project"
