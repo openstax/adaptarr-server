@@ -8,9 +8,9 @@ services:
   adaptarr:
     build: .
     # image: docker.pkg.naukosfera.com/adaptarr-server:0.6.0
-    command: [server, start]
+    command: bash -c "while ! </dev/tcp/db/5432; do sleep 2; done; /usr/bin/adaptarr server start"
     ports:
-      - "8012:80"
+      - "8012:8080"
       # - "%(projects.adaptarr-server.port):80"
     # networks:
     #   - adaptarr
@@ -33,9 +33,12 @@ services:
       - db
     # environment:
     #   PGPASSFILE: /run/secrets/pgpass
+  frontend:
+    build: ./../adaptarr-front
+    ports: ["8013:80"]
 
-networks:
-  adaptarr:
+# networks:
+#   adaptarr:
 
 configs:
   adaptarr:
