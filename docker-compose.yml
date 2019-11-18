@@ -28,19 +28,11 @@ services:
         target: /var/lib/adaptarr/config.toml
     volumes:
       - adaptarr-storage:/var/lib/adaptarr/storage
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
     depends_on:
       - db
 
   frontend:
     build: ./../adaptarr-front
   
-configs:
-  adaptarr:
-    name: config.toml
-
 volumes:
   adaptarr-storage:

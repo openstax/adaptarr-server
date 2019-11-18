@@ -85,4 +85,4 @@ EXPOSE 80
 ENV RUST_BACKTRACE=1
 # ENTRYPOINT ["/usr/bin/adaptarr"]
 
-COPY ./config.dev.toml ./config.toml
+COPY ./config.docker.toml ./config.toml
