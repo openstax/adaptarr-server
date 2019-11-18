@@ -79,7 +79,7 @@ RUN apt-get update && apt-get install -y \
  && rm -rf /var/lib/apt/lists/*
 # --- Create image -------------------------------------------------------------
 WORKDIR /var/lib/adaptarr
-COPY --from=build /usr/src/adaptarr/target/release/adaptarr /usr/bin/adaptarr
+COPY --from=build /usr/src/adaptarr/target/debug/adaptarr /usr/bin/adaptarr
 COPY --from=build /usr/src/adaptarr/locales /var/lib/adaptarr/locales
 COPY --from=build /usr/src/adaptarr/templates /var/lib/adaptarr/templates
 EXPOSE 80
