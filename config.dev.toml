@@ -1,7 +1,7 @@
 # :required: Server configuration.
 [server]
 # :optional: Internet address and port on which to listen.
-address = "127.0.0.1:8080"
+address = "0.0.0.0:8080"
 # :required: Domain (host name) of this server.
 domain = "adaptarr.test"
 # :optional: Secret key, used e.g. to sign session cookies. Must be at least 32

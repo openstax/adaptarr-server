@@ -11,7 +11,7 @@ services:
     command: bash -c "while ! </dev/tcp/db/5432; do sleep 2; done; /usr/bin/adaptarr server start"
     # command: server start
     ports:
-      - "8012:8080"
+      - "8012:8080" # example: http://localhost:8012/api/v1/users/me
       # - "%(projects.adaptarr-server.port):80"
     # networks:
     #   - adaptarr
@@ -36,7 +36,18 @@ services:
     #   PGPASSFILE: /run/secrets/pgpass
   frontend:
     build: ./../adaptarr-front
-    ports: ["8013:80"]
+    ports: ["8013:3000"]
+  
+  web:
+    image: nginx:1.17.5
+    ports:
+      - "8080:80"
+    depends_on:
+      - frontend
+      - adaptarr
+
+    volumes:
+      - ./nginx.dev.conf:/etc/nginx/conf.d/default.conf
 
 # networks:
 #   adaptarr:
