@@ -83,6 +83,6 @@ COPY --from=build /usr/src/adaptarr/locales /var/lib/adaptarr/locales
 COPY --from=build /usr/src/adaptarr/templates /var/lib/adaptarr/templates
 EXPOSE 80
 ENV RUST_BACKTRACE=1
-ENTRYPOINT ["/usr/bin/adaptarr"]
+# ENTRYPOINT ["/usr/bin/adaptarr"]
 
 COPY ./config.toml.dev ./config.toml

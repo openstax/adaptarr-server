@@ -9,6 +9,7 @@ services:
     build: .
     # image: docker.pkg.naukosfera.com/adaptarr-server:0.6.0
     command: bash -c "while ! </dev/tcp/db/5432; do sleep 2; done; /usr/bin/adaptarr server start"
+    # command: server start
     ports:
       - "8012:8080"
       # - "%(projects.adaptarr-server.port):80"
