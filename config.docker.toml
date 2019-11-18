@@ -48,7 +48,7 @@ port = 25
 # - false: never use TLS
 # - true: use TLS when available, otherwise fall back to unencrypted
 # - "strict" or "always": always use TLS, don't allow unencrypted connections
-use-tls = true
+# use-tls = false This is a no-op when the server is in non --release mode
 
 # :required: Backing storage for files.
 [storage]

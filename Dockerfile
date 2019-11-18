@@ -56,8 +56,9 @@ COPY ./tests ./tests
 COPY ./diesel.toml ./diesel.toml
 # COPY ./.git ./.git
 
-# Build for release
-RUN cargo build --release --bin adaptarr
+# HACK: Build for dev so that we do not require HTTPS
+# RUN cargo build --release --bin adaptarr
+RUN cargo build --bin adaptarr
 
 # --- Create a minimal base image ----------------------------------------------
 #

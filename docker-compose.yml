@@ -23,9 +23,6 @@ services:
     # wait for postgres
     command: bash -c "while ! </dev/tcp/db/5432; do sleep 2; done; /usr/bin/adaptarr server start"
     # ports: ["8012:8080"] # example: http://localhost:8012/api/v1/users/me
-    configs:
-      - source: adaptarr
-        target: /var/lib/adaptarr/config.toml
     volumes:
       - adaptarr-storage:/var/lib/adaptarr/storage
     depends_on:
