@@ -11,6 +11,11 @@ RUN apt-get update && apt-get install -y \
 # cargo's dependency cache each time our source changes (which should happen
 # more often than change in dependencies) we create an intermediate image
 # containing just an empty project with our dependencies.
+#
+# Install diesel so we can run migrations in dev mode
+RUN cargo install diesel_cli --no-default-features --features postgres
+
+#
 # Create an empty shell project
 RUN USER=root cargo new --vcs none --bin /usr/src/adaptarr/crates/cli --name adaptarr-cli \
  && USER=root cargo new --vcs none --bin /usr/src/adaptarr/crates/conversations --name adaptarr-conversations \
@@ -89,5 +94,6 @@ RUN cp -r /usr/src/adaptarr/templates /var/lib/adaptarr/templates
 EXPOSE 80
 ENV RUST_BACKTRACE=1
 # ENTRYPOINT ["/usr/bin/adaptarr"]
+
 
 COPY ./config.docker.toml ./config.toml
