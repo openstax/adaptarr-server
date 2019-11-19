@@ -69,9 +69,10 @@ RUN cargo build --bin adaptarr
 #
 # We could make even smaller image using Alpine, but building Rust for musl C in
 # Docker is not very easy at the moment.
-FROM debian:latest
+# FROM debian:latest
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+# RUN apt-get update && apt-get install -y \
+RUN apt-get install -y \
     libmagic1 \
     libpq5 \
     libssl1.1 \
@@ -79,9 +80,12 @@ RUN apt-get update && apt-get install -y \
  && rm -rf /var/lib/apt/lists/*
 # --- Create image -------------------------------------------------------------
 WORKDIR /var/lib/adaptarr
-COPY --from=build /usr/src/adaptarr/target/debug/adaptarr /usr/bin/adaptarr
-COPY --from=build /usr/src/adaptarr/locales /var/lib/adaptarr/locales
-COPY --from=build /usr/src/adaptarr/templates /var/lib/adaptarr/templates
+RUN cp /usr/src/adaptarr/target/debug/adaptarr /usr/bin/adaptarr
+RUN cp -r /usr/src/adaptarr/locales /var/lib/adaptarr/locales
+RUN cp -r /usr/src/adaptarr/templates /var/lib/adaptarr/templates
+# COPY --from=build /usr/src/adaptarr/target/debug/adaptarr /usr/bin/adaptarr
+# COPY --from=build /usr/src/adaptarr/locales /var/lib/adaptarr/locales
+# COPY --from=build /usr/src/adaptarr/templates /var/lib/adaptarr/templates
 EXPOSE 80
 ENV RUST_BACKTRACE=1
 # ENTRYPOINT ["/usr/bin/adaptarr"]
