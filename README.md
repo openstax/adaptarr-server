@@ -9,12 +9,15 @@ $ docker exec --tty --workdir /usr/src/adaptarr/ adaptarr-server_backend_1 diese
 
 # start for real
 $ docker-compose restart
+
+# add a user
+$ docker exec -it adaptarr-server_backend_1 /usr/bin/adaptarr user add admin@localhost --administrator --name admin --password admin
 ```
 
 
 # Log in!
 
-Now, visit http://localhost:8080 and log in using the email `admin@localhost` with `admin` as the password. 
+Now, visit http://localhost:8080 (the initial load takes a while) and log in using the email `admin@localhost` with `admin` as the password. 
 
 To create teams, you will need to temporarily elevate your permissions (like sudo). Visit http://localhost:8080/elevate to do that.
 
