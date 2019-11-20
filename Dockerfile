@@ -85,6 +85,8 @@ RUN apt-get install -y \
  && rm -rf /var/lib/apt/lists/*
 # --- Create image -------------------------------------------------------------
 WORKDIR /var/lib/adaptarr
+
+RUN mkdir ./files
 RUN cp /usr/src/adaptarr/target/debug/adaptarr /usr/bin/adaptarr
 RUN cp -r /usr/src/adaptarr/locales /var/lib/adaptarr/locales
 RUN cp -r /usr/src/adaptarr/templates /var/lib/adaptarr/templates
