@@ -5,13 +5,13 @@
 $ docker-compose up --detach
 
 # Perform database migrations
-$ docker exec --tty --workdir /usr/src/adaptarr/ adaptarr-server_backend_1 diesel --database-url "postgres://postgres:docker@db/postgres" --config-file /usr/src/adaptarr/diesel.toml migration --migration-dir /usr/src/adaptarr/migrations run
+$ docker-compose exec --workdir /usr/src/adaptarr backend diesel --database-url "postgres://postgres:docker@db/postgres" --config-file /usr/src/adaptarr/diesel.toml migration --migration-dir /usr/src/adaptarr/migrations run
 
 # start for real
 $ docker-compose restart
 
 # add a user
-$ docker exec -it adaptarr-server_backend_1 /usr/bin/adaptarr user add admin@localhost --administrator --name admin --password admin
+$ docker-compose exec backend /usr/bin/adaptarr user add admin@localhost --administrator --name admin --password admin
 ```
 
 
