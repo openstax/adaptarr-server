@@ -17,9 +17,9 @@ $ docker-compose exec backend /usr/bin/adaptarr user add admin@localhost --admin
 
 # Log in!
 
-Now, visit http://localhost:8080 (the initial load takes a while) and log in using the email `admin@localhost` with `admin` as the password. 
+Now, visit http://localhost:80 (the initial load takes a while) and log in using the email `admin@localhost` with `admin` as the password. 
 
-To create teams, you will need to temporarily elevate your permissions (like sudo). Visit http://localhost:8080/elevate to do that.
+To create teams, you will need to temporarily elevate your permissions (like sudo). Visit http://localhost:80/elevate to do that.
 
 When you add yourself to a team be sure to check the terminal for an invite link. Rather than sending you an email, `config.toml` sends the email to your terminal.
 
